@@ -1,0 +1,48 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1790297551201,
+      "tag": "0000_awesome_warlock",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790301371972,
+      "tag": "0001_curvy_wildside",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790345104819,
+      "tag": "0002_slippery_jack_murdock",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790345468845,
+      "tag": "0003_clever_turbo",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790348168385,
+      "tag": "0004_curvy_lord_hawal",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790351477826,
+      "tag": "0005_magenta_winter_soldier",
+      "breakpoints": true
+    }
+  ]
+}
