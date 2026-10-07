@@ -33,7 +33,7 @@ test("supplier persists through edit, archive, and restore", async ({
     path: "/tmp/kybo-preview-desktop.png",
     fullPage: true,
   });
-  await page.goto("/suppliers");
+  await page.goto("/inventory/suppliers");
   const name = `Proveedor E2E ${Date.now()}`;
   await page.getByRole("button", { name: "Nuevo proveedor" }).click();
   await page.getByRole("textbox", { name: "Nombre", exact: true }).fill(name);
@@ -133,9 +133,9 @@ test("missing cost is pending, and anonymous catalog access is rejected", async 
   const direct = await request.get("/api/catalog/suppliers");
   expect(direct.status()).toBe(401);
   await signIn(page);
-  await page.goto("/ingredients");
+  await page.goto("/inventory/items");
   const name = `Leche E2E ${Date.now()}`;
-  await page.getByRole("button", { name: "Nuevo insumo" }).click();
+  await page.getByRole("button", { name: "Nuevo artículo" }).click();
   await page.getByRole("textbox", { name: "Nombre", exact: true }).fill(name);
   await page.getByRole("combobox", { name: "Unidad base" }).selectOption("ml");
   await page.getByRole("button", { name: "Guardar", exact: true }).click();
@@ -146,7 +146,7 @@ test("missing cost is pending, and anonymous catalog access is rejected", async 
   await expect(page.getByRole("row", { name: new RegExp(name) })).toContainText(
     "Pendiente",
   );
-  await page.goto("/customers");
+  await page.goto("/sales/customers");
   const customer = `Cliente E2E ${Date.now()}`;
   await page.getByRole("button", { name: "Nuevo cliente" }).click();
   await page
@@ -188,7 +188,7 @@ test("foreign origin cannot write and the catalog fits a narrow phone", async ({
   });
   expect(denied.status()).toBe(403);
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/suppliers");
+  await page.goto("/inventory/suppliers");
   await expect(
     page.getByRole("button", { name: "Nuevo proveedor" }),
   ).toBeVisible();
@@ -204,7 +204,7 @@ test("foreign origin cannot write and the catalog fits a narrow phone", async ({
   await expect(
     page
       .getByRole("navigation", { name: "Principal" })
-      .getByRole("link", { name: "Insumos" }),
+      .getByRole("link", { name: "Artículos" }),
   ).toBeVisible();
 });
 
@@ -237,7 +237,7 @@ test("cancel does not save, while Enter submits a supplier", async ({
   page,
 }) => {
   await signIn(page);
-  await page.goto("/suppliers");
+  await page.goto("/inventory/suppliers");
   const name = `Teclado E2E ${Date.now()}`;
   await page.getByRole("button", { name: "Nuevo proveedor" }).click();
   await page

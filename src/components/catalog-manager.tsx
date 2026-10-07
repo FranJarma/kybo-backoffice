@@ -113,14 +113,14 @@ const columnNames: Record<string, string> = {
   pricePedidosYa: "PedidosYa",
   priceUberEats: "Uber Eats",
   supplierName: "Proveedor",
-  ingredientName: "Insumo",
+  itemName: "Insumo",
   baseQuantity: "Cantidad",
 };
 const entityIcons = {
   suppliers: Truck,
   customers: Users,
   "payment-methods": CreditCard,
-  ingredients: Box,
+  items: Box,
   products: CupSoda,
   presentations: Package,
 };
@@ -275,10 +275,10 @@ export function CatalogManager({
           .catch(() => {
             if (live)
               setReferenceError(
-                "No pudimos cargar proveedores o insumos. Probá de nuevo más tarde.",
+                "No pudimos cargar proveedores o artículos. Probá de nuevo más tarde.",
               );
           }),
-      referenceSearch.suppliers || referenceSearch.ingredients ? 250 : 0,
+      referenceSearch.suppliers || referenceSearch.items ? 250 : 0,
     );
     return () => {
       live = false;
@@ -396,7 +396,7 @@ export function CatalogManager({
         cached?.name ??
         (field.key === "supplierId"
           ? editing?.supplierName
-          : editing?.ingredientName);
+          : editing?.itemName);
       return (
         <>
           <Input
@@ -463,16 +463,14 @@ export function CatalogManager({
             {field.hint}
           </p>
         )}
-        {field.key === "baseQuantity" && draft.ingredientId && (
+        {field.key === "baseQuantity" && draft.itemId && (
           <p className="mt-2 text-xs font-semibold text-brand">
             Unidad seleccionada:{" "}
-            {referenceCache.ingredients?.find(
-              (item) => item.id === draft.ingredientId,
-            )?.baseUnit === "unit"
+            {referenceCache.items?.find((item) => item.id === draft.itemId)
+              ?.baseUnit === "unit"
               ? "unidad"
-              : (referenceCache.ingredients?.find(
-                  (item) => item.id === draft.ingredientId,
-                )?.baseUnit ??
+              : (referenceCache.items?.find((item) => item.id === draft.itemId)
+                  ?.baseUnit ??
                 editing?.baseUnit ??
                 "—")}
           </p>
@@ -661,7 +659,7 @@ export function CatalogManager({
                         {column === "name"
                           ? entity === "products"
                             ? "Producto"
-                            : entity === "ingredients"
+                            : entity === "items"
                               ? "Insumo"
                               : columnNames[column]
                           : (columnNames[column] ?? column)}

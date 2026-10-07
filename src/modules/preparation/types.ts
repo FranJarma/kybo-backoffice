@@ -15,6 +15,7 @@ export type Timing = {
   totalSeconds: number | null;
 };
 export type Station = {
+  consumptionLocationId: string | null;
   id: string;
   name: string;
   revision: number;
@@ -45,7 +46,18 @@ export type PrepTask = {
   readyAt: string | null;
   deliveredAt: string | null;
   cancelledAt: string | null;
-  lines: { id: string; name: string; quantity: number; notes: string | null }[];
+  lines: {
+    modifiers: {
+      groupName: string;
+      optionName: string;
+      count: number;
+      instruction: string | null;
+    }[];
+    id: string;
+    name: string;
+    quantity: number;
+    notes: string | null;
+  }[];
   siblings: { id: string; stationName: string; status: PrepStatus }[];
   timing: Timing;
   orderTiming: Timing;
@@ -72,6 +84,7 @@ export type PrepList = {
   stations: Station[];
 };
 export type PrepSettings = {
+  locations: { id: string; name: string }[];
   stations: Station[];
   products: {
     id: string;

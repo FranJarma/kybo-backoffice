@@ -4,6 +4,9 @@ import { salesResponse } from "@/modules/sales/http";
 import { createSchema, parse } from "@/modules/sales/validation";
 const session = vi.hoisted(() => ({ requireActor: vi.fn() }));
 vi.mock("@/lib/auth", () => session);
+vi.mock("@/modules/branches/http", () => ({
+  operationalActor: session.requireActor,
+}));
 beforeEach(() => {
   vi.stubEnv("BETTER_AUTH_URL", "https://kybo.example");
   vi.stubEnv("BETTER_AUTH_TRUSTED_ORIGINS", "");
@@ -30,6 +33,7 @@ it("accepts a bounded 50-line order with long Unicode observations", async () =>
     fulfillment: "takeaway",
     lines: Array.from({ length: 50 }, () => ({
       productId: randomUUID(),
+      expectedFulfillmentVersionId: randomUUID(),
       quantity: 1,
       price: "7000",
       expectedPrice: "7000.00",

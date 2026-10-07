@@ -1,7 +1,18 @@
+import {
+  requireCatalogManagement,
+  requireCatalogRead,
+} from "../branches/context";
+import { publishFulfillment } from "../products/fulfillment";
+import {
+  productFulfillments,
+  productFulfillmentVersions,
+} from "@/db/product-fulfillment-schema";
+import { loadConfiguration, saveBindings } from "./configuration";
+import { defaultSelections, resolveComposition } from "./composition";
 import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import type { AppDb } from "@/db/client";
-import { ingredients, products, productPrices } from "@/db/business-schema";
+import { items, products, productPrices } from "@/db/business-schema";
 import {
   recipes,
   recipeVersions,
@@ -9,7 +20,7 @@ import {
   recipeOptions,
   recipeGraphLock,
 } from "@/db/recipe-schema";
-import { requireCatalogAccess, type Actor } from "@/lib/access";
+import type { Actor } from "@/lib/access";
 import {
   audit,
   claim,
@@ -64,10 +75,7 @@ export async function recipeDefinition(
             .where(eq(products.id, row.productId!))
         )[0]
       : (
-          await db
-            .select()
-            .from(ingredients)
-            .where(eq(ingredients.id, row.outputIngredientId!))
+          await db.select().from(items).where(eq(items.id, row.outputItemId!))
         )[0];
   const lines = await db
     .select()
@@ -76,9 +84,9 @@ export async function recipeDefinition(
     .orderBy(asc(recipeLines.position));
   const options = lines.length
     ? await db
-        .select({ option: recipeOptions, archivedAt: ingredients.archivedAt })
+        .select({ option: recipeOptions, archivedAt: items.archivedAt })
         .from(recipeOptions)
-        .innerJoin(ingredients, eq(ingredients.id, recipeOptions.ingredientId))
+        .innerJoin(items, eq(items.id, recipeOptions.itemId))
         .where(
           inArray(
             recipeOptions.lineId,
@@ -95,12 +103,13 @@ export async function recipeDefinition(
   return {
     id,
     kind: row.kind as RecipeKind,
-    targetId: row.productId ?? row.outputIngredientId!,
+    targetId: row.productId ?? row.outputItemId!,
     name: version.outputName,
     baseUnit: version.outputUnit,
     yieldQuantity: version.yieldQuantity,
     revision: version.version,
     versionId: version.id,
+    compositionModel: version.compositionModel as "legacy" | "configurable",
     notes: version.notes,
     archived: !!target?.archivedAt,
     lines: lines.map((line) => ({
@@ -110,8 +119,8 @@ export async function recipeDefinition(
         .filter((o) => o.option.lineId === line.id)
         .map(({ option, archivedAt }) => ({
           id: option.id,
-          ingredientId: option.ingredientId,
-          name: option.ingredientName,
+          itemId: option.itemId,
+          name: option.itemName,
           quantity: option.quantity,
           baseUnit: option.baseUnit,
           archived: !!archivedAt,
@@ -157,14 +166,12 @@ async function graph(db: ReadDb) {
       .map((o) => o.option),
   }));
 }
-async function costContext(db: ReadDb) {
-  const stock = new Map(
-    (await db.select().from(ingredients)).map((i) => [i.id, i]),
-  );
+export async function costContext(db: ReadDb) {
+  const stock = new Map((await db.select().from(items)).map((i) => [i.id, i]));
   const prepared = new Map(
     (await graph(db))
       .filter((r) => r.recipe.kind === "preparation")
-      .map((r) => [r.recipe.outputIngredientId!, r]),
+      .map((r) => [r.recipe.outputItemId!, r]),
   );
   const cache = new Map<string, { value: bigint | null; missing: string[] }>();
   const estimate = (
@@ -196,7 +203,7 @@ async function costContext(db: ReadDb) {
       let total = 0n;
       const missing = new Set<string>();
       for (const o of prep.options.filter((o) => o.position === 0)) {
-        const cost = estimate(o.ingredientId, [...path, id]);
+        const cost = estimate(o.itemId, [...path, id]);
         cost.missing.forEach((n) => missing.add(n));
         if (cost.value !== null)
           total += roundedDivision(cost.value * integer(o.quantity), SCALE);
@@ -239,7 +246,7 @@ async function calculate(
   const lines = recipe.lines.map((line) => {
     // Include comparable replacement costs in the detail response.
     for (const o of line.options) {
-      const cost = estimate(o.ingredientId);
+      const cost = estimate(o.itemId);
       o.unitCost = cost.value === null ? null : six(cost.value);
     }
     const optionId = choices.has(line.id)
@@ -252,7 +259,7 @@ async function calculate(
     }
     const option = line.options.find((o) => o.id === optionId);
     if (!option) return invalid("La alternativa no pertenece a esta receta.");
-    const cost = estimate(option.ingredientId);
+    const cost = estimate(option.itemId);
     cost.missing.forEach((n) => missing.add(n));
     const value =
       cost.value === null
@@ -289,16 +296,32 @@ async function detail(
   versionId?: string,
 ): Promise<RecipeDetail> {
   const recipe = await recipeDefinition(db, id, versionId);
+  if (recipe.compositionModel === "configurable") {
+    const configuration = await loadConfiguration(db, recipe.versionId);
+    const { costComposition } = await import("./costing");
+    const cost = await costComposition(
+      db,
+      resolveComposition(configuration, defaultSelections(configuration))
+        .components,
+    );
+    return {
+      ...recipe,
+      configuration,
+      cost: {
+        totalCost: cost.totalCost,
+        unitCost: cost.totalCost,
+        missing: cost.missing,
+        lines: [],
+      },
+    };
+  }
   return { ...recipe, cost: await calculate(db, recipe) };
 }
 async function assertAcyclic(db: ReadDb, output: string, inputs: string[]) {
   const dependencies = new Map(
     (await graph(db))
       .filter((r) => r.recipe.kind === "preparation")
-      .map((r) => [
-        r.recipe.outputIngredientId!,
-        r.options.map((o) => o.ingredientId),
-      ]),
+      .map((r) => [r.recipe.outputItemId!, r.options.map((o) => o.itemId)]),
   );
   dependencies.set(output, inputs);
   const visited = new Set<string>();
@@ -322,8 +345,20 @@ async function assertAcyclic(db: ReadDb, output: string, inputs: string[]) {
 export function createRecipeService(db: AppDb) {
   return {
     async save(actor: Actor, raw: unknown): Promise<RecipeDetail> {
-      requireCatalogAccess(actor);
+      await requireCatalogManagement(db, actor);
       const input = parseRecipe(raw);
+      if (
+        input.compositionModel === "legacy" &&
+        (!input.lines.length || input.groups.length)
+      )
+        invalid("La receta requiere ingredientes.");
+      if (
+        input.compositionModel === "configurable" &&
+        (input.kind !== "product" ||
+          input.lines.some((l) => l.optional || l.options.length !== 1) ||
+          (!input.lines.length && !input.groups.length))
+      )
+        invalid("Separá ingredientes fijos y grupos modificadores.");
       if (!!input.id !== !!input.revision)
         invalid("Falta la versión a editar.");
       if (input.kind === "product" && input.yieldQuantity !== "1.000000")
@@ -368,7 +403,7 @@ export function createRecipeService(db: AppDb) {
             conflict("La receta cambió. Recargá antes de editar.");
           if (
             current.kind !== input.kind ||
-            (current.productId ?? current.outputIngredientId) !== input.targetId
+            (current.productId ?? current.outputItemId) !== input.targetId
           )
             conflict("El destino de una receta no se puede cambiar.");
           revision = current.revision + 1;
@@ -379,7 +414,7 @@ export function createRecipeService(db: AppDb) {
             .where(
               input.kind === "product"
                 ? eq(recipes.productId, input.targetId)
-                : eq(recipes.outputIngredientId, input.targetId),
+                : eq(recipes.outputItemId, input.targetId),
             );
           if (existing)
             conflict(
@@ -389,22 +424,22 @@ export function createRecipeService(db: AppDb) {
         const ids = [
           ...new Set(
             input.lines
-              .flatMap((l) => l.options.map((o) => o.ingredientId))
+              .flatMap((l) => l.options.map((o) => o.itemId))
               .concat(input.kind === "preparation" ? [input.targetId] : []),
           ),
         ].sort();
-        const locked = new Map<string, typeof ingredients.$inferSelect>();
-        for (const ingredientId of ids) {
+        const locked = new Map<string, typeof items.$inferSelect>();
+        for (const itemId of ids) {
           const [item] = await tx
             .select()
-            .from(ingredients)
-            .where(eq(ingredients.id, ingredientId))
+            .from(items)
+            .where(eq(items.id, itemId))
             .for("update");
-          if (!item || item.archivedAt)
+          if (!item || item.archivedAt || !item.recipeUsable)
             conflict(
               "La receta requiere insumos activos. Revisá sus ingredientes.",
             );
-          locked.set(ingredientId, item);
+          locked.set(itemId, item);
         }
         let name: string;
         let outputUnit: string;
@@ -427,7 +462,7 @@ export function createRecipeService(db: AppDb) {
           conflict("La unidad del destino cambió. Recargá la ficha.");
         for (const line of input.lines) {
           if (
-            new Set(line.options.map((o) => o.ingredientId)).size !==
+            new Set(line.options.map((o) => o.itemId)).size !==
             line.options.length
           )
             invalid(
@@ -436,7 +471,7 @@ export function createRecipeService(db: AppDb) {
           for (const option of line.options)
             if (
               option.baseUnit &&
-              option.baseUnit !== locked.get(option.ingredientId)!.baseUnit
+              option.baseUnit !== locked.get(option.itemId)!.baseUnit
             )
               conflict("La unidad de un ingrediente cambió. Recargá la ficha.");
         }
@@ -444,7 +479,7 @@ export function createRecipeService(db: AppDb) {
           await assertAcyclic(
             tx,
             input.targetId,
-            input.lines.flatMap((l) => l.options.map((o) => o.ingredientId)),
+            input.lines.flatMap((l) => l.options.map((o) => o.itemId)),
           );
         if (input.id)
           await tx.update(recipes).set({ revision }).where(eq(recipes.id, id));
@@ -453,13 +488,13 @@ export function createRecipeService(db: AppDb) {
             id,
             kind: input.kind,
             productId: input.kind === "product" ? input.targetId : null,
-            outputIngredientId:
-              input.kind === "preparation" ? input.targetId : null,
+            outputItemId: input.kind === "preparation" ? input.targetId : null,
           });
         await tx.insert(recipeVersions).values({
           id: versionId,
           recipeId: id,
           version: revision,
+          compositionModel: input.compositionModel,
           outputName: name,
           outputUnit,
           yieldQuantity: input.yieldQuantity,
@@ -475,11 +510,58 @@ export function createRecipeService(db: AppDb) {
             line.options.map((option, position) => ({
               lineId: savedLine.id,
               position,
-              ingredientId: option.ingredientId,
-              ingredientName: locked.get(option.ingredientId)!.name,
-              baseUnit: locked.get(option.ingredientId)!.baseUnit,
+              itemId: option.itemId,
+              itemName: locked.get(option.itemId)!.name,
+              baseUnit: locked.get(option.itemId)!.baseUnit,
               quantity: option.quantity,
             })),
+          );
+        }
+        if (input.compositionModel === "configurable") {
+          const previousVersion =
+            revision > 1
+              ? (
+                  await tx
+                    .select()
+                    .from(recipeVersions)
+                    .where(
+                      and(
+                        eq(recipeVersions.recipeId, id),
+                        eq(recipeVersions.version, revision - 1),
+                      ),
+                    )
+                )[0]?.id
+              : undefined;
+          await saveBindings(
+            tx,
+            versionId,
+            input.targetId,
+            input.groups,
+            actor,
+            previousVersion,
+          );
+        }
+        if (
+          input.kind === "product" &&
+          input.compositionModel === "configurable"
+        ) {
+          const [current] = await tx
+            .select({ version: productFulfillmentVersions.version })
+            .from(productFulfillments)
+            .innerJoin(
+              productFulfillmentVersions,
+              eq(productFulfillmentVersions.id, productFulfillments.versionId),
+            )
+            .where(eq(productFulfillments.productId, input.targetId));
+          await publishFulfillment(
+            tx,
+            { actorId: actor.id, role: actor.role },
+            input.targetId,
+            {
+              mode: "recipe",
+              recipeVersionId: versionId,
+              expectedVersion: current?.version ?? 0,
+            },
           );
         }
         await audit(tx, actor, "recipes", id, input.id ? "version" : "create", {
@@ -490,7 +572,7 @@ export function createRecipeService(db: AppDb) {
       });
     },
     async get(actor: Actor, id: string, versionId?: string) {
-      requireCatalogAccess(actor);
+      await requireCatalogRead(db, actor);
       recipeId(id);
       if (versionId) recipeId(versionId);
       return db.transaction((tx) => detail(tx, id, versionId), {
@@ -499,7 +581,7 @@ export function createRecipeService(db: AppDb) {
       });
     },
     async cost(actor: Actor, id: string, raw: unknown) {
-      requireCatalogAccess(actor);
+      await requireCatalogRead(db, actor);
       recipeId(id);
       const input = parseSelections(raw);
       return db.transaction(
@@ -507,6 +589,17 @@ export function createRecipeService(db: AppDb) {
           const recipe = await recipeDefinition(tx, id);
           if (recipe.revision !== input.revision)
             conflict("La receta cambió. Recargá sus ingredientes.");
+          if (recipe.compositionModel === "configurable") {
+            const config = await loadConfiguration(tx, recipe.versionId);
+            const { costComposition } = await import("./costing");
+            return costComposition(
+              tx,
+              resolveComposition(
+                config,
+                input.modifiers ?? defaultSelections(config),
+              ).components,
+            );
+          }
           return calculate(tx, recipe, input.selections);
         },
         { isolationLevel: "repeatable read", accessMode: "read only" },
@@ -518,7 +611,7 @@ export function createRecipeService(db: AppDb) {
       search = "",
       offset = 0,
     ): Promise<RecipeList> {
-      requireCatalogAccess(actor);
+      await requireCatalogRead(db, actor);
       if (kind && !["product", "preparation"].includes(kind))
         invalid("Tipo de receta inválido.");
       if (!Number.isSafeInteger(offset) || offset < 0 || offset > 1_000_000)
@@ -538,7 +631,7 @@ export function createRecipeService(db: AppDb) {
               recipe: recipes,
               version: recipeVersions,
               productArchived: products.archivedAt,
-              ingredientArchived: ingredients.archivedAt,
+              itemArchived: items.archivedAt,
               priceCounter: productPrices.amount,
             })
             .from(recipes)
@@ -557,10 +650,7 @@ export function createRecipeService(db: AppDb) {
                 eq(productPrices.channel, "counter"),
               ),
             )
-            .leftJoin(
-              ingredients,
-              eq(ingredients.id, recipes.outputIngredientId),
-            )
+            .leftJoin(items, eq(items.id, recipes.outputItemId))
             .where(where)
             .orderBy(asc(recipeVersions.outputName), asc(recipes.id))
             .limit(100)
@@ -583,7 +673,7 @@ export function createRecipeService(db: AppDb) {
               let totalCost = 0n;
               let pending = false;
               for (const option of r.options.filter((o) => o.position === 0)) {
-                const cost = estimate(option.ingredientId);
+                const cost = estimate(option.itemId);
                 if (cost.value === null) pending = true;
                 else
                   totalCost += roundedDivision(
@@ -607,25 +697,40 @@ export function createRecipeService(db: AppDb) {
               ];
             }),
           );
+          for (const r of rows)
+            if (r.version.compositionModel === "configurable") {
+              const config = await loadConfiguration(tx, r.version.id);
+              const { costComposition } = await import("./costing");
+              unitCosts.set(
+                r.recipe.id,
+                (
+                  await costComposition(
+                    tx,
+                    resolveComposition(config, defaultSelections(config))
+                      .components,
+                  )
+                ).totalCost,
+              );
+            }
           return {
             rows: rows.map(
               ({
                 recipe: r,
                 version: v,
                 productArchived,
-                ingredientArchived,
+                itemArchived,
                 priceCounter,
               }) => ({
                 id: r.id,
                 unitCost: unitCosts.get(r.id) ?? null,
                 priceCounter,
                 kind: r.kind as RecipeKind,
-                targetId: r.productId ?? r.outputIngredientId!,
+                targetId: r.productId ?? r.outputItemId!,
                 name: v.outputName,
                 baseUnit: v.outputUnit,
                 yieldQuantity: v.yieldQuantity,
                 revision: r.revision,
-                archived: !!(productArchived || ingredientArchived),
+                archived: !!(productArchived || itemArchived),
               }),
             ),
             total: total.n,

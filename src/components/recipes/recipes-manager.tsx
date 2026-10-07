@@ -1,4 +1,6 @@
 "use client";
+
+import { paths } from "@/lib/navigation";
 import {
   useCallback,
   useEffect,
@@ -7,6 +9,8 @@ import {
   type FormEvent,
 } from "react";
 import Link from "next/link";
+import { CostSimulator } from "./cost-simulator";
+import { ModifierRecipeEditor } from "./modifier-editor";
 import {
   BookOpen,
   ChefHat,
@@ -65,7 +69,10 @@ export function RecipesManager({ actorId }: { actorId: string }) {
   const [loading, setLoading] = useState(true),
     [detailLoading, setDetailLoading] = useState(false),
     [error, setError] = useState("");
-  const [editor, setEditor] = useState<{ recipe?: RecipeDetail } | null>(null),
+  const [editor, setEditor] = useState<{
+      recipe?: RecipeDetail;
+      configurable?: boolean;
+    } | null>(null),
     [success, setSuccess] = useState("");
   const onSaved = useCallback((result: unknown) => {
     const recipe = result as RecipeDetail;
@@ -152,14 +159,36 @@ export function RecipesManager({ actorId }: { actorId: string }) {
     <div>
       <div className="page-heading">
         <div>
-          <h1 className="page-title">Productos y recetas</h1>
+          <h1 className="page-title">Recetas</h1>
           <p className="page-description">
             Costos claros para decidir precios y preparar cada producto.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" asChild>
-            <Link href="/products">Gestionar productos</Link>
+            <Link href={paths["modifiers"]}>Modificadores</Link>
+          </Button>
+          {kind === "product" && (
+            <Button
+              variant="outline"
+              onClick={() => setEditor({ configurable: true })}
+            >
+              Nueva receta configurable
+            </Button>
+          )}
+          {detail?.kind === "product" &&
+            detail.compositionModel === "legacy" && (
+              <Button
+                variant="outline"
+                onClick={() =>
+                  setEditor({ recipe: detail, configurable: true })
+                }
+              >
+                Convertir a modificadores
+              </Button>
+            )}
+          <Button variant="outline" asChild>
+            <Link href={paths["products"]}>Gestionar productos</Link>
           </Button>
           <Button
             disabled={operation.locked}
@@ -274,8 +303,9 @@ export function RecipesManager({ actorId }: { actorId: string }) {
                   : "Empezá con tu primera receta"}
               </h2>
               <p className="max-w-xs text-sm text-muted">
-                Elegí un {kind === "product" ? "producto" : "insumo preparado"},
-                agregá sus ingredientes y conocé su costo.
+                Elegí un{" "}
+                {kind === "product" ? "producto" : "artículo preparado"}, agregá
+                sus ingredientes y conocé su costo.
               </p>
               <Button
                 variant="outline"
@@ -488,18 +518,28 @@ export function RecipesManager({ actorId }: { actorId: string }) {
               Los cambios quedan guardados por versión.
             </DialogDescription>
           </DialogHeader>
-          {editor && (
-            <RecipeEditor
-              key={editor.recipe?.versionId ?? kind}
-              kind={kind}
-              initial={editor.recipe}
-              disabled={operation.locked}
-              error={operation.error}
-              retry={operation.uncertain ? operation.retry : undefined}
-              onCancel={() => setEditor(null)}
-              onSave={(input) => operation.submit("/api/recipes", input)}
-            />
-          )}
+          {editor &&
+            (editor.configurable ||
+            editor.recipe?.compositionModel === "configurable" ? (
+              <ModifierRecipeEditor
+                initial={editor.recipe}
+                onSave={(input) => operation.submit("/api/recipes", input)}
+                onCancel={() => setEditor(null)}
+                disabled={operation.locked}
+                error={operation.error}
+              />
+            ) : (
+              <RecipeEditor
+                key={editor.recipe?.versionId ?? kind}
+                kind={kind}
+                initial={editor.recipe}
+                disabled={operation.locked}
+                error={operation.error}
+                retry={operation.uncertain ? operation.retry : undefined}
+                onCancel={() => setEditor(null)}
+                onSave={(input) => operation.submit("/api/recipes", input)}
+              />
+            ))}
         </DialogContent>
       </Dialog>
     </div>
@@ -565,6 +605,9 @@ function RecipePanel({
       className="surface-panel min-w-0 p-5 sm:p-6"
       aria-label="Detalle de receta"
     >
+      {recipe.configuration && (
+        <CostSimulator key={recipe.versionId} recipe={recipe} />
+      )}
       <div className="mb-6 flex items-start gap-4">
         <span className="icon-tile icon-tile-warm">
           {recipe.kind === "product" ? (
@@ -689,13 +732,14 @@ function RecipePanel({
         <Notice>
           <strong>Costo pendiente</strong>
           <p className="mt-1">
-            Faltan precios o hay insumos archivados: {cost.missing.join(", ")}.
+            Faltan precios o hay artículos archivados: {cost.missing.join(", ")}
+            .
           </p>
           <Link
             className="mt-2 inline-block font-semibold underline"
-            href="/ingredients"
+            href={paths["items"]}
           >
-            Revisar insumos
+            Revisar artículos
           </Link>
         </Notice>
       ) : (
@@ -720,7 +764,7 @@ function RecipePanel({
         </Button>
         {recipe.kind === "preparation" && !old && !recipe.archived && (
           <Button asChild>
-            <Link href={`/production?recipe=${recipe.id}`}>
+            <Link href={`${paths.production}?recipe=${recipe.id}`}>
               Registrar producción
               <ArrowRight />
             </Link>
@@ -753,14 +797,14 @@ function RecipePanel({
 
 type OptionDraft = {
   key: string;
-  ingredientId: string;
-  ingredient?: CatalogRow;
+  itemId: string;
+  item?: CatalogRow;
   quantity: string;
 };
 type LineDraft = { key: string; optional: boolean; options: OptionDraft[] };
 const blankOption = (): OptionDraft => ({
   key: crypto.randomUUID(),
-  ingredientId: "",
+  itemId: "",
   quantity: "",
 });
 function RecipeEditor({
@@ -803,10 +847,10 @@ function RecipeEditor({
           optional: l.optional,
           options: l.options.map((o) => ({
             key: o.id,
-            ingredientId: o.ingredientId,
+            itemId: o.itemId,
             quantity: inputDecimal(o.quantity),
-            ingredient: {
-              id: o.ingredientId,
+            item: {
+              id: o.itemId,
               name: o.name,
               baseUnit: o.baseUnit,
               revision: 1,
@@ -849,9 +893,9 @@ function RecipeEditor({
       lines: lines.map((l) => ({
         optional: l.optional,
         options: l.options.map((o) => ({
-          ingredientId: o.ingredientId,
+          itemId: o.itemId,
           quantity: o.quantity,
-          baseUnit: String(o.ingredient?.baseUnit ?? "g"),
+          baseUnit: String(o.item?.baseUnit ?? "g"),
         })),
       })),
     });
@@ -861,7 +905,7 @@ function RecipeEditor({
       <fieldset disabled={disabled} className="space-y-5">
         <div className="grid gap-4 sm:grid-cols-2">
           <SearchSelect
-            entity={kind === "product" ? "products" : "ingredients"}
+            entity={kind === "product" ? "products" : "items"}
             label={kind === "product" ? "Producto" : "Preparado a ingresar"}
             value={targetId}
             initial={target}
@@ -888,10 +932,10 @@ function RecipeEditor({
         <p className="text-xs text-muted">
           ¿Falta una ficha?{" "}
           <Link
-            href={kind === "product" ? "/products" : "/ingredients"}
+            href={kind === "product" ? paths.products : paths.items}
             className="font-semibold text-blue-700 underline"
           >
-            Creala en {kind === "product" ? "Productos" : "Insumos"}
+            Creala en {kind === "product" ? "Productos" : "Artículos"}
           </Link>{" "}
           antes de armar la receta.
         </p>
@@ -939,21 +983,21 @@ function RecipeEditor({
                   className="mb-3 grid items-end gap-3 sm:grid-cols-[minmax(0,1fr)_150px_40px]"
                 >
                   <SearchSelect
-                    entity="ingredients"
+                    entity="items"
                     label={`Ingrediente ${i + 1}.${j + 1}`}
-                    value={option.ingredientId}
-                    initial={option.ingredient}
+                    value={option.itemId}
+                    initial={option.item}
                     required
                     disabled={disabled}
                     onChange={(id, row) =>
-                      update(i, j, { ingredientId: id, ingredient: row })
+                      update(i, j, { itemId: id, item: row })
                     }
                   />
                   <Field
                     label={`Cantidad ${i + 1}.${j + 1}`}
                     value={option.quantity}
                     onChange={(v) => update(i, j, { quantity: v })}
-                    unit={String(option.ingredient?.baseUnit ?? "g")}
+                    unit={String(option.item?.baseUnit ?? "g")}
                     required
                   />
                   {j > 0 ? (

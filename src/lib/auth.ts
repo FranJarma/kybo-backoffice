@@ -96,12 +96,17 @@ export async function actorFromHeaders(
     .select({
       role: operationalUsers.role,
       disabled: operationalUsers.disabled,
+      catalogManager: operationalUsers.catalogManager,
     })
     .from(operationalUsers)
     .where(eq(operationalUsers.userId, session.user.id))
     .limit(1);
   return permissions && !permissions.disabled
-    ? { id: session.user.id, role: permissions.role }
+    ? {
+        id: session.user.id,
+        role: permissions.role,
+        catalogManager: permissions.catalogManager,
+      }
     : null;
 }
 

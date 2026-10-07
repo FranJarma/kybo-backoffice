@@ -1,5 +1,5 @@
 import { getDb } from "@/db/client";
-import { inventoryResponse } from "@/modules/inventory/http";
+import { catalogResponse as inventoryResponse } from "@/modules/catalog/http";
 import { createRecipeService } from "@/modules/recipes/service";
 import type { RecipeKind } from "@/modules/recipes/types";
 export const runtime = "nodejs";

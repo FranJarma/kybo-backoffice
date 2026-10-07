@@ -16,7 +16,6 @@ import {
   ShoppingCart,
   Warehouse,
   LogOut,
-  ChevronRight,
   UserRound,
   ChefHat,
   Store,
@@ -26,32 +25,24 @@ import {
 import { Dialog } from "radix-ui";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-const groups = [
-  {
-    label: "Operación",
-    links: [
-      { href: "/", label: "Inicio", icon: House },
-      { href: "/sales", label: "Ventas", icon: Store },
-      { href: "/kitchen", label: "Comandas", icon: ListChecks },
-      { href: "/tables", label: "Mesas", icon: LayoutGrid },
-      { href: "/inventory", label: "Inventario", icon: Warehouse },
-      { href: "/recipes", label: "Productos y recetas", icon: Package },
-      { href: "/production", label: "Registrar producción", icon: ChefHat },
-      { href: "/purchases", label: "Compras", icon: ShoppingCart },
-    ],
-  },
-  {
-    label: "Administración",
-    links: [
-      { href: "/products", label: "Precios de venta", icon: Package },
-      { href: "/ingredients", label: "Insumos", icon: Boxes },
-      { href: "/presentations", label: "Presentaciones", icon: Layers3 },
-      { href: "/suppliers", label: "Proveedores", icon: Truck },
-      { href: "/customers", label: "Clientes", icon: Users },
-      { href: "/payment-methods", label: "Medios de pago", icon: WalletCards },
-    ],
-  },
-];
+import { BranchSelector } from "@/components/branches/selector";
+import { visibleNavigation, breadcrumbs } from "@/lib/navigation";
+import { Breadcrumb } from "@/components/ui/breadcrumb";
+const icons = {
+  House,
+  Package,
+  Users,
+  Truck,
+  WalletCards,
+  Boxes,
+  Layers3,
+  ShoppingCart,
+  Warehouse,
+  ChefHat,
+  Store,
+  LayoutGrid,
+  ListChecks,
+};
 export function SignOutButton() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -101,11 +92,13 @@ export function AppShell({
   role,
   name,
   dateLabel,
+  catalogManager = false,
 }: {
   children: React.ReactNode;
   role: string;
   name: string;
   dateLabel: string;
+  catalogManager?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const menuButton = useRef<HTMLButtonElement>(null);
@@ -118,20 +111,15 @@ export function AppShell({
     return () => desktop.removeEventListener("change", closeAtDesktop);
   }, []);
   const path = usePathname();
-  const visibleGroups =
-    role === "staff"
-      ? [
-          {
-            label: "Operación",
-            links: groups[0].links.filter((l) =>
-              ["/sales", "/tables", "/kitchen"].includes(l.href),
-            ),
-          },
-        ]
-      : groups;
-  const current =
-    groups.flatMap((g) => g.links).find((l) => l.href === path)?.label ??
-    "Kybo";
+  const entries = visibleNavigation({ role, catalogManager });
+  const visibleGroups = [...new Set(entries.map((n) => n.area))].map(
+    (label) => ({
+      label,
+      links: entries
+        .filter((n) => n.area === label)
+        .map((n) => ({ ...n, icon: icons[n.icon] })),
+    }),
+  );
   const initials = name
     .split(/\s+/)
     .filter(Boolean)
@@ -175,12 +163,22 @@ export function AppShell({
       </div>
       <nav
         aria-label="Principal"
-        className="flex-1 space-y-7 overflow-y-auto px-4 py-6"
+        className="flex-1 space-y-4 overflow-y-auto px-3 py-4"
       >
-        {visibleGroups.map((g, i) => (
-          <div key={g.label}>
-            {i > 0 && <p className="eyebrow mb-3 px-3">{g.label}</p>}
-            <div className="space-y-1.5">
+        {visibleGroups.map((g) => (
+          <div
+            key={g.label}
+            className={cn(
+              "rounded-lg border-l-2 pl-1",
+              g.links.some((l) => l.href === path)
+                ? "border-blue"
+                : "border-transparent",
+            )}
+          >
+            {g.label !== "Inicio" && (
+              <p className="eyebrow mb-1.5 px-3">{g.label}</p>
+            )}
+            <div className="space-y-0.5">
               {g.links.map(({ href, label, icon: Icon }) => (
                 <Link
                   key={href}
@@ -188,7 +186,7 @@ export function AppShell({
                   onClick={() => setOpen(false)}
                   aria-current={path === href ? "page" : undefined}
                   className={cn(
-                    "flex min-h-11 items-center gap-3 rounded-[9px] px-3 text-[13px] font-semibold transition-colors",
+                    "flex min-h-10 items-center gap-3 rounded-[9px] px-3 py-2 text-[13px] leading-5 font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue",
                     path === href
                       ? "bg-[#e7f3ff] text-brand"
                       : "text-muted hover:bg-surface hover:text-brand",
@@ -258,7 +256,7 @@ export function AppShell({
       <div className="min-w-0">
         <header
           data-topbar
-          className="sticky top-0 z-20 flex h-16 items-center justify-between gap-4 border-b border-line bg-white/95 px-4 backdrop-blur-sm sm:px-7"
+          className="sticky top-0 z-20 flex min-h-16 items-center justify-between gap-4 border-b border-line bg-white/95 px-4 py-3 backdrop-blur-sm sm:px-7"
         >
           <div className="flex min-w-0 items-center gap-3">
             <Button
@@ -272,22 +270,7 @@ export function AppShell({
             >
               <Menu size={21} />
             </Button>
-            <div
-              aria-label="Ubicación"
-              className="flex min-w-0 items-center gap-3 text-xs"
-            >
-              <Link
-                href={role === "staff" ? "/sales" : "/"}
-                className="hidden text-muted sm:inline"
-              >
-                Kybo
-              </Link>
-              <ChevronRight
-                size={13}
-                className="hidden text-[#adbbcd] sm:block"
-              />
-              <span className="truncate font-bold text-brand">{current}</span>
-            </div>
+            <Breadcrumb items={breadcrumbs(path, { role, catalogManager })} />
           </div>
           <div className="flex items-center gap-5">
             <span className="hidden text-xs font-medium text-muted sm:block">
@@ -303,6 +286,9 @@ export function AppShell({
           </div>
         </header>
         <main id="main-content" className="page-container">
+          <div className="mb-6 max-w-sm">
+            <BranchSelector />
+          </div>
           {children}
         </main>
       </div>

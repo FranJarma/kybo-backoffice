@@ -1,4 +1,5 @@
 export type ProductionInput = {
+  locationId: string;
   recipeId: string;
   revision: number;
   multiplier: string;
@@ -24,8 +25,8 @@ export type ProductionPreview = {
   unitCost: string | null;
   missingCosts: string[];
   earliestExpiry: string | null;
-  ingredients: {
-    ingredientId: string;
+  items: {
+    itemId: string;
     name: string;
     baseUnit: string;
     needed: string;
@@ -36,7 +37,7 @@ export type ProductionPreview = {
 export type BatchSummary = {
   id: string;
   recipeVersionId: string;
-  outputIngredientId: string;
+  outputItemId: string;
   outputName: string;
   baseUnit: string;
   outputLotId: string;
@@ -58,9 +59,9 @@ export type BatchDetail = BatchSummary & {
   recipeRevision: number;
   selections: { lineId: string; optionId: string | null; quantity: string }[];
   allocations: {
-    ingredientId: string;
+    itemId: string;
     lotId: string;
-    ingredientName: string;
+    itemName: string;
     baseUnit: string;
     quantity: string;
     totalCost: string | null;

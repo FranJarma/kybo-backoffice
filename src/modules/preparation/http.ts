@@ -1,4 +1,4 @@
-import { requireActor } from "@/lib/auth";
+import { operationalActor } from "@/modules/branches/http";
 import type { Actor } from "@/lib/access";
 import { salesAccess } from "@/modules/sales/validation";
 import {
@@ -11,7 +11,7 @@ export async function preparationResponse(
   action: (actor: Actor, input: unknown) => Promise<unknown>,
 ) {
   try {
-    const actor = await requireActor();
+    const actor = await operationalActor(request);
     salesAccess(actor);
     return privateJson(
       await action(actor, request ? await requestInput(request) : undefined),

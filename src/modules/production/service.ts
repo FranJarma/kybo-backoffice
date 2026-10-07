@@ -1,9 +1,18 @@
+import { requireOperationalContext } from "../branches/context";
+import type { OperationalContext } from "../operations/types";
+import { businessDate as branchBusinessDate } from "../operations/business-date";
+import { inventoryValuations, lotLocationBalances } from "@/db/stock-schema";
+import { productionOrders } from "@/db/production-order-schema";
+import { stockDocuments } from "@/db/inventory-document-schema";
+import { lockStock } from "../inventory/locking";
+import { reserveStock, settleReservation } from "../inventory/reservations";
+import { postMovement } from "../inventory/ledger";
 import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, gt, lte, or, isNull, sql } from "drizzle-orm";
 import type { AppDb } from "@/db/client";
-import { ingredients } from "@/db/business-schema";
+import { items } from "@/db/business-schema";
 import { recipes, recipeVersions } from "@/db/recipe-schema";
-import { inventoryLots, stockBalances } from "@/db/inventory-schema";
+import { inventoryLots } from "@/db/inventory-schema";
 import {
   productionBatches,
   productionSelections,
@@ -13,13 +22,10 @@ import { requireCatalogAccess, type Actor } from "@/lib/access";
 import {
   actorName,
   audit,
-  businessDate,
   claim,
   conflict,
   fingerprint,
   invalid,
-  lockIngredient,
-  move,
   nextBalance,
   notFound,
   type Tx,
@@ -41,11 +47,18 @@ import {
 } from "./validation";
 import type { BatchDetail, BatchSummary, ProductionPreview } from "./types";
 
-type LockedIngredient = Awaited<ReturnType<typeof lockIngredient>>;
+type LockedItem = {
+  row: typeof items.$inferSelect;
+  balance: {
+    itemId: string;
+    physicalQuantity: string;
+    stockValue: string | null;
+  };
+};
 type Allocation = {
-  ingredientId: string;
+  itemId: string;
   lotId: string;
-  ingredientName: string;
+  itemName: string;
   baseUnit: string;
   quantity: string;
   totalCost: string | null;
@@ -56,8 +69,9 @@ async function prepare(
   input: ParsedProduction,
   now: Date,
   locking: boolean,
+  ctx: OperationalContext,
 ) {
-  const date = businessDate(now);
+  const date = branchBusinessDate(now, ctx.timeZone);
   if (input.producedOn !== date)
     invalid(
       "Registrá la producción del día de hoy. La carga retroactiva todavía no está habilitada.",
@@ -106,40 +120,50 @@ async function prepare(
     const option = line.options.find((o) => o.id === selection.optionId);
     if (!option) return invalid("La alternativa no pertenece a esta receta.");
     if (qty <= 0n) invalid("El consumo real debe ser positivo.");
-    const total = (needed.get(option.ingredientId) ?? 0n) + qty;
+    const total = (needed.get(option.itemId) ?? 0n) + qty;
     safeQuantity(total);
-    needed.set(option.ingredientId, total);
+    needed.set(option.itemId, total);
   }
   if (!needed.size)
     invalid("La producción debe consumir al menos un ingrediente.");
   if (needed.has(recipe.targetId))
     invalid("Una preparación no puede consumirse a sí misma.");
-  const locked = new Map<string, LockedIngredient>();
-  for (const id of [...needed.keys(), recipe.targetId].sort()) {
-    if (locking) locked.set(id, await lockIngredient(tx, id, true));
-    else {
-      const [row] = await tx
-        .select()
-        .from(ingredients)
-        .where(eq(ingredients.id, id));
-      if (!row || row.archivedAt)
-        conflict("Hay un insumo archivado. Revisá la receta.");
-      const [balance] = await tx
-        .select()
-        .from(stockBalances)
-        .where(eq(stockBalances.ingredientId, id));
-      locked.set(id, {
-        row,
-        balance: balance ?? {
-          ingredientId: id,
-          physicalQuantity: "0.000000",
-          stockValue: "0.000000",
-        },
-      });
-    }
+  const locked = new Map<string, LockedItem>();
+  const itemIds = [...needed.keys(), recipe.targetId].sort();
+  if (locking)
+    await lockStock(
+      tx,
+      ctx,
+      itemIds.map((itemId) => ({ itemId, locationId: input.locationId })),
+    );
+  for (const id of itemIds) {
+    const [row] = await tx.select().from(items).where(eq(items.id, id));
+    if (!row || row.archivedAt || !row.recipeUsable)
+      conflict("Elegí artículos activos habilitados para recetas.");
+    const [balance] = await tx
+      .select({
+        itemId: inventoryValuations.itemId,
+        physicalQuantity: inventoryValuations.quantity,
+        stockValue: inventoryValuations.value,
+      })
+      .from(inventoryValuations)
+      .where(
+        and(
+          eq(inventoryValuations.itemId, id),
+          eq(inventoryValuations.branchId, ctx.branchId),
+        ),
+      );
+    locked.set(id, {
+      row,
+      balance: balance ?? {
+        itemId: id,
+        physicalQuantity: "0.000000",
+        stockValue: "0.000000",
+      },
+    });
   }
   const allocations: Allocation[] = [];
-  const availability: ProductionPreview["ingredients"] = [];
+  const availability: ProductionPreview["items"] = [];
   const lotState: {
     id: string;
     revision: number;
@@ -153,13 +177,28 @@ async function prepare(
   for (const [id, qty] of [...needed].sort(([a], [b]) => a.localeCompare(b))) {
     const { row, balance } = locked.get(id)!;
     const query = tx
-      .select()
+      .select({
+        id: inventoryLots.id,
+        revision: lotLocationBalances.revision,
+        receivedOn: inventoryLots.receivedOn,
+        expiresOn: inventoryLots.expiresOn,
+        remainingQuantity: sql<string>`${lotLocationBalances.quantity} - ${lotLocationBalances.reserved}`,
+      })
       .from(inventoryLots)
+      .innerJoin(
+        lotLocationBalances,
+        and(
+          eq(lotLocationBalances.lotId, inventoryLots.id),
+          eq(lotLocationBalances.locationId, input.locationId),
+          eq(lotLocationBalances.branchId, ctx.branchId),
+        ),
+      )
       .where(
         and(
-          eq(inventoryLots.ingredientId, id),
+          eq(inventoryLots.itemId, id),
           eq(inventoryLots.blocked, false),
-          gt(inventoryLots.remainingQuantity, "0"),
+          eq(lotLocationBalances.blocked, false),
+          sql`${lotLocationBalances.quantity} > ${lotLocationBalances.reserved}`,
           lte(inventoryLots.receivedOn, date),
           or(
             isNull(inventoryLots.expiresOn),
@@ -187,7 +226,7 @@ async function prepare(
       0n,
     );
     availability.push({
-      ingredientId: id,
+      itemId: id,
       name: row.name,
       baseUnit: row.baseUnit,
       needed: six(qty),
@@ -213,9 +252,9 @@ async function prepare(
       if (lot.expiresOn && (!earliestExpiry || lot.expiresOn < earliestExpiry))
         earliestExpiry = lot.expiresOn;
       allocations.push({
-        ingredientId: id,
+        itemId: id,
         lotId: lot.id,
-        ingredientName: row.name,
+        itemName: row.name,
         baseUnit: row.baseUnit,
         quantity: six(used),
         totalCost: value.applied === null ? null : six(-value.applied),
@@ -270,7 +309,7 @@ async function prepare(
     unitCost: unitCost === null ? null : six(unitCost),
     missingCosts: [...missingCosts],
     earliestExpiry,
-    ingredients: availability,
+    items: availability,
   };
   return { recipe, locked, allocations, preview };
 }
@@ -279,11 +318,20 @@ const summary = (row: typeof productionBatches.$inferSelect): BatchSummary => ({
   ...row,
   createdAt: row.createdAt.toISOString(),
 });
-async function detail(db: AppDb | Tx, id: string): Promise<BatchDetail> {
+async function detail(
+  db: AppDb | Tx,
+  id: string,
+  branchId: string,
+): Promise<BatchDetail> {
   const [row] = await db
     .select()
     .from(productionBatches)
-    .where(eq(productionBatches.id, id));
+    .where(
+      and(
+        eq(productionBatches.id, id),
+        eq(productionBatches.branchId, branchId),
+      ),
+    );
   if (!row) notFound();
   const [version] = await db
     .select()
@@ -314,14 +362,28 @@ export function createProductionService(
   return {
     async preview(actor: Actor, raw: unknown) {
       requireCatalogAccess(actor);
+      const ctx = await requireOperationalContext(
+        db,
+        actor,
+        actor.branchId ?? "",
+      );
+      if (ctx.role === "staff")
+        invalid("Se requiere permiso de encargado.", "FORBIDDEN", 403);
       const input = parseProduction(raw);
       return db.transaction(
-        async (tx) => (await prepare(tx, input, now(), false)).preview,
+        async (tx) => (await prepare(tx, input, now(), false, ctx)).preview,
         { isolationLevel: "repeatable read", accessMode: "read only" },
       );
     },
     async record(actor: Actor, raw: unknown): Promise<BatchDetail> {
       requireCatalogAccess(actor);
+      const ctx = await requireOperationalContext(
+        db,
+        actor,
+        actor.branchId ?? "",
+      );
+      if (ctx.role === "staff")
+        invalid("Se requiere permiso de encargado.", "FORBIDDEN", 403);
       const parsed = parseProductionOperation(raw);
       const { requestId, previewToken, ...input } = parsed;
       return db.transaction(async (tx) => {
@@ -334,12 +396,13 @@ export function createProductionService(
           fingerprint("production", parsed),
           id,
         );
-        if (previous) return detail(tx, previous);
-        const { recipe, locked, allocations, preview } = await prepare(
+        if (previous) return detail(tx, previous, ctx.branchId);
+        const { recipe, allocations, preview } = await prepare(
           tx,
           input,
           now(),
           true,
+          ctx,
         );
         if (!preview.canConfirm)
           invalid(
@@ -353,10 +416,54 @@ export function createProductionService(
             "STALE_PREVIEW",
             409,
           );
+        await tx.insert(productionOrders).values({
+          id,
+          branchId: ctx.branchId,
+          locationId: input.locationId,
+          recipeVersionId: recipe.versionId,
+          outputItemId: recipe.targetId,
+          plannedQuantity: preview.expectedOutput,
+          composition: { selections: input.selections, allocations },
+          state: "confirmed",
+        });
+        const [document] = await tx
+          .insert(stockDocuments)
+          .values({
+            branchId: ctx.branchId,
+            kind: "production",
+            productionOrderId: id,
+          })
+          .returning();
+        const reservation = await reserveStock(tx, ctx, {
+          operationId: requestId,
+          documentId: document.id,
+          demands: allocations.map((a) => ({
+            itemId: a.itemId,
+            locationId: input.locationId,
+            quantity: a.quantity,
+          })),
+        });
+        await settleReservation(tx, ctx, {
+          operationId: requestId,
+          reservationId: reservation.reservationId,
+          consume: reservation.allocations,
+          release: [],
+        });
+        await postMovement(tx, ctx, {
+          operationId: requestId,
+          documentId: document.id,
+          action: "production",
+          reason: input.notes,
+          legs: reservation.allocations.map((a) => ({
+            ...a,
+            direction: "out",
+            incomingValue: null,
+          })),
+        });
         const [lot] = await tx
           .insert(inventoryLots)
           .values({
-            ingredientId: recipe.targetId,
+            itemId: recipe.targetId,
             receivedOn: input.producedOn,
             expiresOn: input.expiresOn,
             lotCode: input.lotCode,
@@ -364,90 +471,94 @@ export function createProductionService(
             remainingQuantity: input.actualOutput,
           })
           .returning();
-        await tx
-          .insert(productionBatches)
-          .values({
-            id,
-            recipeVersionId: recipe.versionId,
-            outputIngredientId: recipe.targetId,
-            outputName: recipe.name,
-            baseUnit: recipe.baseUnit,
-            outputLotId: lot.id,
-            multiplier: input.multiplier,
-            expectedOutput: preview.expectedOutput,
-            actualOutput: input.actualOutput,
-            totalCost: preview.totalCost,
-            unitCost: preview.unitCost,
-            producedOn: input.producedOn,
-            expiresOn: input.expiresOn,
-            lotCode: input.lotCode,
-            notes: input.notes,
-            actorId: actor.id,
-            actorName: await actorName(tx, actor),
-          });
-        await tx
-          .insert(productionSelections)
-          .values(
-            input.selections.map((selection) => ({
-              ...selection,
-              batchId: id,
-            })),
-          );
+        await tx.insert(productionBatches).values({
+          id,
+          branchId: ctx.branchId,
+          recipeVersionId: recipe.versionId,
+          outputItemId: recipe.targetId,
+          outputName: recipe.name,
+          baseUnit: recipe.baseUnit,
+          outputLotId: lot.id,
+          multiplier: input.multiplier,
+          expectedOutput: preview.expectedOutput,
+          actualOutput: input.actualOutput,
+          totalCost: preview.totalCost,
+          unitCost: preview.unitCost,
+          producedOn: input.producedOn,
+          expiresOn: input.expiresOn,
+          lotCode: input.lotCode,
+          notes: input.notes,
+          actorId: actor.id,
+          actorName: await actorName(tx, actor),
+        });
+        await tx.insert(productionSelections).values(
+          input.selections.map((selection) => ({
+            ...selection,
+            batchId: id,
+          })),
+        );
         for (const [position, allocation] of allocations.entries()) {
-          await tx
-            .update(inventoryLots)
-            .set({
-              remainingQuantity: sql`${inventoryLots.remainingQuantity} - ${allocation.quantity}::numeric`,
-              revision: sql`${inventoryLots.revision} + 1`,
-            })
-            .where(eq(inventoryLots.id, allocation.lotId));
-          await move(
-            tx,
-            actor,
-            allocation.ingredientId,
-            allocation.lotId,
-            "production_out",
-            -integer(allocation.quantity),
-            null,
-            `Producción: ${recipe.name}`,
-            id,
-            locked.get(allocation.ingredientId)!.balance,
-          );
           await tx
             .insert(productionAllocations)
             .values({ ...allocation, batchId: id, position });
         }
-        await move(
-          tx,
-          actor,
-          recipe.targetId,
-          lot.id,
-          "production_in",
-          integer(input.actualOutput),
-          preview.totalCost === null ? null : integer(preview.totalCost),
-          `Producción: ${recipe.name}`,
-          id,
-          locked.get(recipe.targetId)!.balance,
-        );
+        await postMovement(tx, ctx, {
+          operationId: requestId,
+          documentId: document.id,
+          action: "production",
+          reason: input.notes,
+          legs: [
+            {
+              itemId: recipe.targetId,
+              lotId: lot.id,
+              locationId: input.locationId,
+              quantity: input.actualOutput,
+              direction: "in",
+              incomingValue: preview.totalCost,
+            },
+          ],
+        });
+        await tx
+          .update(productionOrders)
+          .set({
+            state: "completed",
+            actualQuantity: input.actualOutput,
+            revision: 2,
+          })
+          .where(eq(productionOrders.id, id));
         await audit(tx, actor, "production", id, "produce", {
           recipeVersionId: recipe.versionId,
           outputLotId: lot.id,
           actualOutput: input.actualOutput,
           totalCost: preview.totalCost,
         });
-        return detail(tx, id);
+        return detail(tx, id, ctx.branchId);
       });
     },
     async get(actor: Actor, id: string) {
       requireCatalogAccess(actor);
+      const ctx = await requireOperationalContext(
+        db,
+        actor,
+        actor.branchId ?? "",
+      );
+      if (ctx.role === "staff")
+        invalid("Se requiere permiso de encargado.", "FORBIDDEN", 403);
       recipeId(id);
-      return detail(db, id);
+      return detail(db, id, ctx.branchId);
     },
     async list(
       actor: Actor,
       offset = 0,
     ): Promise<{ rows: BatchSummary[]; total: number }> {
       requireCatalogAccess(actor);
+      const ctx = await requireOperationalContext(
+        db,
+        actor,
+        actor.branchId ?? "",
+      );
+      if (ctx.role === "staff")
+        invalid("Se requiere permiso de encargado.", "FORBIDDEN", 403);
       if (!Number.isSafeInteger(offset) || offset < 0 || offset > 1_000_000)
         invalid("Página inválida.");
       return db.transaction(
@@ -455,6 +566,7 @@ export function createProductionService(
           const rows = await tx
             .select()
             .from(productionBatches)
+            .where(eq(productionBatches.branchId, ctx.branchId))
             .orderBy(
               desc(productionBatches.createdAt),
               desc(productionBatches.id),
@@ -463,7 +575,8 @@ export function createProductionService(
             .offset(offset);
           const [total] = await tx
             .select({ n: sql<number>`count(*)::int` })
-            .from(productionBatches);
+            .from(productionBatches)
+            .where(eq(productionBatches.branchId, ctx.branchId));
           return { rows: rows.map(summary), total: total.n };
         },
         { isolationLevel: "repeatable read", accessMode: "read only" },

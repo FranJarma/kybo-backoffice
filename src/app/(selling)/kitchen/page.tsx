@@ -1,4 +1,4 @@
-import { requireActor } from "@/lib/auth";
+import { requirePageActor as requireActor } from "@/modules/branches/page-context";
 import { PreparationBoard } from "@/components/preparation/board";
 export default async function KitchenPage({
   searchParams,

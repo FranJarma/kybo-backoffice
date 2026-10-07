@@ -1,3 +1,4 @@
+import { requireOperationalContext } from "../branches/context";
 import { randomUUID } from "node:crypto";
 import { and, asc, count, eq, isNull } from "drizzle-orm";
 import type { AppDb } from "@/db/client";
@@ -50,7 +51,11 @@ export async function lockTable(tx: Tx, id: string) {
   if (table.archivedAt) invalid("La mesa está archivada.");
   return table;
 }
-async function tableView(db: AppDb | Tx, id?: string): Promise<TableView[]> {
+async function tableView(
+  db: AppDb | Tx,
+  branchId: string,
+  id?: string,
+): Promise<TableView[]> {
   const rows = await db
     .select({ table: diningTables, sale: sales })
     .from(diningTables)
@@ -62,7 +67,12 @@ async function tableView(db: AppDb | Tx, id?: string): Promise<TableView[]> {
         eq(sales.status, "open"),
       ),
     )
-    .where(id ? eq(diningTables.id, id) : isNull(diningTables.archivedAt))
+    .where(
+      and(
+        eq(diningTables.branchId, branchId),
+        id ? eq(diningTables.id, id) : isNull(diningTables.archivedAt),
+      ),
+    )
     .orderBy(asc(diningTables.y), asc(diningTables.x));
   const counts = await db
     .select({ id: saleOrders.saleId, total: count() })
@@ -75,6 +85,7 @@ async function tableView(db: AppDb | Tx, id?: string): Promise<TableView[]> {
         eq(sales.origin, "table"),
       ),
     )
+    .where(eq(sales.branchId, branchId))
     .groupBy(saleOrders.saleId);
   return rows.map(({ table: t, sale: s }) => ({
     id: t.id,
@@ -96,7 +107,12 @@ export function createTableService(db: AppDb) {
   return {
     async list(actor: Actor | null) {
       salesAccess(actor);
-      return db.transaction((tx) => tableView(tx), {
+      const ctx = await requireOperationalContext(
+        db,
+        actor,
+        actor.branchId ?? "",
+      );
+      return db.transaction((tx) => tableView(tx, ctx.branchId), {
         isolationLevel: "repeatable read",
         accessMode: "read only",
       });
@@ -104,6 +120,9 @@ export function createTableService(db: AppDb) {
     async save(actor: Actor | null, raw: unknown) {
       requireCatalogAccess(actor);
       const a = actor!;
+      const ctx = await requireOperationalContext(db, a, a.branchId ?? "");
+      if (ctx.role === "staff")
+        invalid("Se requiere un encargado.", "FORBIDDEN", 403);
       const input = parse(tableSchema, raw);
       const id = input.id ?? randomUUID();
       return salesTransaction(() =>
@@ -116,9 +135,10 @@ export function createTableService(db: AppDb) {
             fingerprint("sale-table", input),
             id,
           );
-          if (old) return (await tableView(tx, old))[0];
+          if (old) return (await tableView(tx, ctx.branchId, old))[0];
           if (input.id) {
             const table = await lockTable(tx, input.id);
+            if (table.branchId !== ctx.branchId) notFound();
             if (table.revision !== input.revision)
               conflict("La mesa cambió. Actualizá antes de guardar.");
             if (input.archived) {
@@ -154,6 +174,7 @@ export function createTableService(db: AppDb) {
               invalid("La nueva mesa debe estar activa.");
             await tx.insert(diningTables).values({
               id,
+              branchId: ctx.branchId,
               name: input.name,
               capacity: input.capacity,
               x: input.x,
@@ -168,7 +189,7 @@ export function createTableService(db: AppDb) {
             input.id ? "update" : "create",
             input,
           );
-          return (await tableView(tx, id))[0];
+          return (await tableView(tx, ctx.branchId, id))[0];
         }),
       );
     },

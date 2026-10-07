@@ -1,3 +1,4 @@
+import { branches } from "./branch-schema";
 import { sql } from "drizzle-orm";
 import {
   pgTable,
@@ -11,7 +12,7 @@ import {
   index,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
-import { ingredients } from "./business-schema";
+import { items } from "./business-schema";
 import { user } from "./auth-schema";
 import { inventoryLots } from "./inventory-schema";
 import { recipeVersions, recipeLines, recipeOptions } from "./recipe-schema";
@@ -21,12 +22,15 @@ export const productionBatches = pgTable(
   "production_batches",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
     recipeVersionId: uuid("recipe_version_id")
       .notNull()
       .references(() => recipeVersions.id, { onDelete: "restrict" }),
-    outputIngredientId: uuid("output_ingredient_id")
+    outputItemId: uuid("output_item_id")
       .notNull()
-      .references(() => ingredients.id, { onDelete: "restrict" }),
+      .references(() => items.id, { onDelete: "restrict" }),
     outputName: text("output_name").notNull(),
     baseUnit: text("base_unit").notNull(),
     outputLotId: uuid("output_lot_id")
@@ -93,13 +97,13 @@ export const productionAllocations = pgTable(
       .notNull()
       .references(() => productionBatches.id, { onDelete: "restrict" }),
     position: integer("position").notNull(),
-    ingredientId: uuid("ingredient_id")
+    itemId: uuid("item_id")
       .notNull()
-      .references(() => ingredients.id, { onDelete: "restrict" }),
+      .references(() => items.id, { onDelete: "restrict" }),
     lotId: uuid("lot_id")
       .notNull()
       .references(() => inventoryLots.id, { onDelete: "restrict" }),
-    ingredientName: text("ingredient_name").notNull(),
+    itemName: text("item_name").notNull(),
     baseUnit: text("base_unit").notNull(),
     quantity: quantity("quantity").notNull(),
     totalCost: value("total_cost"),

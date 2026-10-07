@@ -8,6 +8,10 @@ import { inputDecimal } from "@/components/recipes/shared";
 import { cents, decimal, integer } from "@/modules/inventory/decimal";
 import type { SaleChannel, SaleLookup } from "@/modules/sales/types";
 export type CartLine = {
+  expectedFulfillmentVersionId?: string;
+  expectedRecipeVersionId?: string | null;
+  modifiers?: import("@/modules/modifiers/types").Selection[];
+  modifierLabels?: string[];
   productId: string;
   name: string;
   quantity: number;
@@ -157,7 +161,9 @@ export function Cart({
   allowPrice,
   total,
   children,
+  onEdit,
 }: {
+  onEdit?: (index: number) => void;
   lines: CartLine[];
   onChange: (lines: CartLine[]) => void;
   locked: boolean;
@@ -199,7 +205,22 @@ export function Cart({
                 changed = true;
               }
               return (
-                <div key={line.productId} className="py-4">
+                <div key={`${line.productId}:${i}`} className="py-4">
+                  {line.modifierLabels?.map((label, j) => (
+                    <p key={j} className="mb-1 text-xs text-muted">
+                      {label}
+                    </p>
+                  ))}
+                  {line.modifiers !== undefined && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      type="button"
+                      onClick={() => onEdit?.(i)}
+                    >
+                      Editar opciones
+                    </Button>
+                  )}
                   <div className="flex items-start justify-between gap-2">
                     <p className="min-w-0 text-sm font-bold text-brand">
                       {line.name}
@@ -314,6 +335,7 @@ export function Cart({
 }
 export function newCartLine(row: SaleLookup["rows"][number]): CartLine {
   return {
+    expectedFulfillmentVersionId: row.fulfillmentVersionId ?? undefined,
     productId: row.id,
     name: row.name,
     quantity: 1,

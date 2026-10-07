@@ -43,6 +43,27 @@
       "when": 1790351477826,
       "tag": "0005_magenta_winter_soldier",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790556429878,
+      "tag": "0006_fair_gambit",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790556429879,
+      "tag": "0007_data_model_expand",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790556429880,
+      "tag": "0008_data_model_finalize",
+      "breakpoints": true
     }
   ]
 }

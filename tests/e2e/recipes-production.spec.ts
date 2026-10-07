@@ -32,22 +32,22 @@ test("edits a recipe, reviews shortages, records real yield and safely retries a
   test.setTimeout(120_000);
   await signIn(page);
   const raw = (
-    await post(page, "/api/catalog/ingredients", {
+    await post(page, "/api/catalog/items", {
       name: "Tapioca cruda · prueba",
       baseUnit: "g",
       unitCost: "2",
     })
   ).row;
   const prepared = (
-    await post(page, "/api/catalog/ingredients", {
+    await post(page, "/api/catalog/items", {
       name: "Tapioca cocida · prueba",
       baseUnit: "g",
       unitCost: "",
     })
   ).row;
-  await page.goto("/recipes");
+  await page.goto("/products/recipes");
   await expect(
-    page.getByRole("heading", { name: "Productos y recetas", exact: true }),
+    page.getByRole("heading", { name: "Recetas", exact: true }),
   ).toBeVisible();
   await page
     .getByRole("button", { name: "Preparaciones base", exact: true })
@@ -87,7 +87,12 @@ test("edits a recipe, reviews shortages, records real yield and safely retries a
     .click();
   await expect(dialog).not.toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Ver receta de Tapioca cocida · prueba", exact: true }).getByText("Versión 2", { exact: true }),
+    page
+      .getByRole("button", {
+        name: "Ver receta de Tapioca cocida · prueba",
+        exact: true,
+      })
+      .getByText("Versión 2", { exact: true }),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Tapioca cocida · prueba", exact: true }),
@@ -99,7 +104,7 @@ test("edits a recipe, reviews shortages, records real yield and safely retries a
     path: "docs/previews/recipes-desktop.png",
     fullPage: true,
   });
-  await page.goto("/production");
+  await page.goto("/kitchen/production");
   await page
     .getByRole("button", { name: "Seleccionar Tapioca cocida · prueba" })
     .click();
@@ -126,7 +131,7 @@ test("edits a recipe, reviews shortages, records real yield and safely retries a
   await post(page, "/api/inventory/adjustments", {
     requestId: randomUUID(),
     kind: "opening",
-    ingredientId: raw.id,
+    itemId: raw.id,
     quantity: "200",
     unitCost: "2",
     receivedOn: date,
@@ -179,7 +184,7 @@ test("edits a recipe, reviews shortages, records real yield and safely retries a
   });
   await page.goto("/inventory");
   await page
-    .getByRole("searchbox", { name: "Buscar insumo" })
+    .getByRole("searchbox", { name: "Buscar artículo" })
     .fill("Tapioca cocida · prueba");
   await expect(page.getByText(/200.*g/).first()).toBeVisible();
 });
@@ -188,15 +193,15 @@ test("compares optional alternatives without editing the recipe and fits mobile"
   page,
 }) => {
   await signIn(page);
-  const ingredient = (
-    await post(page, "/api/catalog/ingredients", {
+  const item = (
+    await post(page, "/api/catalog/items", {
       name: "Perlas · prueba",
       baseUnit: "g",
       unitCost: "2",
     })
   ).row;
   const alternative = (
-    await post(page, "/api/catalog/ingredients", {
+    await post(page, "/api/catalog/items", {
       name: "Alternativa sin precio · prueba",
       baseUnit: "g",
       unitCost: "",
@@ -210,7 +215,7 @@ test("compares optional alternatives without editing the recipe and fits mobile"
       priceUberEats: "",
     })
   ).row;
-  await page.goto("/recipes");
+  await page.goto("/products/recipes");
   await page.getByRole("button", { name: "Nueva receta", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await dialog
@@ -218,7 +223,7 @@ test("compares optional alternatives without editing the recipe and fits mobile"
     .selectOption(product.id);
   await dialog
     .getByRole("combobox", { name: "Ingrediente 1.1" })
-    .selectOption(ingredient.id);
+    .selectOption(item.id);
   await dialog.getByRole("textbox", { name: "Cantidad 1.1" }).fill("10");
   await dialog.getByRole("checkbox", { name: "Opcional" }).check();
   await dialog

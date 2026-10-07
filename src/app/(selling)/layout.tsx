@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { AppShell } from "@/components/app-shell";
 import { requireActor } from "@/lib/auth";
+import { shellActor } from "@/modules/branches/page-context";
 import { getDb } from "@/db/client";
 import { user } from "@/db/auth-schema";
 export default async function SellingLayout({
@@ -11,7 +12,7 @@ export default async function SellingLayout({
 }) {
   let actor: Awaited<ReturnType<typeof requireActor>>;
   try {
-    actor = await requireActor();
+    actor = await shellActor(await requireActor());
   } catch (error) {
     if (
       typeof error === "object" &&
@@ -32,11 +33,12 @@ export default async function SellingLayout({
   return (
     <AppShell
       role={actor.role}
+      catalogManager={actor.catalogManager}
       name={profile?.name ?? "Equipo Kybo"}
       dateLabel={new Intl.DateTimeFormat("es-AR", {
         day: "numeric",
         month: "long",
-        timeZone: "America/Argentina/Salta",
+        timeZone: actor.timeZone ?? "America/Argentina/Buenos_Aires",
       }).format(new Date())}
     >
       {children}

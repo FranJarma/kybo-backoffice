@@ -4,6 +4,9 @@ import { inventoryResponse } from "../src/modules/inventory/http";
 
 const session = vi.hoisted(() => ({ requireActor: vi.fn() }));
 vi.mock("../src/lib/auth", () => session);
+vi.mock("../src/modules/branches/http", () => ({
+  operationalActor: session.requireActor,
+}));
 
 beforeEach(() => {
   vi.stubEnv("BETTER_AUTH_URL", "https://kybo.example");

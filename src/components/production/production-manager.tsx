@@ -1,4 +1,8 @@
 "use client";
+
+import { paths } from "@/lib/navigation";
+import { ProductionOrdersPanel } from "./orders-panel";
+import { LocationSelect } from "@/components/branches/location-select";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import {
@@ -47,9 +51,11 @@ import type {
 
 export function ProductionManager({
   actorId,
+  timeZone,
   initialRecipe = "",
 }: {
   actorId: string;
+  timeZone: string;
   initialRecipe?: string;
 }) {
   const [list, setList] = useState<RecipeList>({ rows: [], total: 0 }),
@@ -178,13 +184,13 @@ export function ProductionManager({
     <div>
       <div className="page-heading">
         <div>
-          <h1 className="page-title">Registrar producción</h1>
+          <h1 className="page-title">Registro de producción</h1>
           <p className="page-description">
-            Registrá insumos consumidos y rendimiento real de cada lote.
+            Registrá artículos consumidos y rendimiento real de cada lote.
           </p>
         </div>
         <Button variant="outline" asChild>
-          <Link href="/recipes">
+          <Link href={paths["recipes"]}>
             Ver recetas
             <ArrowRight />
           </Link>
@@ -216,6 +222,7 @@ export function ProductionManager({
           ) : null}
         </div>
       )}
+      <ProductionOrdersPanel actorId={actorId} recipe={recipe} />
       {saved ? (
         <section className="surface-panel mb-6 p-6">
           <div className="mb-4 flex items-center gap-3">
@@ -225,7 +232,7 @@ export function ProductionManager({
             </h2>
           </div>
           <p className="text-sm text-muted">
-            Se descontaron los insumos y se ingresaron{" "}
+            Se descontaron los artículos y se ingresaron{" "}
             {quantity(saved.actualOutput, saved.baseUnit)} de {saved.outputName}
             .
           </p>
@@ -259,7 +266,7 @@ export function ProductionManager({
               Ver detalle del lote
             </Button>
             <Button variant="outline" asChild>
-              <Link href="/inventory">Ver inventario</Link>
+              <Link href={paths["inventory"]}>Ver inventario</Link>
             </Button>
           </div>
         </section>
@@ -305,7 +312,7 @@ export function ProductionManager({
                 </p>
                 <Link
                   className="mt-2 inline-block font-semibold text-blue-700 underline"
-                  href="/recipes"
+                  href={paths["recipes"]}
                 >
                   Crear una receta base
                 </Link>
@@ -379,6 +386,7 @@ export function ProductionManager({
             </p>
           ) : recipe ? (
             <ProductionForm
+              timeZone={timeZone}
               key={`${recipe.versionId}:${refresh}`}
               recipe={recipe}
               locked={operation.locked}
@@ -495,18 +503,21 @@ export function ProductionManager({
 
 function ProductionForm({
   recipe,
+  timeZone,
   locked,
   operationStatus,
   onConfirm,
   onReload,
 }: {
   recipe: RecipeDetail;
+  timeZone: string;
   locked: boolean;
   operationStatus: number | null;
   onConfirm: (data: ProductionOperation) => void;
   onReload: () => void;
 }) {
   const [multiplier, setMultiplier] = useState("1"),
+    [locationId, setLocationId] = useState(""),
     [actual, setActual] = useState(inputDecimal(recipe.yieldQuantity));
   const [selections, setSelections] = useState(() =>
     recipe.lines.map((line) => ({
@@ -565,11 +576,12 @@ function ProductionForm({
     setBusy(true);
     invalidate();
     const input: ProductionInput = {
+      locationId,
       recipeId: recipe.id,
       revision: recipe.revision,
       multiplier,
       actualOutput: actual,
-      producedOn: today(),
+      producedOn: today(timeZone),
       expiresOn: expiresOn || null,
       lotCode,
       notes,
@@ -602,6 +614,14 @@ function ProductionForm({
       <section className="surface-panel min-w-0 p-5 sm:p-6">
         <fieldset disabled={disabled}>
           <h2 className="mb-4 text-xl font-bold">Datos del lote</h2>
+          <LocationSelect
+            value={locationId}
+            onChange={(value) => {
+              setLocationId(value);
+              invalidate();
+            }}
+            disabled={disabled}
+          />
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
               label="Recetas base"
@@ -611,13 +631,13 @@ function ProductionForm({
             />
             <Field
               label="Fecha de producción"
-              value={date(today())}
-              hint="Registro del día · hora de Salta"
+              value={date(today(timeZone))}
+              hint="Registro del día · hora de la sucursal"
             />
           </div>
           <div className="my-5 border-t border-line" />
           <div className="mb-4">
-            <h2 className="text-xl font-bold">Insumos utilizados</h2>
+            <h2 className="text-xl font-bold">Artículos utilizados</h2>
             <p className="mt-1 text-sm text-muted">
               Ajustá las cantidades al consumo real de este lote.
             </p>
@@ -628,8 +648,8 @@ function ProductionForm({
               const option = line.options.find(
                 (o) => o.id === selection.optionId,
               );
-              const availability = preview?.ingredients.find(
-                (r) => r.ingredientId === option?.ingredientId,
+              const availability = preview?.items.find(
+                (r) => r.itemId === option?.itemId,
               );
               return (
                 <div
@@ -810,7 +830,7 @@ function ProductionForm({
               }
             />
             <SummaryLine
-              label="Costo total de insumos"
+              label="Costo total de artículos"
               value={preview ? money(preview.totalCost) : "Por calcular"}
               strong
             />
@@ -841,17 +861,17 @@ function ProductionForm({
               <h3>Stock insuficiente</h3>
             </div>
             <ul className="mt-3 space-y-2 text-sm">
-              {preview.ingredients
+              {preview.items
                 .filter((i) => i.shortfall !== "0.000000")
                 .map((i) => (
-                  <li key={i.ingredientId}>
+                  <li key={i.itemId}>
                     {i.name}: faltan {quantity(i.shortfall, i.baseUnit)}.
                   </li>
                 ))}
             </ul>
             <Link
               className="mt-4 inline-block text-sm font-bold underline"
-              href="/inventory"
+              href={paths["inventory"]}
             >
               Revisar inventario
             </Link>
@@ -907,8 +927,8 @@ function ProductionForm({
             Guardar lote
           </Button>
           <p className="text-center text-xs leading-relaxed text-muted">
-            Se descontarán los insumos y se sumará el preparado al stock. Revisá
-            los datos antes de guardar.
+            Se descontarán los artículos y se sumará el preparado al stock.
+            Revisá los datos antes de guardar.
           </p>
         </section>
         {recipe.notes && (
@@ -959,7 +979,7 @@ function BatchView({ batch }: { batch: BatchDetail }) {
             className="flex justify-between gap-4 py-3 text-sm"
           >
             <span className="min-w-0 break-words">
-              {row.ingredientName}
+              {row.itemName}
               <span className="mt-1 block text-xs text-muted">
                 Lote {row.lotId.slice(0, 8)}
               </span>
@@ -979,7 +999,7 @@ function BatchView({ batch }: { batch: BatchDetail }) {
         </p>
       )}
       <Button className="mt-4" variant="outline" asChild>
-        <Link href="/inventory">Ver inventario</Link>
+        <Link href={paths["inventory"]}>Ver inventario</Link>
       </Button>
     </div>
   );

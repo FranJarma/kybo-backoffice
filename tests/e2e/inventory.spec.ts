@@ -40,7 +40,7 @@ test("receives two packages as base stock, pays separately, then records waste a
   const supplier = await createCatalog(page, "suppliers", {
     name: `Proveedor ${suffix}`,
   });
-  const ingredient = await createCatalog(page, "ingredients", {
+  const item = await createCatalog(page, "items", {
     name: `Harina ${suffix}`,
     baseUnit: "g",
     unitCost: "",
@@ -48,21 +48,21 @@ test("receives two packages as base stock, pays separately, then records waste a
   const presentation = await createCatalog(page, "presentations", {
     name: `Bolsa 800 ${suffix}`,
     supplierId: supplier.id,
-    ingredientId: ingredient.id,
+    itemId: item.id,
     baseQuantity: "800",
   });
   const paymentMethod = await createCatalog(page, "payment-methods", {
     name: `Efectivo ${suffix}`,
     kind: "cash",
   });
-  await page.goto("/purchases");
+  await page.goto("/inventory/purchases");
   await page.getByRole("button", { name: "Nueva recepción" }).click();
   await page
     .getByRole("combobox", { name: "Proveedor" })
     .selectOption(supplier.id);
   await page
-    .getByRole("combobox", { name: "Insumo", exact: true })
-    .selectOption(ingredient.id);
+    .getByRole("combobox", { name: "Artículo", exact: true })
+    .selectOption(item.id);
   await page
     .getByRole("combobox", { name: "Presentación" })
     .selectOption(presentation.id);
@@ -83,13 +83,13 @@ test("receives two packages as base stock, pays separately, then records waste a
   await expect(page.getByText(/1\.500,00/).first()).toBeVisible();
   await page.goto("/inventory");
   await page
-    .getByRole("searchbox", { name: "Buscar insumo" })
+    .getByRole("searchbox", { name: "Buscar artículo" })
     .fill(`Harina ${suffix}`);
   await expect(page.getByText(`Harina ${suffix}`).first()).toBeVisible();
   await expect(page.getByText(/1\.600.*g/).first()).toBeVisible();
   await page.reload();
   await page
-    .getByRole("searchbox", { name: "Buscar insumo" })
+    .getByRole("searchbox", { name: "Buscar artículo" })
     .fill(`Harina ${suffix}`);
   await page
     .getByRole("button", { name: new RegExp(`Ver lotes de Harina ${suffix}`) })
@@ -111,7 +111,7 @@ test("receives two packages as base stock, pays separately, then records waste a
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload();
   await page
-    .getByRole("searchbox", { name: "Buscar insumo" })
+    .getByRole("searchbox", { name: "Buscar artículo" })
     .fill(`Harina ${suffix}`);
   await expect(page.getByText(/1\.400.*g/).first()).toBeVisible();
   await page
@@ -140,19 +140,19 @@ test("an uncertain reception retains the identical operation for retry", async (
   const supplier = await createCatalog(page, "suppliers", {
     name: `Proveedor reintento ${suffix}`,
   });
-  const ingredient = await createCatalog(page, "ingredients", {
+  const item = await createCatalog(page, "items", {
     name: `Cacao ${suffix}`,
     baseUnit: "g",
     unitCost: "",
   });
-  await page.goto("/purchases");
+  await page.goto("/inventory/purchases");
   await page.getByRole("button", { name: "Nueva recepción" }).click();
   await page
     .getByRole("combobox", { name: "Proveedor" })
     .selectOption(supplier.id);
   await page
-    .getByRole("combobox", { name: "Insumo", exact: true })
-    .selectOption(ingredient.id);
+    .getByRole("combobox", { name: "Artículo", exact: true })
+    .selectOption(item.id);
   await page.getByRole("textbox", { name: "Cantidad recibida" }).fill("4");
   await page.getByRole("button", { name: "Revisar recepción" }).click();
   let submitted: unknown;
@@ -201,7 +201,7 @@ test("review converts Argentine grouped decimals exactly before confirmation", a
   const supplier = await createCatalog(page, "suppliers", {
     name: `Proveedor decimal ${suffix}`,
   });
-  const ingredient = await createCatalog(page, "ingredients", {
+  const item = await createCatalog(page, "items", {
     name: `Azúcar ${suffix}`,
     baseUnit: "g",
     unitCost: "",
@@ -209,17 +209,17 @@ test("review converts Argentine grouped decimals exactly before confirmation", a
   const presentation = await createCatalog(page, "presentations", {
     name: `Bolsa 800 ${suffix}`,
     supplierId: supplier.id,
-    ingredientId: ingredient.id,
+    itemId: item.id,
     baseQuantity: "800",
   });
-  await page.goto("/purchases");
+  await page.goto("/inventory/purchases");
   await page.getByRole("button", { name: "Nueva recepción" }).click();
   await page
     .getByRole("combobox", { name: "Proveedor" })
     .selectOption(supplier.id);
   await page
-    .getByRole("combobox", { name: "Insumo", exact: true })
-    .selectOption(ingredient.id);
+    .getByRole("combobox", { name: "Artículo", exact: true })
+    .selectOption(item.id);
   await page
     .getByRole("combobox", { name: "Presentación" })
     .selectOption(presentation.id);
@@ -238,7 +238,7 @@ test("opening another receipt clears the previous receipt payment draft", async 
   const supplier = await createCatalog(page, "suppliers", {
     name: `Proveedor cambio ${suffix}`,
   });
-  const ingredient = await createCatalog(page, "ingredients", {
+  const item = await createCatalog(page, "items", {
     name: `Insumo cambio ${suffix}`,
     baseUnit: "unit",
     unitCost: "",
@@ -263,7 +263,7 @@ test("opening another receipt clears the previous receipt payment draft", async 
         documentNumber: reference,
         lines: [
           {
-            ingredientId: ingredient.id,
+            itemId: item.id,
             quantity: "1",
             unitPrice: "100",
             discount: "0",
@@ -276,7 +276,7 @@ test("opening another receipt clears the previous receipt payment draft", async 
   };
   const first = await receive(`A-${suffix}`);
   const second = await receive(`B-${suffix}`);
-  await page.goto("/purchases");
+  await page.goto("/inventory/purchases");
   await page.getByRole("button", { name: "Ver detalle" }).nth(1).click();
   await expect(page.getByText(`A-${suffix}`)).toBeVisible();
   await page.getByRole("button", { name: "Registrar pago" }).click();
@@ -305,8 +305,8 @@ test("opening another receipt clears the previous receipt payment draft", async 
     .getByRole("combobox", { name: "Proveedor" })
     .selectOption(supplier.id);
   await page
-    .getByRole("combobox", { name: "Insumo", exact: true })
-    .selectOption(ingredient.id);
+    .getByRole("combobox", { name: "Artículo", exact: true })
+    .selectOption(item.id);
   await page.getByRole("textbox", { name: "Cantidad recibida" }).fill("1");
   await page
     .getByRole("textbox", { name: "Precio por presentación o unidad" })

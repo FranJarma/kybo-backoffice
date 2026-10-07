@@ -1,3 +1,18 @@
+import { requireOperationalContext } from "../branches/context";
+import { resolveFulfillment } from "../products/fulfillment";
+import {
+  productFulfillments,
+  productFulfillmentVersions,
+} from "@/db/product-fulfillment-schema";
+import { branchProducts } from "@/db/branch-schema";
+import { reserveOrder } from "./reservation";
+import { cancelStock } from "../fulfillment/cancellation";
+import { businessDate as branchBusinessDate } from "../operations/business-date";
+import { loadConfiguration } from "@/modules/recipes/configuration";
+import { resolveComposition } from "@/modules/recipes/composition";
+import { saleLineComponents, saleLineModifiers } from "@/db/modifier-schema";
+import { items } from "@/db/business-schema";
+import type { ResolvedComposition } from "@/modules/modifiers/types";
 import { randomUUID } from "node:crypto";
 import { and, asc, count, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -11,7 +26,7 @@ import {
   paymentMethods,
 } from "@/db/business-schema";
 import { sales, saleOrders, saleLines, salePayments } from "@/db/sales-schema";
-import { recipes, recipeVersions } from "@/db/recipe-schema";
+import { recipeGraphLock } from "@/db/recipe-schema";
 import {
   audit,
   claim,
@@ -19,7 +34,6 @@ import {
   fingerprint,
   invalid,
   notFound,
-  businessDate,
   type Tx,
 } from "@/modules/inventory/service";
 import { cents, integer } from "@/modules/inventory/decimal";
@@ -44,20 +58,26 @@ import {
 } from "@/modules/preparation/publication";
 import type { SaleChannel, SaleList, SaleLookup } from "./types";
 
-async function replaySaleDetail(tx: Tx, id: string) {
+async function replaySaleDetail(tx: Tx, id: string, branchId: string) {
   // Every mutation locks this header. Keep it stable across the detail queries.
-  await tx
+  const [sale] = await tx
     .select({ id: sales.id })
     .from(sales)
-    .where(eq(sales.id, id))
+    .where(and(eq(sales.id, id), eq(sales.branchId, branchId)))
     .for("share");
+  if (!sale) notFound();
   return saleDetail(tx, id);
 }
-async function lockSale(tx: Tx, id: string, revision: number) {
+async function lockSale(
+  tx: Tx,
+  id: string,
+  revision: number,
+  branchId: string,
+) {
   const [row] = await tx
     .select()
     .from(sales)
-    .where(eq(sales.id, id))
+    .where(and(eq(sales.id, id), eq(sales.branchId, branchId)))
     .for("update");
   if (!row) notFound();
   if (row.revision !== revision)
@@ -71,6 +91,13 @@ async function prepareLines(
   channel: SaleChannel,
   lines: LineInput[],
 ) {
+  const ctx = await requireOperationalContext(tx, actor, actor.branchId ?? "");
+  await tx.insert(recipeGraphLock).values({ id: 1 }).onConflictDoNothing();
+  await tx
+    .select()
+    .from(recipeGraphLock)
+    .where(eq(recipeGraphLock.id, 1))
+    .for("update");
   const catalog = new Map<
     string,
     { name: string; price: string | null; recipeVersionId: string | null }
@@ -93,34 +120,84 @@ async function prepareLines(
         ),
       );
     const [version] = await tx
-      .select({ id: recipeVersions.id })
-      .from(recipeVersions)
+      .select({ recipeVersionId: productFulfillmentVersions.recipeVersionId })
+      .from(productFulfillments)
       .innerJoin(
-        recipes,
-        and(
-          eq(recipes.id, recipeVersions.recipeId),
-          eq(recipes.productId, id),
-          eq(recipes.revision, recipeVersions.version),
-        ),
+        productFulfillmentVersions,
+        eq(productFulfillmentVersions.id, productFulfillments.versionId),
       )
-      .limit(1);
+      .where(eq(productFulfillments.productId, id));
     catalog.set(id, {
       name: product.name,
       price: price?.amount ?? null,
-      recipeVersionId: version?.id ?? null,
+      recipeVersionId: version?.recipeVersionId ?? null,
     });
   }
   let total = 0n;
-  const values = lines.map((line, position) => {
+  const snapshots: ResolvedComposition[] = [];
+  const values = [];
+  for (const [position, line] of lines.entries()) {
     const product = catalog.get(line.productId)!;
-    if (product.price !== line.expectedPrice)
+    const physical = await resolveFulfillment(tx, ctx, {
+      productId: line.productId,
+      quantity: "1.000000",
+      expectedVersionId: line.expectedFulfillmentVersionId,
+      selections: line.modifiers,
+    });
+    let composition: ResolvedComposition = {
+      components: [],
+      modifiers: [],
+      surcharge: "0.00",
+    };
+    if (product.recipeVersionId) {
+      const config = await loadConfiguration(tx, product.recipeVersionId);
+      if (
+        (config.model === "configurable" ||
+          line.expectedRecipeVersionId !== undefined) &&
+        line.expectedRecipeVersionId !== product.recipeVersionId
+      )
+        conflict("Cambió la receta. Revisá las opciones.");
+      composition = resolveComposition(config, line.modifiers, channel);
+      for (const c of [...composition.components].sort((a, b) =>
+        a.itemId.localeCompare(b.itemId),
+      )) {
+        const [i] = await tx
+          .select()
+          .from(items)
+          .where(eq(items.id, c.itemId))
+          .for("share");
+        if (!i || i.archivedAt || i.baseUnit !== c.baseUnit)
+          conflict("Un insumo cambió. Revisá el pedido.");
+      }
+    } else if (line.modifiers.length || line.expectedRecipeVersionId)
+      conflict("El producto no tiene esa receta.");
+    if (physical.version.mode === "direct") {
+      for (const component of physical.components) {
+        const [item] = await tx
+          .select()
+          .from(items)
+          .where(eq(items.id, component.itemId));
+        composition.components.push({
+          ...component,
+          name: item.name,
+          baseUnit: item.baseUnit,
+          archived: false,
+        });
+      }
+    }
+    snapshots.push(composition);
+    const configuredPrice =
+      product.price === null
+        ? null
+        : moneyBound(integer(product.price) + integer(composition.surcharge));
+    if (configuredPrice !== line.expectedPrice)
       conflict(
         `Cambió el precio de ${product.name}. Actualizá la carta y revisá el pedido.`,
       );
-    if (line.price !== product.price) {
+    if (line.price !== configuredPrice) {
       if (!line.priceReason)
         invalid(`Indicá el motivo del precio aplicado a ${product.name}.`);
-      if (channel === "counter" && actor.role === "staff")
+      if (channel === "counter" && ctx.role === "staff")
         invalid(
           "Un encargado debe autorizar cambios de precio en el local.",
           "FORBIDDEN",
@@ -129,20 +206,22 @@ async function prepareLines(
     }
     const lineTotal = integer(line.price) * BigInt(line.quantity);
     total += lineTotal;
-    return {
+    values.push({
+      compositionStatus: "resolved",
+      fulfillmentVersionId: line.expectedFulfillmentVersionId,
       position,
       productId: line.productId,
       name: product.name,
       quantity: line.quantity,
-      listPrice: product.price,
+      listPrice: configuredPrice,
       unitPrice: line.price,
       lineTotal: moneyBound(lineTotal),
       priceReason: line.priceReason || null,
       notes: line.notes || null,
       recipeVersionId: product.recipeVersionId,
-    };
-  });
-  return { values, totalAmount: moneyBound(total) };
+    });
+  }
+  return { values, snapshots, totalAmount: moneyBound(total) };
 }
 async function preparePayments(
   tx: Tx,
@@ -195,19 +274,41 @@ async function insertOrder(
   sequence: number,
   prepared: Awaited<ReturnType<typeof prepareLines>>,
   notes: string,
+  operationId: string,
 ) {
   const id = randomUUID();
+  const ctx = await requireOperationalContext(tx, actor, actor.branchId ?? "");
   await tx.insert(saleOrders).values({
     id,
     saleId,
+    branchId: ctx.branchId,
     sequence,
     totalAmount: prepared.totalAmount,
     notes: notes || null,
     actorId: actor.id,
   });
-  await tx
-    .insert(saleLines)
-    .values(prepared.values.map((l) => ({ ...l, orderId: id })));
+  for (const [position, value] of prepared.values.entries()) {
+    const [line] = await tx
+      .insert(saleLines)
+      .values({ ...value, orderId: id, branchId: ctx.branchId })
+      .returning();
+    const snapshot = prepared.snapshots[position];
+    for (const c of snapshot.components)
+      await tx.insert(saleLineComponents).values({
+        saleLineId: line.id,
+        itemId: c.itemId,
+        name: c.name,
+        baseUnit: c.baseUnit,
+        quantity: c.quantity,
+      });
+    for (const m of snapshot.modifiers)
+      await tx.insert(saleLineModifiers).values({
+        ...m,
+        saleLineId: line.id,
+        recipeVersionId: line.recipeVersionId!,
+      });
+  }
+  await reserveOrder(tx, ctx, id, operationId);
   await publishOrder(tx, actor, id);
 }
 const listSchema = z
@@ -225,6 +326,11 @@ export function createSalesService(db: AppDb) {
   return {
     async create(actor: Actor | null, raw: unknown) {
       salesAccess(actor);
+      const ctx = await requireOperationalContext(
+        db,
+        actor,
+        actor.branchId ?? "",
+      );
       const input = parse(createSchema, raw),
         id = randomUUID();
       return salesTransaction(() =>
@@ -237,7 +343,7 @@ export function createSalesService(db: AppDb) {
             fingerprint("sale-create", input),
             id,
           );
-          if (old) return replaySaleDetail(tx, old);
+          if (old) return replaySaleDetail(tx, old, ctx.branchId);
           if (input.origin === "delivery") {
             if (
               input.channel === "counter" ||
@@ -266,6 +372,7 @@ export function createSalesService(db: AppDb) {
           const table = input.tableId
             ? await lockTable(tx, input.tableId)
             : null;
+          if (table && table.branchId !== ctx.branchId) notFound();
           if (input.origin === "table") {
             const [open] = await tx
               .select({ id: sales.id })
@@ -314,6 +421,7 @@ export function createSalesService(db: AppDb) {
             closed = paid === total;
           await tx.insert(sales).values({
             id,
+            branchId: ctx.branchId,
             origin: input.origin,
             channel: input.channel,
             fulfillment: input.fulfillment,
@@ -326,11 +434,19 @@ export function createSalesService(db: AppDb) {
             notes: input.notes || null,
             totalAmount: lines.totalAmount,
             paidAmount: payments.totalAmount,
-            businessDate: businessDate(now),
+            businessDate: branchBusinessDate(now, ctx.timeZone),
             actorId: actor.id,
             closedAt: closed ? now : null,
           });
-          await insertOrder(tx, actor, id, 1, lines, input.notes);
+          await insertOrder(
+            tx,
+            actor,
+            id,
+            1,
+            lines,
+            input.notes,
+            input.requestId,
+          );
           if (payments.values.length)
             await tx.insert(salePayments).values(
               payments.values.map((p) => ({
@@ -346,6 +462,11 @@ export function createSalesService(db: AppDb) {
     },
     async addOrder(actor: Actor | null, id: string, raw: unknown) {
       salesAccess(actor);
+      const ctx = await requireOperationalContext(
+        db,
+        actor,
+        actor.branchId ?? "",
+      );
       parse(uuid, id);
       const input = parse(orderSchema, raw);
       return db.transaction(async (tx) => {
@@ -357,8 +478,8 @@ export function createSalesService(db: AppDb) {
           fingerprint("sale-order", { id, ...input }),
           id,
         );
-        if (old) return replaySaleDetail(tx, old);
-        const sale = await lockSale(tx, id, input.revision);
+        if (old) return replaySaleDetail(tx, old, ctx.branchId);
+        const sale = await lockSale(tx, id, input.revision, ctx.branchId);
         if (sale.status !== "open" || sale.origin !== "table")
           conflict("Solo podés agregar pedidos a una cuenta de mesa abierta.");
         const [{ total: orderCount }] = await tx
@@ -373,7 +494,15 @@ export function createSalesService(db: AppDb) {
           sale.channel as SaleChannel,
           input.lines,
         );
-        await insertOrder(tx, actor, id, orderCount + 1, lines, input.notes);
+        await insertOrder(
+          tx,
+          actor,
+          id,
+          orderCount + 1,
+          lines,
+          input.notes,
+          input.requestId,
+        );
         await tx
           .update(sales)
           .set({
@@ -389,6 +518,11 @@ export function createSalesService(db: AppDb) {
     },
     async pay(actor: Actor | null, id: string, raw: unknown) {
       salesAccess(actor);
+      const ctx = await requireOperationalContext(
+        db,
+        actor,
+        actor.branchId ?? "",
+      );
       parse(uuid, id);
       const input = parse(paySchema, raw);
       return db.transaction(async (tx) => {
@@ -400,8 +534,8 @@ export function createSalesService(db: AppDb) {
           fingerprint("sale-pay", { id, ...input }),
           id,
         );
-        if (old) return replaySaleDetail(tx, old);
-        const sale = await lockSale(tx, id, input.revision);
+        if (old) return replaySaleDetail(tx, old, ctx.branchId);
+        const sale = await lockSale(tx, id, input.revision, ctx.branchId);
         if (sale.status !== "open") conflict("La cuenta ya está cobrada.");
         const payments = await preparePayments(
           tx,
@@ -434,6 +568,9 @@ export function createSalesService(db: AppDb) {
     async cancel(actor: Actor | null, id: string, raw: unknown) {
       requireCatalogAccess(actor);
       const a = actor!;
+      const ctx = await requireOperationalContext(db, a, a.branchId ?? "");
+      if (ctx.role === "staff")
+        invalid("Se requiere un encargado.", "FORBIDDEN", 403);
       parse(uuid, id);
       const input = parse(cancelSchema, raw);
       return db.transaction(async (tx) => {
@@ -445,8 +582,8 @@ export function createSalesService(db: AppDb) {
           fingerprint("sale-cancel", { id, ...input }),
           id,
         );
-        if (old) return replaySaleDetail(tx, old);
-        const sale = await lockSale(tx, id, input.revision);
+        if (old) return replaySaleDetail(tx, old, ctx.branchId);
+        const sale = await lockSale(tx, id, input.revision, ctx.branchId);
         if (integer(sale.paidAmount) > 0n && !input.refundConfirmed)
           invalid(
             "Confirmá la devolución ya realizada antes de anular una venta cobrada.",
@@ -486,24 +623,46 @@ export function createSalesService(db: AppDb) {
           })
           .where(eq(sales.id, id));
         await audit(tx, a, "sales", id, "cancel", input);
+        await cancelStock(tx, ctx, id, input.requestId);
         await cancelSaleTasks(tx, a, id, input.reason);
         return saleDetail(tx, id);
       });
     },
     async get(actor: Actor | null, id: string) {
       salesAccess(actor);
+      const ctx = await requireOperationalContext(
+        db,
+        actor,
+        actor.branchId ?? "",
+      );
       parse(uuid, id);
-      return db.transaction((tx) => saleDetail(tx, id), {
-        isolationLevel: "repeatable read",
-        accessMode: "read only",
-      });
+      return db.transaction(
+        async (tx) => {
+          const [sale] = await tx
+            .select({ id: sales.id })
+            .from(sales)
+            .where(and(eq(sales.id, id), eq(sales.branchId, ctx.branchId)));
+          if (!sale) notFound();
+          return saleDetail(tx, id);
+        },
+        {
+          isolationLevel: "repeatable read",
+          accessMode: "read only",
+        },
+      );
     },
     async list(actor: Actor | null, raw: unknown = {}): Promise<SaleList> {
       salesAccess(actor);
+      const ctx = await requireOperationalContext(
+        db,
+        actor,
+        actor.branchId ?? "",
+      );
       const input = parse(listSchema, raw);
       return db.transaction(
         async (tx) => {
           const filters = and(
+            eq(sales.branchId, ctx.branchId),
             input.origin ? eq(sales.origin, input.origin) : undefined,
             input.status ? eq(sales.status, input.status) : undefined,
             input.date ? eq(sales.businessDate, input.date) : undefined,
@@ -542,6 +701,11 @@ export function createSalesService(db: AppDb) {
       channel = "counter",
     ): Promise<SaleLookup> {
       salesAccess(actor);
+      const ctx = await requireOperationalContext(
+        db,
+        actor,
+        actor.branchId ?? "",
+      );
       parse(z.enum(["products", "customers", "payment-methods"]), kind);
       parse(z.string().max(160), q);
       parse(channelSchema, channel);
@@ -549,6 +713,7 @@ export function createSalesService(db: AppDb) {
         async (tx) => {
           if (kind === "products") {
             const filter = and(
+              sql`exists (select 1 from ${branchProducts} where ${branchProducts.productId} = ${products.id} and ${branchProducts.branchId} = ${ctx.branchId} and ${branchProducts.enabled} = true)`,
               isNull(products.archivedAt),
               or(
                 ilike(products.name, term(q)),
@@ -564,8 +729,13 @@ export function createSalesService(db: AppDb) {
                 id: products.id,
                 name: products.name,
                 price: productPrices.amount,
+                fulfillmentVersionId: productFulfillments.versionId,
               })
               .from(products)
+              .leftJoin(
+                productFulfillments,
+                eq(productFulfillments.productId, products.id),
+              )
               .leftJoin(
                 productPrices,
                 and(

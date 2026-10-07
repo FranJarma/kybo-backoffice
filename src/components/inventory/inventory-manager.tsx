@@ -1,4 +1,5 @@
 "use client";
+import { LocationSelect } from "@/components/branches/location-select";
 import {
   useCallback,
   useEffect,
@@ -52,6 +53,12 @@ const actionLabels = {
   block: "Bloquear o desbloquear",
 };
 const kindLabels = {
+  production: "Producción",
+  sale_consume: "Preparación terminada",
+  direct_dispatch: "Producto entregado",
+  transfer: "Traslado",
+  internal_use: "Consumo interno",
+  return: "Devolución física",
   production_in: "Producción ingresada",
   production_out: "Consumo en producción",
   receipt: "Recepción",
@@ -118,7 +125,13 @@ function StockStatus({ row }: { row: StockRow }) {
     </div>
   );
 }
-export function InventoryManager({ actorId }: { actorId: string }) {
+export function InventoryManager({
+  actorId,
+  timeZone,
+}: {
+  actorId: string;
+  timeZone: string;
+}) {
   const [stock, setStock] = useState<StockResult | null>(null),
     [search, setSearch] = useState(""),
     [error, setError] = useState(""),
@@ -129,8 +142,9 @@ export function InventoryManager({ actorId }: { actorId: string }) {
     [movementOffset, setMovementOffset] = useState(0);
   const [action, setAction] = useState<Action | null>(null),
     [lot, setLot] = useState<LotRow | null>(null),
-    [ingredientId, setIngredientId] = useState(""),
-    [receivedOn, setReceivedOn] = useState(today());
+    [itemId, setItemId] = useState(""),
+    [locationId, setLocationId] = useState(""),
+    [receivedOn, setReceivedOn] = useState(today(timeZone));
   const [expiresOn, setExpiresOn] = useState(""),
     [lotCode, setLotCode] = useState(""),
     [quantityInput, setQuantityInput] = useState(""),
@@ -185,16 +199,16 @@ export function InventoryManager({ actorId }: { actorId: string }) {
   );
   useEffect(() => {
     if (!selected) return;
-    const timer = setTimeout(() => void loadDetail(selected.ingredientId), 0);
+    const timer = setTimeout(() => void loadDetail(selected.itemId), 0);
     return () => clearTimeout(timer);
   }, [selected, lotOffset, movementOffset, loadDetail]);
   const onAdjusted = useCallback(async () => {
     setAction(null);
     setLot(null);
-    setIngredientId("");
+    setItemId("");
     const [stockOk, detailOk] = await Promise.all([
       loadStock(),
-      selected ? loadDetail(selected.ingredientId) : Promise.resolve(true),
+      selected ? loadDetail(selected.itemId) : Promise.resolve(true),
     ]);
     setNotice(
       stockOk && detailOk
@@ -208,8 +222,8 @@ export function InventoryManager({ actorId }: { actorId: string }) {
   function openAction(kind: Action, row?: LotRow) {
     setAction(kind);
     setLot(row || null);
-    setIngredientId(selected?.ingredientId || "");
-    setReceivedOn(today());
+    setItemId(selected?.itemId || "");
+    setReceivedOn(today(timeZone));
     setExpiresOn("");
     setLotCode("");
     setQuantityInput("");
@@ -227,7 +241,8 @@ export function InventoryManager({ actorId }: { actorId: string }) {
       input = {
         requestId,
         kind: "opening",
-        ingredientId,
+        locationId,
+        itemId,
         quantity: quantityInput,
         unitCost: unitCost.trim() || null,
         receivedOn,
@@ -239,6 +254,7 @@ export function InventoryManager({ actorId }: { actorId: string }) {
       input = {
         requestId,
         kind: "waste",
+        locationId: lot!.locationId,
         lotId: lot.id,
         revision: lot.revision,
         quantity: quantityInput,
@@ -248,6 +264,7 @@ export function InventoryManager({ actorId }: { actorId: string }) {
       input = {
         requestId,
         kind: "count",
+        locationId: lot!.locationId,
         lotId: lot.id,
         revision: lot.revision,
         countedQuantity: quantityInput,
@@ -257,6 +274,7 @@ export function InventoryManager({ actorId }: { actorId: string }) {
       input = {
         requestId,
         kind: "block",
+        locationId: lot!.locationId,
         lotId: lot.id,
         revision: lot.revision,
         blocked,
@@ -282,15 +300,15 @@ export function InventoryManager({ actorId }: { actorId: string }) {
     (row) => Number(row.expiredQuantity) > 0 || Number(row.blockedQuantity) > 0,
   ).length;
   const summaryScope = stock
-    ? `En los ${stock.rows.length} insumos mostrados`
+    ? `En los ${stock.rows.length} artículos mostrados`
     : "Cargando inventario";
   return (
     <div className="space-y-6">
       <header className="page-heading">
         <div>
-          <h1 className="page-title">Inventario</h1>
+          <h1 className="page-title">Inventario y compras</h1>
           <p className="page-description">
-            Stock, lotes y movimientos de tus insumos en un solo lugar.
+            Stock, lotes y movimientos de tus artículos en un solo lugar.
           </p>
         </div>
         <Button
@@ -351,7 +369,7 @@ export function InventoryManager({ actorId }: { actorId: string }) {
               {stock?.total ?? "—"}
             </p>
             <p className="text-sm text-muted">
-              {search ? "insumos encontrados" : "insumos en inventario"}
+              {search ? "artículos encontrados" : "artículos en inventario"}
             </p>
           </div>
         </Card>
@@ -380,10 +398,10 @@ export function InventoryManager({ actorId }: { actorId: string }) {
           </div>
         </Card>
       </div>
-      <section className="space-y-4" aria-label="Stock por insumo">
+      <section className="space-y-4" aria-label="Stock por artículo">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line">
           <h2 className="inline-flex items-center gap-2 border-b-2 border-[#087cff] px-3 py-3 text-sm font-bold text-blue">
-            Insumos
+            Artículos
             <span className="rounded-md bg-[#eaf4ff] px-1.5 py-0.5 text-xs">
               {stock?.total ?? "—"}
             </span>
@@ -396,7 +414,7 @@ export function InventoryManager({ actorId }: { actorId: string }) {
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <label className="relative block w-full sm:max-w-md">
-            <span className="sr-only">Buscar insumo</span>
+            <span className="sr-only">Buscar artículo</span>
             <Search
               className="pointer-events-none absolute top-1/2 left-3.5 size-5 -translate-y-1/2 text-muted"
               aria-hidden="true"
@@ -406,7 +424,7 @@ export function InventoryManager({ actorId }: { actorId: string }) {
               className="h-12 bg-white pl-11"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Buscar insumo…"
+              placeholder="Buscar artículo…"
             />
           </label>
           <p className="text-xs text-muted">
@@ -430,7 +448,7 @@ export function InventoryManager({ actorId }: { actorId: string }) {
             <div className="overflow-x-auto">
               <table className="block w-full text-left text-sm md:table">
                 <caption className="sr-only">
-                  Existencias, costo y estado de cada insumo
+                  Existencias, costo y estado de cada artículo
                 </caption>
                 <thead className="hidden bg-[#f9fbfe] text-xs font-medium text-muted md:table-header-group">
                   <tr>
@@ -457,8 +475,8 @@ export function InventoryManager({ actorId }: { actorId: string }) {
                 <tbody className="block divide-y divide-line md:table-row-group">
                   {stock.rows.map((row) => (
                     <tr
-                      key={row.ingredientId}
-                      className={`grid grid-cols-2 items-center gap-x-4 gap-y-4 p-4 transition-colors md:table-row md:p-0 ${selected?.ingredientId === row.ingredientId ? "bg-[#f0f7ff]" : "hover:bg-[#fafcff]"}`}
+                      key={row.itemId}
+                      className={`grid grid-cols-2 items-center gap-x-4 gap-y-4 p-4 transition-colors md:table-row md:p-0 ${selected?.itemId === row.itemId ? "bg-[#f0f7ff]" : "hover:bg-[#fafcff]"}`}
                     >
                       <td className="col-span-2 block min-w-0 md:table-cell md:px-5 md:py-4">
                         <div className="flex items-center gap-3">
@@ -539,14 +557,14 @@ export function InventoryManager({ actorId }: { actorId: string }) {
               </p>
               <p className="text-sm text-muted">
                 {search
-                  ? "Probá con otro nombre de insumo."
+                  ? "Probá con otro nombre de artículo."
                   : "Los ingresos y recepciones aparecerán acá."}
               </p>
             </div>
           )}
           {stock && (
             <div className="border-t border-line px-5 py-4 text-xs text-muted">
-              {stock.rows.length} de {stock.total} insumos
+              {stock.rows.length} de {stock.total} artículos
               {stock.total > stock.rows.length
                 ? " · Refiná la búsqueda para ver más resultados."
                 : ""}
@@ -562,7 +580,7 @@ export function InventoryManager({ actorId }: { actorId: string }) {
           <Card className="gap-0 overflow-hidden p-0">
             <div className="flex items-start justify-between gap-4 border-b border-line p-5">
               <div>
-                <p className="eyebrow">Detalle del insumo</p>
+                <p className="eyebrow">Detalle del artículo</p>
                 <h2 className="mt-1 text-xl font-bold text-brand">
                   {selected.name}
                 </h2>
@@ -593,7 +611,7 @@ export function InventoryManager({ actorId }: { actorId: string }) {
                   type="button"
                   variant="outline"
                   className="mt-3"
-                  onClick={() => void loadDetail(selected.ingredientId)}
+                  onClick={() => void loadDetail(selected.itemId)}
                 >
                   Reintentar cargar detalle
                 </Button>
@@ -647,12 +665,16 @@ export function InventoryManager({ actorId }: { actorId: string }) {
                   <tbody className="block divide-y divide-line md:table-row-group">
                     {detail.lots.rows.map((item) => (
                       <tr
-                        key={item.id}
+                        key={`${item.id}:${item.locationId}`}
                         className="grid grid-cols-2 gap-3 p-5 md:table-row md:p-0"
                       >
                         <td className="block md:table-cell md:px-5 md:py-4">
                           <h4 className="font-semibold text-brand">
                             {item.lotCode || "Sin código"}
+                            <span className="block text-xs text-muted">
+                              {item.locationName} · reservado:{" "}
+                              {quantity(item.reservedQuantity, item.baseUnit)}
+                            </span>
                           </h4>
                           <p className="mt-1 text-xs text-muted">
                             Recibido {date(item.receivedOn)}
@@ -798,7 +820,7 @@ export function InventoryManager({ actorId }: { actorId: string }) {
                           {new Intl.DateTimeFormat("es-AR", {
                             dateStyle: "short",
                             timeStyle: "short",
-                            timeZone: "America/Argentina/Salta",
+                            timeZone,
                           }).format(new Date(item.createdAt))}
                         </time>
                       </div>
@@ -863,9 +885,12 @@ export function InventoryManager({ actorId }: { actorId: string }) {
             <p className="text-sm text-muted">
               {action === "opening"
                 ? "El ingreso genera un lote y movimiento con motivo. El costo puede quedar pendiente."
-                : `${lot?.ingredientName} · lote ${lot?.lotCode || "Sin código"} · remanente ${lot ? quantity(lot.remainingQuantity, lot.baseUnit) : ""}`}
+                : `${lot?.itemName} · lote ${lot?.lotCode || "Sin código"} · remanente ${lot ? quantity(lot.remainingQuantity, lot.baseUnit) : ""}`}
             </p>
             <form onSubmit={submit} className="space-y-4">
+              {action === "opening" && (
+                <LocationSelect value={locationId} onChange={setLocationId} />
+              )}
               <fieldset
                 disabled={operation.locked}
                 className="grid gap-4 sm:grid-cols-2"
@@ -873,10 +898,10 @@ export function InventoryManager({ actorId }: { actorId: string }) {
                 {action === "opening" && (
                   <>
                     <SearchSelect
-                      entity="ingredients"
+                      entity="items"
                       label="Insumo"
-                      value={ingredientId}
-                      onChange={setIngredientId}
+                      value={itemId}
+                      onChange={setItemId}
                       required
                     />
                     <TextField

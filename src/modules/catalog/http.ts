@@ -5,6 +5,10 @@ import { AppError } from "@/lib/errors";
 import { configuredOrigins } from "@/lib/origins";
 import { entities, type Entity } from "./types";
 import { createCatalogService } from "./service";
+import type { Actor } from "@/lib/access";
+import { ZodError } from "zod";
+import { headers, cookies } from "next/headers";
+import { operationalActor } from "../branches/http";
 
 export function entityFromParam(value: string): Entity {
   if (!entities.includes(value as Entity))
@@ -23,6 +27,11 @@ export function privateJson(data: unknown, status = 200) {
 }
 
 export function errorResponse(error: unknown) {
+  if (error instanceof ZodError)
+    return privateJson(
+      { error: "Revisá los campos ingresados.", code: "VALIDATION" },
+      400,
+    );
   if (error instanceof AppError)
     return privateJson(
       { error: error.message, code: error.code },
@@ -84,6 +93,40 @@ export async function requestInput(
 
 export async function catalogContext(value: string) {
   const actor = await requireActor();
+  if (actor.role !== "admin" && !actor.catalogManager)
+    actor.branchId =
+      (await headers()).get("X-Kybo-Branch-Id") ??
+      (await cookies()).get("kybo-branch")?.value;
   const entity = entityFromParam(value);
   return { actor, entity, service: createCatalogService(await getDb()) };
+}
+export async function catalogResponse(
+  request: Request | null,
+  action: (actor: Actor, input: unknown) => Promise<unknown>,
+) {
+  try {
+    let actor = await requireActor();
+    if (actor.role !== "admin" && actor.catalogManager !== true) {
+      const readOnly =
+        !request || new URL(request.url).pathname.endsWith("/cost");
+      if (!readOnly)
+        throw new AppError(
+          "FORBIDDEN",
+          "No tenés permiso para gestionar el catálogo compartido.",
+          403,
+        );
+      actor = await operationalActor(request);
+      if (actor.role === "staff")
+        throw new AppError(
+          "FORBIDDEN",
+          "Se requiere permiso de encargado.",
+          403,
+        );
+    }
+    return privateJson(
+      await action(actor, request ? await requestInput(request) : undefined),
+    );
+  } catch (error) {
+    return errorResponse(error);
+  }
 }

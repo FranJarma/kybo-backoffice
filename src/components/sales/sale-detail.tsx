@@ -2,6 +2,7 @@
 import { CheckCircle2, Plus, WalletCards, Ban, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { money } from "@/components/inventory/shared";
+import { SaleFulfillmentPanel } from "./fulfillment-panel";
 import {
   channelLabels,
   originLabels,
@@ -15,6 +16,7 @@ const time = (value: string) =>
     timeZone: "America/Argentina/Salta",
   }).format(new Date(value));
 export function SaleDetailPanel({
+  actorId,
   sale,
   canCancel,
   locked,
@@ -23,6 +25,7 @@ export function SaleDetailPanel({
   onCancel,
   onBack,
 }: {
+  actorId: string;
   sale: SaleDetail;
   canCancel: boolean;
   locked: boolean;
@@ -61,6 +64,12 @@ export function SaleDetailPanel({
       </div>
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
         <section className="space-y-4">
+          <SaleFulfillmentPanel
+            key={`${sale.id}:${sale.revision}`}
+            actorId={actorId}
+            saleId={sale.id}
+            canManage={canCancel}
+          />
           <div className="surface-panel p-5">
             <p className="eyebrow mb-2">Cliente</p>
             <p className="font-bold text-brand">
@@ -109,6 +118,11 @@ export function SaleDetailPanel({
                           : " · Sin precio de lista"}
                       </p>
                     )}
+                    {line.modifiers?.map((m, i) => (
+                      <p key={i} className="text-xs text-muted">
+                        {m.count} × {m.optionName}
+                      </p>
+                    ))}
                     {line.notes && (
                       <p className="mt-2 whitespace-pre-wrap text-xs text-muted">
                         {line.notes}

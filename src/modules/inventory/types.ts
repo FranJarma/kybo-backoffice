@@ -1,6 +1,6 @@
 export type ReceiptLineInput = {
-  ingredientId: string;
-  ingredientRevision?: number;
+  itemId: string;
+  itemRevision?: number;
   presentationId?: string | null;
   presentationRevision?: number;
   quantity: string;
@@ -10,6 +10,7 @@ export type ReceiptLineInput = {
   expiresOn?: string | null;
 };
 export type ReceiveInput = {
+  locationId: string;
   requestId: string;
   supplierId: string;
   receivedOn: string;
@@ -28,7 +29,8 @@ export type AdjustmentInput =
   | {
       requestId: string;
       kind: "opening";
-      ingredientId: string;
+      locationId: string;
+      itemId: string;
       quantity: string;
       unitCost?: string | null;
       receivedOn: string;
@@ -39,6 +41,7 @@ export type AdjustmentInput =
   | {
       requestId: string;
       kind: "waste";
+      locationId: string;
       lotId: string;
       revision: number;
       quantity: string;
@@ -47,6 +50,7 @@ export type AdjustmentInput =
   | {
       requestId: string;
       kind: "count";
+      locationId: string;
       lotId: string;
       revision: number;
       countedQuantity: string;
@@ -55,6 +59,7 @@ export type AdjustmentInput =
   | {
       requestId: string;
       kind: "block";
+      locationId: string;
       lotId: string;
       revision: number;
       blocked: boolean;
@@ -75,8 +80,8 @@ export type ReceiptSummary = {
 };
 export type ReceiptLine = {
   id: string;
-  ingredientId: string;
-  ingredientName: string;
+  itemId: string;
+  itemName: string;
   baseUnit: string;
   presentationId: string | null;
   presentationName: string | null;
@@ -104,7 +109,7 @@ export type ReceiptDetail = ReceiptSummary & {
   payments: PurchasePayment[];
 };
 export type StockRow = {
-  ingredientId: string;
+  itemId: string;
   name: string;
   baseUnit: string;
   archived: boolean;
@@ -123,9 +128,12 @@ export type StockResult = {
   businessDate: string;
 };
 export type LotRow = {
+  locationId: string;
+  locationName: string;
+  reservedQuantity: string;
   id: string;
-  ingredientId: string;
-  ingredientName: string;
+  itemId: string;
+  itemName: string;
   baseUnit: string;
   receiptId: string | null;
   receivedOn: string;
@@ -141,14 +149,20 @@ export type LotRow = {
 export type MovementRow = {
   id: string;
   lotId: string;
-  ingredientId: string;
+  itemId: string;
   kind:
     | "receipt"
     | "opening"
     | "waste"
     | "count"
     | "production_in"
-    | "production_out";
+    | "production_out"
+    | "production"
+    | "sale_consume"
+    | "direct_dispatch"
+    | "transfer"
+    | "internal_use"
+    | "return";
   delta: string;
   unitCost: string | null;
   valueDelta: string | null;

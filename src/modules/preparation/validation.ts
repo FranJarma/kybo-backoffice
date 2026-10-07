@@ -15,6 +15,7 @@ export const stationSchema = z
     id: uuid.optional(),
     revision: z.number().int().positive().optional(),
     name: z.string().trim().min(1).max(60),
+    consumptionLocationId: uuid,
     archived: z.boolean().default(false),
   })
   .strict();

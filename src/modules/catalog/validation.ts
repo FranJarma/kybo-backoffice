@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Entity } from "./types";
 import { AppError } from "@/lib/errors";
+import { itemSchema } from "../items/validation";
 
 export function parseDecimal(input: unknown, scale: number): string | null {
   if (input === null || input === undefined || input === "") return null;
@@ -73,13 +74,18 @@ const schemas = {
   "payment-methods": z
     .object({ name, kind: z.enum(["cash", "card", "transfer", "other"]) })
     .strict(),
-  ingredients: z
-    .object({
-      name,
-      baseUnit: z.enum(["g", "ml", "unit"]),
-      unitCost: decimal(6),
-    })
-    .strict(),
+  items: z.preprocess((raw) => {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return raw;
+    const value = raw as Record<string, unknown>;
+    const booleanValue = (v: unknown) =>
+      v === "true" ? true : v === "false" ? false : v;
+    return {
+      ...value,
+      unitCost: parseDecimal(value.unitCost, 6),
+      purchasable: booleanValue(value.purchasable),
+      recipeUsable: booleanValue(value.recipeUsable),
+    };
+  }, itemSchema),
   products: z
     .object({
       name,
@@ -92,7 +98,7 @@ const schemas = {
     .object({
       name,
       supplierId: z.uuid(),
-      ingredientId: z.uuid(),
+      itemId: z.uuid(),
       baseQuantity: decimal(6, true, true),
     })
     .strict(),

@@ -1,3 +1,4 @@
+import { bindingInput } from "@/modules/modifiers/validation";
 import { z } from "zod";
 import { AppError } from "@/lib/errors";
 import { decimal } from "@/modules/inventory/decimal";
@@ -7,6 +8,8 @@ export const positiveQuantity = z
 const unit = z.enum(["g", "ml", "unit"]);
 const recipe = z
   .object({
+    compositionModel: z.enum(["legacy", "configurable"]).default("legacy"),
+    groups: z.array(bindingInput).max(30).default([]),
     requestId: z.uuid(),
     id: z.uuid().optional(),
     revision: z.number().int().positive().optional(),
@@ -29,7 +32,7 @@ const recipe = z
               .array(
                 z
                   .object({
-                    ingredientId: z.uuid(),
+                    itemId: z.uuid(),
                     quantity: positiveQuantity,
                     baseUnit: unit.optional(),
                   })
@@ -40,7 +43,7 @@ const recipe = z
           })
           .strict(),
       )
-      .min(1)
+      .min(0)
       .max(30),
   })
   .strict();
@@ -50,7 +53,18 @@ const choice = z
 const selection = z
   .object({
     revision: z.number().int().positive(),
-    selections: z.array(choice).max(30),
+    selections: z.array(choice).max(30).default([]),
+    modifiers: z
+      .array(
+        z
+          .object({
+            recipeModifierOptionId: z.uuid(),
+            count: z.number().int().min(0).max(100),
+          })
+          .strict(),
+      )
+      .max(150)
+      .optional(),
   })
   .strict();
 export function parse<T>(schema: z.ZodType<T>, raw: unknown): T {

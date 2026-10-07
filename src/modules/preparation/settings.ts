@@ -1,3 +1,5 @@
+import { requireOperationalContext } from "../branches/context";
+import { locations } from "@/db/branch-schema";
 import { randomUUID } from "node:crypto";
 import { and, asc, count, eq, ilike, inArray, isNull, sql } from "drizzle-orm";
 import type { AppDb } from "@/db/client";
@@ -37,12 +39,21 @@ export function createPreparationSettings(db: AppDb) {
   return {
     async list(actor: Actor | null, raw: unknown = {}): Promise<PrepSettings> {
       requireCatalogAccess(actor);
+      const ctx = await requireOperationalContext(
+        db,
+        actor!,
+        actor!.branchId ?? "",
+      );
+      requireCatalogAccess({ id: ctx.actorId, role: ctx.role });
+      if (ctx.role === "staff")
+        invalid("Se requiere permiso de encargado.", "FORBIDDEN", 403);
       const input = parse(settingsSchema, raw);
       return db.transaction(
         async (tx) => {
           const stations = await tx
             .select()
             .from(preparationStations)
+            .where(eq(preparationStations.branchId, ctx.branchId))
             .orderBy(asc(preparationStations.name));
           const where = and(
             input.includeArchived ? undefined : isNull(products.archivedAt),
@@ -66,13 +77,26 @@ export function createPreparationSettings(db: AppDb) {
             .from(products)
             .leftJoin(
               preparationRoutes,
-              eq(preparationRoutes.productId, products.id),
+              and(
+                eq(preparationRoutes.productId, products.id),
+                eq(preparationRoutes.branchId, ctx.branchId),
+              ),
             )
             .where(where)
             .orderBy(asc(products.name), asc(products.id))
             .limit(30)
             .offset(input.offset);
           return {
+            locations: await tx
+              .select({ id: locations.id, name: locations.name })
+              .from(locations)
+              .where(
+                and(
+                  eq(locations.branchId, ctx.branchId),
+                  isNull(locations.archivedAt),
+                ),
+              )
+              .orderBy(locations.name),
             stations: stations.map(stationView),
             products: rows.map(({ archivedAt, ...p }) => ({
               ...p,
@@ -88,6 +112,13 @@ export function createPreparationSettings(db: AppDb) {
     },
     async saveStation(actor: Actor | null, raw: unknown) {
       requireCatalogAccess(actor);
+      const ctx = await requireOperationalContext(
+        db,
+        actor!,
+        actor!.branchId ?? "",
+      );
+      if (ctx.role === "staff")
+        invalid("Se requiere permiso de encargado.", "FORBIDDEN", 403);
       const a = actor!,
         input = parse(stationSchema, raw),
         id = input.id ?? randomUUID();
@@ -105,15 +136,38 @@ export function createPreparationSettings(db: AppDb) {
             const [s] = await tx
               .select()
               .from(preparationStations)
-              .where(eq(preparationStations.id, old));
+              .where(
+                and(
+                  eq(preparationStations.id, old),
+                  eq(preparationStations.branchId, ctx.branchId),
+                ),
+              );
             if (!s) notFound();
             return stationView(s);
           }
+          const [location] = await tx
+            .select()
+            .from(locations)
+            .where(
+              and(
+                eq(locations.id, input.consumptionLocationId),
+                eq(locations.branchId, ctx.branchId),
+                isNull(locations.archivedAt),
+              ),
+            )
+            .for("share");
+          if (!location)
+            invalid("Elegí una ubicación activa de esta sucursal.");
           if (input.id) {
             const [s] = await tx
               .select()
               .from(preparationStations)
-              .where(eq(preparationStations.id, id))
+              .where(
+                and(
+                  eq(preparationStations.id, id),
+                  eq(preparationStations.branchId, ctx.branchId),
+                ),
+              )
               .for("update");
             if (!s) notFound();
             if (s.revision !== input.revision)
@@ -143,12 +197,18 @@ export function createPreparationSettings(db: AppDb) {
               .update(preparationStations)
               .set({
                 name: input.name,
+                consumptionLocationId: input.consumptionLocationId,
                 archivedAt: input.archived
                   ? (s.archivedAt ?? new Date())
                   : null,
                 revision: s.revision + 1,
               })
-              .where(eq(preparationStations.id, id))
+              .where(
+                and(
+                  eq(preparationStations.id, id),
+                  eq(preparationStations.branchId, ctx.branchId),
+                ),
+              )
               .returning();
             await audit(tx, a, "preparation-stations", id, "update", input);
             return stationView(saved);
@@ -158,11 +218,21 @@ export function createPreparationSettings(db: AppDb) {
           const [{ total }] = await tx
             .select({ total: count() })
             .from(preparationStations)
-            .where(isNull(preparationStations.archivedAt));
+            .where(
+              and(
+                eq(preparationStations.branchId, ctx.branchId),
+                isNull(preparationStations.archivedAt),
+              ),
+            );
           if (total >= 30) invalid("Se permiten hasta 30 estaciones activas.");
           const [saved] = await tx
             .insert(preparationStations)
-            .values({ id, name: input.name })
+            .values({
+              id,
+              branchId: ctx.branchId,
+              name: input.name,
+              consumptionLocationId: input.consumptionLocationId,
+            })
             .returning();
           await audit(tx, a, "preparation-stations", id, "create", input);
           return stationView(saved);
@@ -171,6 +241,13 @@ export function createPreparationSettings(db: AppDb) {
     },
     async routeProduct(actor: Actor | null, raw: unknown) {
       requireCatalogAccess(actor);
+      const ctx = await requireOperationalContext(
+        db,
+        actor!,
+        actor!.branchId ?? "",
+      );
+      if (ctx.role === "staff")
+        invalid("Se requiere permiso de encargado.", "FORBIDDEN", 403);
       const a = actor!,
         input = parse(routeSchema, raw);
       return db.transaction(async (tx) => {
@@ -191,7 +268,12 @@ export function createPreparationSettings(db: AppDb) {
         const [route] = await tx
           .select()
           .from(preparationRoutes)
-          .where(eq(preparationRoutes.productId, input.productId));
+          .where(
+            and(
+              eq(preparationRoutes.productId, input.productId),
+              eq(preparationRoutes.branchId, ctx.branchId),
+            ),
+          );
         if (old)
           return {
             productId: p.id,
@@ -208,17 +290,19 @@ export function createPreparationSettings(db: AppDb) {
             .from(preparationStations)
             .where(eq(preparationStations.id, input.stationId))
             .for("share");
-          if (!s || s.archivedAt) invalid("Elegí una estación activa.");
+          if (!s || s.archivedAt || s.branchId !== ctx.branchId)
+            invalid("Elegí una estación activa.");
         }
         const [saved] = await tx
           .insert(preparationRoutes)
           .values({
             productId: p.id,
+            branchId: ctx.branchId,
             stationId: input.stationId,
             revision: input.revision + 1,
           })
           .onConflictDoUpdate({
-            target: preparationRoutes.productId,
+            target: [preparationRoutes.branchId, preparationRoutes.productId],
             set: {
               stationId: input.stationId,
               revision: sql`${preparationRoutes.revision}+1`,

@@ -25,6 +25,8 @@ export type SaleSummary = {
   closedAt: string | null;
 };
 export type SaleLine = {
+  compositionStatus: string;
+  modifiers: import("@/modules/modifiers/types").ResolvedModifier[];
   id: string;
   productId: string;
   name: string;
@@ -62,7 +64,12 @@ export type SaleDetail = SaleSummary & {
 };
 export type SaleList = { rows: SaleSummary[]; total: number; offset: number };
 export type SaleLookup = {
-  rows: { id: string; name: string; price?: string | null }[];
+  rows: {
+    id: string;
+    name: string;
+    price?: string | null;
+    fulfillmentVersionId?: string | null;
+  }[];
   total: number;
 };
 export type TableView = {

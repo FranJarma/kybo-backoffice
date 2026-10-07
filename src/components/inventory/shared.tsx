@@ -2,9 +2,9 @@
 import { useCallback, useEffect, useId, useState } from "react";
 import type { CatalogRow, Entity, ListResult } from "@/modules/catalog/types";
 
-export const today = () =>
+export const today = (timeZone = "America/Argentina/Buenos_Aires") =>
   new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Argentina/Salta",
+    timeZone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -27,7 +27,10 @@ export function date(value: string) {
   return `${day}/${month}/${year}`;
 }
 export async function getJson<T>(url: string): Promise<T> {
-  const response = await fetch(url, { cache: "no-store" });
+  const response = await fetch(url, {
+    cache: "no-store",
+    headers: branchHeaders(),
+  });
   if (!response.ok) throw new Error(await errorText(response));
   return response.json() as Promise<T>;
 }
@@ -43,7 +46,26 @@ async function errorText(response: Response) {
 }
 
 type Pending<T> = { url: string; payload: T };
+function currentBranchId() {
+  return typeof document === "undefined"
+    ? ""
+    : (document.cookie
+        .split("; ")
+        .find((c) => c.startsWith("kybo-branch="))
+        ?.split("=")[1] ?? "");
+}
+function branchHeaders(): Record<string, string> {
+  const branchId = currentBranchId();
+  return branchId ? { "X-Kybo-Branch-Id": branchId } : {};
+}
 type OperationKind =
+  | "reservation"
+  | "recall"
+  | "transfer"
+  | "internal-use"
+  | "fulfillment"
+  | "stock-resolution"
+  | "production-order"
   | "receipt"
   | "payment"
   | "adjustment"
@@ -54,24 +76,48 @@ type OperationKind =
   | "preparation-settings"
   | "table";
 const urlFor = (kind: OperationKind, url: string) =>
-  kind === "preparation"
-    ? /^\/api\/preparation\/[0-9a-f-]{36}$/.test(url)
-    : kind === "preparation-settings"
-      ? /^\/api\/preparation\/settings\/(stations|routes)$/.test(url)
-      : kind === "sale"
-        ? url === "/api/sales" ||
-          /^\/api\/sales\/[0-9a-f-]{36}\/(orders|payments|cancel)$/.test(url)
-        : kind === "table"
-          ? url === "/api/sales/tables"
-          : kind === "recipe"
-            ? url === "/api/recipes"
-            : kind === "production"
-              ? url === "/api/production"
-              : kind === "receipt"
-                ? url === "/api/purchases"
-                : kind === "adjustment"
-                  ? url === "/api/inventory/adjustments"
-                  : /^\/api\/purchases\/[0-9a-f-]{36}\/payments$/.test(url);
+  kind === "reservation"
+    ? url === "/api/inventory/reservations"
+    : kind === "recall"
+      ? url === "/api/inventory/recalls"
+      : kind === "production-order"
+        ? url === "/api/production/orders" ||
+          /^\/api\/production\/orders\/[0-9a-f-]{36}$/.test(url)
+        : kind === "transfer"
+          ? url === "/api/transfers" ||
+            /^\/api\/transfers\/[0-9a-f-]{36}\/(dispatch|receive|resolve|cancel)$/.test(
+              url,
+            )
+          : kind === "internal-use"
+            ? url === "/api/inventory/internal-use"
+            : kind === "fulfillment"
+              ? /^\/api\/fulfillment\/(complete|deliver|return)$/.test(url)
+              : kind === "stock-resolution"
+                ? /^\/api\/stock-resolutions\/[0-9a-f-]{36}$/.test(url)
+                : kind === "preparation"
+                  ? /^\/api\/preparation\/[0-9a-f-]{36}$/.test(url)
+                  : kind === "preparation-settings"
+                    ? /^\/api\/preparation\/settings\/(stations|routes)$/.test(
+                        url,
+                      )
+                    : kind === "sale"
+                      ? url === "/api/sales" ||
+                        /^\/api\/sales\/[0-9a-f-]{36}\/(orders|payments|cancel)$/.test(
+                          url,
+                        )
+                      : kind === "table"
+                        ? url === "/api/sales/tables"
+                        : kind === "recipe"
+                          ? url === "/api/recipes"
+                          : kind === "production"
+                            ? url === "/api/production"
+                            : kind === "receipt"
+                              ? url === "/api/purchases"
+                              : kind === "adjustment"
+                                ? url === "/api/inventory/adjustments"
+                                : /^\/api\/purchases\/[0-9a-f-]{36}\/payments$/.test(
+                                    url,
+                                  );
 function validPending<T>(
   kind: OperationKind,
   value: unknown,
@@ -92,7 +138,8 @@ export function useOperation<T>(
   kind: OperationKind,
   onSuccess: (result: unknown) => void,
 ) {
-  const storageKey = `kybo:pending:${actorId}:${kind}`;
+  const branchId = currentBranchId();
+  const storageKey = `kybo:pending:${actorId}:${branchId}:${kind}`;
   const [pending, setPending] = useState<Pending<T> | null>(null);
   const [uncertain, setUncertain] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -143,7 +190,10 @@ export function useOperation<T>(
       try {
         response = await fetch(operation.url, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...(branchId ? { "X-Kybo-Branch-Id": branchId } : {}),
+          },
           body: JSON.stringify(operation.payload),
         });
       } catch {
@@ -201,7 +251,7 @@ export function useOperation<T>(
       setBusy(false);
       onSuccess(result);
     },
-    [kind, onSuccess, storageKey],
+    [kind, onSuccess, storageKey, branchId],
   );
   const submit = (url: string, payload: T) => {
     if (!ready || pending || busy || !urlFor(kind, url)) return;

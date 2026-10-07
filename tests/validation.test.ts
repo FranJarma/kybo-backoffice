@@ -21,14 +21,26 @@ describe("decimal amounts entered in Argentina", () => {
 });
 
 describe("strict catalog inputs", () => {
-  it("stores an unknown ingredient cost as null", () => {
+  it("stores an unknown item cost as null", () => {
     expect(
-      parseInput("ingredients", {
+      parseInput("items", {
+        code: "UNKNOWN-COST",
+        class: "food",
+        purchasable: true,
+        recipeUsable: true,
         name: "Leche",
         baseUnit: "ml",
         unitCost: "",
       }),
-    ).toEqual({ name: "Leche", baseUnit: "ml", unitCost: null });
+    ).toEqual({
+      code: "UNKNOWN-COST",
+      class: "food",
+      purchasable: true,
+      recipeUsable: true,
+      name: "Leche",
+      baseUnit: "ml",
+      unitCost: null,
+    });
   });
   it("normalizes optional contact without granting marketing consent", () => {
     expect(
@@ -49,7 +61,7 @@ describe("strict catalog inputs", () => {
   });
   it("rejects invalid base unit and zero-size pack", () => {
     expect(() =>
-      parseInput("ingredients", {
+      parseInput("items", {
         name: "Leche",
         baseUnit: "kg",
         unitCost: "",
@@ -59,7 +71,7 @@ describe("strict catalog inputs", () => {
       parseInput("presentations", {
         name: "Bolsa",
         supplierId: crypto.randomUUID(),
-        ingredientId: crypto.randomUUID(),
+        itemId: crypto.randomUUID(),
         baseQuantity: "0",
       }),
     ).toThrow();

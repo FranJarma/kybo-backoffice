@@ -1,0 +1,17 @@
+{
+  "initialBranch": {
+    "id": "f5f9faa9-b2e7-4a9e-a685-b1d5f973e995",
+    "code": "PRINCIPAL",
+    "name": "Principal",
+    "timeZone": "America/Argentina/Buenos_Aires"
+  },
+  "initialLocation": {
+    "id": "0fa36681-c052-4789-9b19-a7c6d35a8bb2",
+    "code": "DEPOSITO",
+    "name": "Depósito principal"
+  },
+  "memberships": [],
+  "catalogManagers": [],
+  "itemClassifications": [],
+  "cutoverAt": "2026-09-28T20:19:17.261Z"
+}

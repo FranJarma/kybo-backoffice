@@ -116,6 +116,7 @@ export const operationalUsers = pgTable("operational_users", {
     .references(() => user.id, { onDelete: "cascade" }),
   role: operationalRole("role").notNull(),
   disabled: boolean("disabled").notNull().default(false),
+  catalogManager: boolean("catalog_manager").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

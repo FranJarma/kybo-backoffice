@@ -31,6 +31,7 @@ const receive = z
   .object({
     requestId,
     supplierId: id,
+    locationId: id,
     receivedOn: date,
     documentNumber: optionalText(120).transform(
       (v) => v?.toLocaleUpperCase("es-AR") ?? null,
@@ -40,8 +41,8 @@ const receive = z
       .array(
         z
           .object({
-            ingredientId: id,
-            ingredientRevision: z.number().int().positive().optional(),
+            itemId: id,
+            itemRevision: z.number().int().positive().optional(),
             presentationRevision: z.number().int().positive().optional(),
             presentationId: id.nullish().transform((v) => v || null),
             quantity: quantity(true, true),
@@ -68,8 +69,9 @@ const payment = z
 const opening = z
   .object({
     kind: z.literal("opening"),
+    locationId: id,
     requestId,
-    ingredientId: id,
+    itemId: id,
     quantity: quantity(true, true),
     unitCost: quantity(false),
     receivedOn: date,
@@ -79,6 +81,7 @@ const opening = z
   })
   .strict();
 const baseLot = {
+  locationId: id,
   requestId,
   lotId: id,
   revision: z.number().int().positive(),

@@ -1,4 +1,5 @@
 "use client";
+import { LocationSelect } from "@/components/branches/location-select";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
   Plus,
@@ -41,8 +42,8 @@ import {
 } from "./shared";
 
 type LineDraft = {
-  ingredientId: string;
-  ingredient?: CatalogRow;
+  itemId: string;
+  item?: CatalogRow;
   presentationId: string;
   presentation?: CatalogRow;
   quantity: string;
@@ -52,7 +53,7 @@ type LineDraft = {
   expiresOn: string;
 };
 const blankLine = (): LineDraft => ({
-  ingredientId: "",
+  itemId: "",
   presentationId: "",
   quantity: "",
   unitPrice: "",
@@ -139,7 +140,13 @@ function PaymentStatus({ receipt }: { receipt: ReceiptSummary }) {
     </span>
   );
 }
-export function PurchasesManager({ actorId }: { actorId: string }) {
+export function PurchasesManager({
+  actorId,
+  timeZone,
+}: {
+  actorId: string;
+  timeZone: string;
+}) {
   const [rows, setRows] = useState<ReceiptSummary[]>([]),
     [total, setTotal] = useState(0),
     [search, setSearch] = useState("");
@@ -147,14 +154,15 @@ export function PurchasesManager({ actorId }: { actorId: string }) {
     [detail, setDetail] = useState<ReceiptDetail | null>(null),
     [view, setView] = useState<"list" | "draft" | "review" | "detail">("list");
   const [supplierId, setSupplierId] = useState(""),
+    [locationId, setLocationId] = useState(""),
     [supplier, setSupplier] = useState<CatalogRow | undefined>(),
-    [receivedOn, setReceivedOn] = useState(today());
+    [receivedOn, setReceivedOn] = useState(today(timeZone));
   const [documentNumber, setDocumentNumber] = useState(""),
     [notes, setNotes] = useState(""),
     [lines, setLines] = useState<LineDraft[]>([blankLine()]);
   const [payment, setPayment] = useState(false),
     [paymentMethodId, setPaymentMethodId] = useState(""),
-    [paidOn, setPaidOn] = useState(today()),
+    [paidOn, setPaidOn] = useState(today(timeZone)),
     [amount, setAmount] = useState(""),
     [reference, setReference] = useState("");
   const [refreshWarning, setRefreshWarning] = useState("");
@@ -177,23 +185,26 @@ export function PurchasesManager({ actorId }: { actorId: string }) {
     const timer = setTimeout(() => void refreshList(), search ? 250 : 0);
     return () => clearTimeout(timer);
   }, [refreshList, search]);
-  const showDetail = useCallback(async (id: string) => {
-    try {
-      const data = await getJson<{ receipt: ReceiptDetail }>(
-        `/api/purchases/${id}`,
-      );
-      setDetail(data.receipt);
-      setPayment(false);
-      setPaymentMethodId("");
-      setAmount("");
-      setReference("");
-      setPaidOn(today());
-      setView("detail");
-      setLoadError("");
-    } catch {
-      setLoadError("No pudimos cargar el detalle de la recepción.");
-    }
-  }, []);
+  const showDetail = useCallback(
+    async (id: string) => {
+      try {
+        const data = await getJson<{ receipt: ReceiptDetail }>(
+          `/api/purchases/${id}`,
+        );
+        setDetail(data.receipt);
+        setPayment(false);
+        setPaymentMethodId("");
+        setAmount("");
+        setReference("");
+        setPaidOn(today(timeZone));
+        setView("detail");
+        setLoadError("");
+      } catch {
+        setLoadError("No pudimos cargar el detalle de la recepción.");
+      }
+    },
+    [timeZone],
+  );
   const onReceived = useCallback(
     (result: unknown) => {
       const receipt = (result as { receipt: ReceiptDetail }).receipt;
@@ -202,7 +213,7 @@ export function PurchasesManager({ actorId }: { actorId: string }) {
       setPaymentMethodId("");
       setAmount("");
       setReference("");
-      setPaidOn(today());
+      setPaidOn(today(timeZone));
       setView("detail");
       setRefreshWarning("");
       void refreshList().then((ok) => {
@@ -212,7 +223,7 @@ export function PurchasesManager({ actorId }: { actorId: string }) {
           );
       });
     },
-    [refreshList],
+    [refreshList, timeZone],
   );
   const receiptOperation = useOperation<ReceiveInput>(
     actorId,
@@ -252,10 +263,10 @@ export function PurchasesManager({ actorId }: { actorId: string }) {
     setPaymentMethodId("");
     setAmount("");
     setReference("");
-    setPaidOn(today());
+    setPaidOn(today(timeZone));
     setSupplierId("");
     setSupplier(undefined);
-    setReceivedOn(today());
+    setReceivedOn(today(timeZone));
     setDocumentNumber("");
     setNotes("");
     setLines([blankLine()]);
@@ -283,12 +294,13 @@ export function PurchasesManager({ actorId }: { actorId: string }) {
     const payload: ReceiveInput = {
       requestId: crypto.randomUUID(),
       supplierId,
+      locationId,
       receivedOn,
       documentNumber: documentNumber.trim() || null,
       notes: notes.trim() || null,
       lines: lines.map((line): ReceiptLineInput => ({
-        ingredientId: line.ingredientId,
-        ingredientRevision: line.ingredient?.revision,
+        itemId: line.itemId,
+        itemRevision: line.item?.revision,
         presentationRevision: line.presentation?.revision,
         presentationId: line.presentationId || null,
         quantity: line.quantity,
@@ -315,7 +327,7 @@ export function PurchasesManager({ actorId }: { actorId: string }) {
     <div className="space-y-6">
       <header className="page-heading">
         <div className="min-w-0">
-          <h1 className="page-title">Recepciones</h1>
+          <h1 className="page-title">Compras</h1>
           <p className="page-description">
             Registrá lo que efectivamente llegó y revisá las cantidades antes de
             confirmar.
@@ -575,6 +587,11 @@ export function PurchasesManager({ actorId }: { actorId: string }) {
                     </p>
                   </div>
                   <div className="grid gap-4 sm:grid-cols-2">
+                    <LocationSelect
+                      value={locationId}
+                      onChange={setLocationId}
+                      disabled={locked}
+                    />
                     <SearchSelect
                       entity="suppliers"
                       label="Proveedor"
@@ -649,13 +666,13 @@ export function PurchasesManager({ actorId }: { actorId: string }) {
                     <div className="space-y-5 p-5 sm:p-6">
                       <div className="grid gap-4 sm:grid-cols-2">
                         <SearchSelect
-                          entity="ingredients"
-                          label="Insumo"
-                          value={line.ingredientId}
+                          entity="items"
+                          label="Artículo"
+                          value={line.itemId}
                           onChange={(id, row) =>
                             updateLine(index, {
-                              ingredientId: id,
-                              ingredient: row,
+                              itemId: id,
+                              item: row,
                               presentationId: "",
                               presentation: undefined,
                             })
@@ -673,10 +690,10 @@ export function PurchasesManager({ actorId }: { actorId: string }) {
                             })
                           }
                           filter={(row) =>
-                            row.ingredientId === line.ingredientId &&
+                            row.itemId === line.itemId &&
                             row.supplierId === supplierId
                           }
-                          disabled={!line.ingredientId || !supplierId}
+                          disabled={!line.itemId || !supplierId}
                         />
                       </div>
                       <div className="grid gap-4 sm:grid-cols-2">
@@ -687,9 +704,9 @@ export function PurchasesManager({ actorId }: { actorId: string }) {
                           unit={
                             line.presentationId
                               ? "present."
-                              : line.ingredient?.baseUnit === "unit"
+                              : line.item?.baseUnit === "unit"
                                 ? "unid."
-                                : String(line.ingredient?.baseUnit || "unidad")
+                                : String(line.item?.baseUnit || "unidad")
                           }
                           value={line.quantity}
                           onChange={(quantity) =>
@@ -739,9 +756,8 @@ export function PurchasesManager({ actorId }: { actorId: string }) {
                         />
                         <span>
                           Sin presentación, cantidad y precio corresponden a la
-                          unidad base{" "}
-                          {line.ingredient?.baseUnit || "del insumo"}. Usá coma
-                          para los decimales.
+                          unidad base {line.item?.baseUnit || "del artículo"}. Usá
+                          coma para los decimales.
                         </span>
                       </p>
                     </div>
@@ -864,7 +880,7 @@ export function PurchasesManager({ actorId }: { actorId: string }) {
                 <Card className="gap-0 overflow-hidden p-0">
                   <div className="border-b border-line px-5 py-4 sm:px-6">
                     <h3 className="font-bold text-brand">
-                      Detalle de insumos{" "}
+                      Detalle de artículos{" "}
                       <span className="ml-1 text-sm font-normal text-muted">
                         ({lines.length})
                       </span>
@@ -882,14 +898,14 @@ export function PurchasesManager({ actorId }: { actorId: string }) {
                           </span>
                           <div className="min-w-0">
                             <h4 className="break-words font-semibold text-brand">
-                              {line.ingredient?.name}
+                              {line.item?.name}
                             </h4>
                             <p className="mt-1 text-sm text-muted">
                               {quantity(decimal(line.quantity, 6)!)} ×{" "}
                               {line.presentation?.name ||
-                                (line.ingredient?.baseUnit === "unit"
+                                (line.item?.baseUnit === "unit"
                                   ? "unidad"
-                                  : line.ingredient?.baseUnit)}
+                                  : line.item?.baseUnit)}
                             </p>
                           </div>
                           <div className="ml-auto shrink-0 text-right">
@@ -899,7 +915,7 @@ export function PurchasesManager({ actorId }: { actorId: string }) {
                             <p className="mt-1 font-bold text-brand tabular-nums">
                               {quantity(
                                 basePreview(line),
-                                String(line.ingredient?.baseUnit || ""),
+                                String(line.item?.baseUnit || ""),
                               )}
                             </p>
                           </div>
@@ -971,7 +987,7 @@ export function PurchasesManager({ actorId }: { actorId: string }) {
                     >
                       {receiptOperation.error}
                       {receiptOperation.status === 409 &&
-                        " El catálogo o la recepción cambió. Volvé a editar y seleccioná de nuevo los insumos y presentaciones antes de revisar."}
+                        " El catálogo o la recepción cambió. Volvé a editar y seleccioná de nuevo los artículos y presentaciones antes de revisar."}
                     </p>
                   )}
                   {receiptOperation.uncertain ? (
@@ -1006,8 +1022,8 @@ export function PurchasesManager({ actorId }: { actorId: string }) {
                         setLines((old) =>
                           old.map((item) => ({
                             ...item,
-                            ingredientId: "",
-                            ingredient: undefined,
+                            itemId: "",
+                            item: undefined,
                             presentationId: "",
                             presentation: undefined,
                           })),
@@ -1064,7 +1080,7 @@ export function PurchasesManager({ actorId }: { actorId: string }) {
                         </span>
                         <div className="min-w-0">
                           <h3 className="break-words text-sm font-semibold text-brand">
-                            {line.ingredientName}
+                            {line.itemName}
                           </h3>
                           <p className="mt-1 text-sm text-muted">
                             {quantity(line.quantity)}{" "}

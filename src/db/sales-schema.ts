@@ -1,3 +1,4 @@
+import { branches } from "./branch-schema";
 import { sql } from "drizzle-orm";
 import {
   pgTable,
@@ -11,11 +12,13 @@ import {
   check,
   uniqueIndex,
   index,
+  foreignKey,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 import { customers, products, paymentMethods } from "./business-schema";
 import { recipeVersions } from "./recipe-schema";
+import { productFulfillmentVersions } from "./product-fulfillment-schema";
 const at = (name: string) =>
   timestamp(name, { withTimezone: true }).notNull().defaultNow();
 const amount = (name: string) =>
@@ -25,6 +28,9 @@ export const diningTables = pgTable(
   "dining_tables",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
     name: text("name").notNull(),
     capacity: integer("capacity").notNull(),
     x: integer("x").notNull(),
@@ -35,7 +41,11 @@ export const diningTables = pgTable(
   },
   (t) => [
     uniqueIndex("table_active_cell")
-      .on(t.x, t.y)
+      .on(t.branchId, t.x, t.y)
+      .where(sql`${t.archivedAt} is null`),
+    uniqueIndex("table_branch_identity").on(t.id, t.branchId),
+    uniqueIndex("table_active_name")
+      .on(t.branchId, sql`lower(${t.name})`)
       .where(sql`${t.archivedAt} is null`),
     check(
       "table_grid_bounds",
@@ -47,6 +57,9 @@ export const sales = pgTable(
   "sales",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
     number: serial("number").notNull(),
     revision: integer("revision").notNull().default(1),
     origin: text("origin").notNull(),
@@ -76,8 +89,13 @@ export const sales = pgTable(
   },
   (t) => [
     uniqueIndex("sale_number").on(t.number),
+    uniqueIndex("sale_branch_identity").on(t.id, t.branchId),
+    foreignKey({
+      columns: [t.tableId, t.branchId],
+      foreignColumns: [diningTables.id, diningTables.branchId],
+    }),
     uniqueIndex("sale_external_identity")
-      .on(t.channel, t.externalId)
+      .on(t.branchId, t.channel, t.externalId)
       .where(sql`${t.externalId} is not null`),
     uniqueIndex("sale_open_table")
       .on(t.tableId)
@@ -103,6 +121,9 @@ export const saleOrders = pgTable(
   "sale_orders",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
     saleId: uuid("sale_id")
       .notNull()
       .references(() => sales.id, { onDelete: "restrict" }),
@@ -114,12 +135,22 @@ export const saleOrders = pgTable(
       .references(() => user.id, { onDelete: "restrict" }),
     createdAt: at("created_at"),
   },
-  (t) => [uniqueIndex("sale_order_sequence").on(t.saleId, t.sequence)],
+  (t) => [
+    uniqueIndex("sale_order_sequence").on(t.saleId, t.sequence),
+    uniqueIndex("sale_order_branch").on(t.id, t.branchId),
+    foreignKey({
+      columns: [t.saleId, t.branchId],
+      foreignColumns: [sales.id, sales.branchId],
+    }),
+  ],
 );
 export const saleLines = pgTable(
   "sale_lines",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id),
     orderId: uuid("order_id")
       .notNull()
       .references(() => saleOrders.id, { onDelete: "restrict" }),
@@ -134,12 +165,32 @@ export const saleLines = pgTable(
     lineTotal: amount("line_total"),
     priceReason: text("price_reason"),
     notes: text("notes"),
+    compositionStatus: text("composition_status")
+      .notNull()
+      .default("legacy_unknown"),
+    fulfillmentVersionId: uuid("fulfillment_version_id").references(
+      () => productFulfillmentVersions.id,
+    ),
     recipeVersionId: uuid("recipe_version_id").references(
       () => recipeVersions.id,
       { onDelete: "restrict" },
     ),
   },
   (t) => [
+    uniqueIndex("sale_line_recipe_owner").on(t.id, t.recipeVersionId),
+    uniqueIndex("sale_line_branch").on(t.id, t.branchId),
+    uniqueIndex("sale_line_product").on(t.id, t.productId),
+    foreignKey({
+      columns: [t.orderId, t.branchId],
+      foreignColumns: [saleOrders.id, saleOrders.branchId],
+    }),
+    foreignKey({
+      columns: [t.fulfillmentVersionId, t.productId],
+      foreignColumns: [
+        productFulfillmentVersions.id,
+        productFulfillmentVersions.productId,
+      ],
+    }),
     uniqueIndex("sale_line_position").on(t.orderId, t.position),
     check(
       "sale_line_values",

@@ -1,3 +1,4 @@
+import { paths } from "@/lib/navigation";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
@@ -16,7 +17,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getDb } from "@/db/client";
-import { requireActor } from "@/lib/auth";
+import { requirePageActor as requireActor } from "@/modules/branches/page-context";
 import { createCatalogService } from "@/modules/catalog/service";
 import { createInventoryService } from "@/modules/inventory/service";
 import { user } from "@/db/auth-schema";
@@ -38,9 +39,9 @@ export default async function HomePage() {
   const db = await getDb();
   const catalog = createCatalogService(db);
   const inventory = createInventoryService(db);
-  const [ingredients, products, suppliers, stock, receipts, profiles] =
+  const [items, products, suppliers, stock, receipts, profiles] =
     await Promise.all([
-      catalog.listRecords(actor, "ingredients"),
+      catalog.listRecords(actor, "items"),
       catalog.listRecords(actor, "products"),
       catalog.listRecords(actor, "suppliers"),
       inventory.getStock(actor),
@@ -61,8 +62,8 @@ export default async function HomePage() {
   );
   const metrics = [
     {
-      label: "Insumos",
-      value: ingredients.total,
+      label: "Artículos",
+      value: items.total,
       hint: "En tu catálogo activo",
       icon: Boxes,
       bg: "bg-blue-50 text-blue",
@@ -99,7 +100,7 @@ export default async function HomePage() {
           </p>
         </div>
         <Button asChild className="shrink-0">
-          <Link href="/purchases">
+          <Link href={paths["purchases"]}>
             <Plus size={18} />
             Registrar compra
           </Link>
@@ -134,11 +135,11 @@ export default async function HomePage() {
                 Inventario a mano
               </h2>
               <p className="mt-1 text-xs text-muted">
-                Existencias disponibles y valor de tus insumos.
+                Existencias disponibles y valor de tus artículos.
               </p>
             </div>
             <Link
-              href="/inventory"
+              href={paths["inventory"]}
               aria-label="Ver todo el inventario"
               className="flex shrink-0 items-center gap-1.5 text-xs font-bold text-blue"
             >
@@ -160,7 +161,7 @@ export default async function HomePage() {
                 </thead>
                 <tbody className="divide-y divide-line">
                   {stock.rows.slice(0, 5).map((r) => (
-                    <tr key={r.ingredientId}>
+                    <tr key={r.itemId}>
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
                           <span className="icon-tile hidden sm:flex">
@@ -186,7 +187,7 @@ export default async function HomePage() {
                 </tbody>
               </table>
               <p className="border-t border-line px-5 py-3 text-[11px] text-muted">
-                {Math.min(5, stock.rows.length)} de {stock.total} insumos con
+                {Math.min(5, stock.rows.length)} de {stock.total} artículos con
                 historial de stock
               </p>
             </div>
@@ -200,10 +201,10 @@ export default async function HomePage() {
               </h3>
               <p className="mx-auto mt-2 max-w-xs text-xs leading-6 text-muted">
                 Registrá la mercadería que recibiste o cargá el stock inicial de
-                tus insumos.
+                tus artículos.
               </p>
               <Button variant="outline" asChild className="mt-5">
-                <Link href="/inventory">
+                <Link href={paths["inventory"]}>
                   Ir a inventario
                   <ArrowRight size={15} />
                 </Link>
@@ -221,7 +222,7 @@ export default async function HomePage() {
             </span>
           </div>
           <p className="mb-4 text-xs leading-5 text-muted">
-            Revisión de {stock.rows.length} insumos consultados
+            Revisión de {stock.rows.length} artículos consultados
             {stock.total > stock.rows.length ? ` de ${stock.total}` : ""}.
           </p>
           <div className="space-y-3">
@@ -238,8 +239,8 @@ export default async function HomePage() {
                     : "Costo pendiente";
               return (
                 <Link
-                  href="/inventory"
-                  key={r.ingredientId}
+                  href={paths["inventory"]}
+                  key={r.itemId}
                   className="flex items-center gap-3 rounded-xl border border-line p-3 transition-colors hover:bg-surface"
                 >
                   <span
@@ -268,7 +269,7 @@ export default async function HomePage() {
                 <p className="mt-2 text-xs leading-6 text-muted">
                   {stock.rows.length
                     ? "Los costos pendientes, lotes vencidos o bloqueados aparecerán acá."
-                    : "Cuando registres stock, vas a ver acá los insumos que necesitan revisión."}
+                    : "Cuando registres stock, vas a ver acá los artículos que necesitan revisión."}
                 </p>
               </div>
             )}
@@ -286,7 +287,7 @@ export default async function HomePage() {
             </p>
           </div>
           <Link
-            href="/purchases"
+            href={paths["purchases"]}
             className="flex items-center gap-1.5 text-xs font-bold text-blue"
           >
             Ver todas
@@ -356,19 +357,19 @@ export default async function HomePage() {
       <div className="grid gap-3 sm:grid-cols-3">
         {[
           {
-            href: "/ingredients",
-            label: "Gestionar insumos",
+            href: paths["items"],
+            label: "Gestionar artículos",
             desc: "Unidades y costos de reposición",
             icon: CircleDollarSign,
           },
           {
-            href: "/presentations",
+            href: paths["presentations"],
             label: "Presentaciones de compra",
             desc: "Paquetes, bolsas y conversiones",
             icon: Layers3,
           },
           {
-            href: "/payment-methods",
+            href: paths["payment-methods"],
             label: "Medios de pago",
             desc: "Organizá las formas de pago",
             icon: WalletCards,

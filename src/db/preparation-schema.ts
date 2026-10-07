@@ -1,3 +1,4 @@
+import { branches, locations } from "./branch-schema";
 import { sql } from "drizzle-orm";
 import {
   pgTable,
@@ -9,6 +10,7 @@ import {
   uniqueIndex,
   primaryKey,
   check,
+  foreignKey,
 } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 import { products } from "./business-schema";
@@ -18,34 +20,58 @@ export const preparationStations = pgTable(
   "preparation_stations",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
     name: text("name").notNull(),
+    consumptionLocationId: uuid("consumption_location_id")
+      .notNull()
+      .references(() => locations.id),
     revision: integer("revision").notNull().default(1),
     archivedAt: at("archived_at"),
     createdAt: at("created_at").notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex("preparation_station_name")
-      .on(sql`lower(${t.name})`)
+      .on(t.branchId, sql`lower(${t.name})`)
       .where(sql`${t.archivedAt} is null`),
+    uniqueIndex("preparation_station_branch").on(t.id, t.branchId),
+    foreignKey({
+      columns: [t.consumptionLocationId, t.branchId],
+      foreignColumns: [locations.id, locations.branchId],
+    }),
   ],
 );
 export const preparationRoutes = pgTable(
   "preparation_routes",
   {
     productId: uuid("product_id")
-      .primaryKey()
+      .notNull()
       .references(() => products.id, { onDelete: "restrict" }),
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id),
     stationId: uuid("station_id").references(() => preparationStations.id, {
       onDelete: "restrict",
     }),
     revision: integer("revision").notNull().default(1),
   },
-  (t) => [index("preparation_route_station").on(t.stationId)],
+  (t) => [
+    primaryKey({ columns: [t.branchId, t.productId] }),
+    index("preparation_route_station").on(t.stationId),
+    foreignKey({
+      columns: [t.stationId, t.branchId],
+      foreignColumns: [preparationStations.id, preparationStations.branchId],
+    }),
+  ],
 );
 export const preparationTasks = pgTable(
   "preparation_tasks",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
     orderId: uuid("order_id")
       .notNull()
       .references(() => saleOrders.id, { onDelete: "restrict" }),
@@ -66,6 +92,14 @@ export const preparationTasks = pgTable(
   },
   (t) => [
     index("preparation_active_queue").on(t.status, t.enqueuedAt, t.id),
+    foreignKey({
+      columns: [t.orderId, t.branchId],
+      foreignColumns: [saleOrders.id, saleOrders.branchId],
+    }),
+    foreignKey({
+      columns: [t.stationId, t.branchId],
+      foreignColumns: [preparationStations.id, preparationStations.branchId],
+    }),
     index("preparation_order").on(t.orderId),
     index("preparation_assignee").on(t.assigneeId, t.status),
     uniqueIndex("preparation_order_station")

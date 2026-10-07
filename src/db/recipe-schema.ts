@@ -11,7 +11,7 @@ import {
   uniqueIndex,
   index,
 } from "drizzle-orm/pg-core";
-import { ingredients, products } from "./business-schema";
+import { items, products } from "./business-schema";
 import { user } from "./auth-schema";
 
 // One serialization point for edits to the dependency graph (including alternatives).
@@ -26,10 +26,9 @@ export const recipes = pgTable(
     productId: uuid("product_id").references(() => products.id, {
       onDelete: "restrict",
     }),
-    outputIngredientId: uuid("output_ingredient_id").references(
-      () => ingredients.id,
-      { onDelete: "restrict" },
-    ),
+    outputItemId: uuid("output_item_id").references(() => items.id, {
+      onDelete: "restrict",
+    }),
     revision: integer("revision").notNull().default(1),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -37,10 +36,10 @@ export const recipes = pgTable(
   },
   (t) => [
     uniqueIndex("recipe_product").on(t.productId),
-    uniqueIndex("recipe_output").on(t.outputIngredientId),
+    uniqueIndex("recipe_output").on(t.outputItemId),
     check(
       "recipe_target",
-      sql`(${t.kind} = 'product' and ${t.productId} is not null and ${t.outputIngredientId} is null) or (${t.kind} = 'preparation' and ${t.productId} is null and ${t.outputIngredientId} is not null)`,
+      sql`(${t.kind} = 'product' and ${t.productId} is not null and ${t.outputItemId} is null) or (${t.kind} = 'preparation' and ${t.productId} is null and ${t.outputItemId} is not null)`,
     ),
     check("recipe_revision_positive", sql`${t.revision} > 0`),
   ],
@@ -53,6 +52,7 @@ export const recipeVersions = pgTable(
       .notNull()
       .references(() => recipes.id, { onDelete: "restrict" }),
     version: integer("version").notNull(),
+    compositionModel: text("composition_model").notNull().default("legacy"),
     outputName: text("output_name").notNull(),
     outputUnit: text("output_unit").notNull(),
     yieldQuantity: numeric("yield_quantity", {
@@ -92,16 +92,16 @@ export const recipeOptions = pgTable(
       .notNull()
       .references(() => recipeLines.id, { onDelete: "restrict" }),
     position: integer("position").notNull(),
-    ingredientId: uuid("ingredient_id")
+    itemId: uuid("item_id")
       .notNull()
-      .references(() => ingredients.id, { onDelete: "restrict" }),
-    ingredientName: text("ingredient_name").notNull(),
+      .references(() => items.id, { onDelete: "restrict" }),
+    itemName: text("item_name").notNull(),
     baseUnit: text("base_unit").notNull(),
     quantity: numeric("quantity", { precision: 18, scale: 6 }).notNull(),
   },
   (t) => [
     uniqueIndex("recipe_option_position").on(t.lineId, t.position),
-    index("recipe_option_ingredient").on(t.ingredientId),
+    index("recipe_option_item").on(t.itemId),
     check("recipe_option_quantity_positive", sql`${t.quantity} > 0`),
   ],
 );

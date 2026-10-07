@@ -76,19 +76,19 @@ test("prototype layout aligns headers, shows actual records, and works on mobile
     { name: "Vasos de 500 ml", baseUnit: "unit", quantity: "48", cost: "150" },
   ];
   const ids: string[] = [];
-  for (const [index, item] of items.entries()) {
-    const ingredient = await create("ingredients", {
-      name: item.name,
-      baseUnit: item.baseUnit,
-      unitCost: item.cost ?? "",
+  for (const [index, seedItem] of items.entries()) {
+    const item = await create("items", {
+      name: seedItem.name,
+      baseUnit: seedItem.baseUnit,
+      unitCost: seedItem.cost ?? "",
     });
-    ids.push(ingredient.id);
+    ids.push(item.id);
     const result = await post(page, "/api/inventory/adjustments", {
       requestId: crypto.randomUUID(),
       kind: "opening",
-      ingredientId: ingredient.id,
-      quantity: item.quantity,
-      unitCost: item.cost,
+      itemId: item.id,
+      quantity: seedItem.quantity,
+      unitCost: seedItem.cost,
       receivedOn: businessDay(),
       expiresOn: index === 0 ? businessDay(-1) : businessDay(14),
       reason: "Datos de prueba visual",
@@ -114,7 +114,7 @@ test("prototype layout aligns headers, shows actual records, and works on mobile
   await create("presentations", {
     name: "Bolsa de 1 kg",
     supplierId: supplier.id,
-    ingredientId: ids[2],
+    itemId: ids[2],
     baseQuantity: "1000",
   });
   const receipt = await post(page, "/api/purchases", {
@@ -124,7 +124,7 @@ test("prototype layout aligns headers, shows actual records, and works on mobile
     documentNumber: "DEMO-0001",
     lines: [
       {
-        ingredientId: ids[3],
+        itemId: ids[3],
         quantity: "8000",
         unitPrice: "1,45",
         discount: "0",
@@ -191,7 +191,7 @@ test("prototype layout aligns headers, shows actual records, and works on mobile
     page.getByRole("cell", { name: "Taro Iced Latte", exact: true }),
   ).toBeVisible();
   await screenshot(page, "products-desktop");
-  await page.goto("/purchases");
+  await page.goto("/inventory/purchases");
   await expect(page.getByText("DEMO-0001", { exact: true })).toBeVisible();
   await screenshot(page, "purchases-desktop");
   await page.getByRole("button", { name: "Nueva recepción" }).click();
@@ -202,7 +202,7 @@ test("prototype layout aligns headers, shows actual records, and works on mobile
     page.getByRole("combobox", { name: "Proveedor", exact: true }),
   ).toBeEnabled();
   await expect(
-    page.getByRole("combobox", { name: "Insumo", exact: true }),
+    page.getByRole("combobox", { name: "Artículo", exact: true }),
   ).toBeEnabled();
   await screenshot(page, "purchase-form-desktop");
   await page.setViewportSize({ width: 390, height: 844 });
@@ -233,7 +233,7 @@ test("prototype layout aligns headers, shows actual records, and works on mobile
   ).toBeVisible();
   for (let i = 0; i < 7; i++)
     await create("suppliers", { name: `Proveedor visual ${i}` });
-  await page.goto("/purchases");
+  await page.goto("/inventory/purchases");
   await page.getByRole("button", { name: "Nueva recepción" }).click();
   const supplierSearch = page.getByRole("searchbox", {
     name: "Buscar proveedor",

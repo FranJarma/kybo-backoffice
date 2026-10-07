@@ -2,12 +2,7 @@ import { randomUUID as uid } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { createTestDb } from "./helpers/database";
-import {
-  user,
-  ingredients,
-  inventoryOperations,
-  inventoryLots,
-} from "@/db/schema";
+import { user, items, inventoryOperations, inventoryLots } from "@/db/schema";
 import { createRecipeService } from "@/modules/recipes/service";
 import { createProductionService } from "@/modules/production/service";
 import { createInventoryService } from "@/modules/inventory/service";
@@ -24,30 +19,44 @@ beforeAll(async () => {
   recipes = createRecipeService(ctx.db);
   service = createProductionService(ctx.db, now);
   inventory = createInventoryService(ctx.db, now);
-  await ctx.db
-    .insert(user)
-    .values({
-      id: actor.id,
-      name: "Fran",
-      email: "production@test.local",
-      emailVerified: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
+  await ctx.db.insert(user).values({
+    id: actor.id,
+    name: "Fran",
+    email: "production@test.local",
+    emailVerified: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
 });
 afterAll(async () => {
   await ctx?.close();
 });
 async function fixture(cost: string | null = "2", repeated = false) {
   const [raw, output] = await ctx.db
-    .insert(ingredients)
+    .insert(items)
     .values([
-      { name: `Cruda ${uid()}`, baseUnit: "g", unitCost: cost },
-      { name: `Cocida ${uid()}`, baseUnit: "g", unitCost: null },
+      {
+        code: crypto.randomUUID(),
+        class: "food",
+        purchasable: true,
+        recipeUsable: true,
+        name: `Cruda ${uid()}`,
+        baseUnit: "g",
+        unitCost: cost,
+      },
+      {
+        code: crypto.randomUUID(),
+        class: "food",
+        purchasable: true,
+        recipeUsable: true,
+        name: `Cocida ${uid()}`,
+        baseUnit: "g",
+        unitCost: null,
+      },
     ])
     .returning();
   const line = {
-    options: [{ ingredientId: raw.id, quantity: repeated ? "50" : "100" }],
+    options: [{ itemId: raw.id, quantity: repeated ? "50" : "100" }],
   };
   const recipe = await recipes.save(actor, {
     requestId: uid(),
@@ -73,7 +82,7 @@ async function fixture(cost: string | null = "2", repeated = false) {
   return { raw, output, recipe, input };
 }
 async function open(
-  ingredientId: string,
+  itemId: string,
   quantity = "100",
   expiresOn: string | null = "2026-09-28",
   unitCost: string | null = "2",
@@ -81,14 +90,14 @@ async function open(
   await inventory.adjust(actor, {
     requestId: uid(),
     kind: "opening",
-    ingredientId,
+    itemId,
     quantity,
     unitCost,
     receivedOn: "2026-09-24",
     expiresOn,
     reason: "Stock inicial",
   });
-  return (await inventory.getLots(actor, ingredientId)).rows.find(
+  return (await inventory.getLots(actor, itemId)).rows.find(
     (l) => l.expiresOn === expiresOn,
   )!;
 }
@@ -102,7 +111,7 @@ async function record(input: unknown) {
 }
 
 describe("production ledger", () => {
-  it("consumes FEFO usable lots, aggregates repeated ingredients, transfers exact cost to actual yield", async () => {
+  it("consumes FEFO usable lots, aggregates repeated items, transfers exact cost to actual yield", async () => {
     const { raw, output, input } = await fixture("2", true);
     await open(raw.id, "30", "2026-09-26");
     await open(raw.id, "100", "2026-09-28");
@@ -125,8 +134,8 @@ describe("production ledger", () => {
       expectedOutput: "250.000000",
       yieldDifference: "-50.000000",
     });
-    expect(preview.ingredients).toHaveLength(1);
-    expect(preview.ingredients[0]).toMatchObject({
+    expect(preview.items).toHaveLength(1);
+    expect(preview.items[0]).toMatchObject({
       needed: "100.000000",
       usable: "130.000000",
     });
@@ -136,10 +145,10 @@ describe("production ledger", () => {
       "70.000000",
     ]);
     const stock = await inventory.getStock(actor);
-    expect(
-      stock.rows.find((r) => r.ingredientId === raw.id)?.physicalQuantity,
-    ).toBe("230.000000");
-    expect(stock.rows.find((r) => r.ingredientId === output.id)).toMatchObject({
+    expect(stock.rows.find((r) => r.itemId === raw.id)?.physicalQuantity).toBe(
+      "230.000000",
+    );
+    expect(stock.rows.find((r) => r.itemId === output.id)).toMatchObject({
       physicalQuantity: "200.000000",
       stockValue: "200.000000",
     });
@@ -152,7 +161,7 @@ describe("production ledger", () => {
     await open(raw.id, "50");
     const preview = await service.preview(actor, input);
     expect(preview.canConfirm).toBe(false);
-    expect(preview.ingredients[0].shortfall).toBe("50.000000");
+    expect(preview.items[0].shortfall).toBe("50.000000");
     const requestId = uid();
     await expect(
       service.record(actor, {
@@ -169,9 +178,8 @@ describe("production ledger", () => {
     ).toHaveLength(0);
     expect((await inventory.getLots(actor, output.id)).rows).toHaveLength(0);
     expect(
-      (await inventory.getStock(actor)).rows.find(
-        (r) => r.ingredientId === raw.id,
-      )?.physicalQuantity,
+      (await inventory.getStock(actor)).rows.find((r) => r.itemId === raw.id)
+        ?.physicalQuantity,
     ).toBe("50.000000");
   });
   it("invalidates a preview after stock changes and replays committed requests even after a recipe edit or date change", async () => {
@@ -196,7 +204,7 @@ describe("production ledger", () => {
       kind: "preparation",
       targetId: recipe.targetId,
       yieldQuantity: "300",
-      lines: [{ options: [{ ingredientId: raw.id, quantity: "120" }] }],
+      lines: [{ options: [{ itemId: raw.id, quantity: "120" }] }],
     });
     const tomorrow = createProductionService(
       ctx.db,
@@ -220,15 +228,22 @@ describe("production ledger", () => {
       const first = await record({ ...input, expiresOn: null });
       expect(first.totalCost).toBe(cost === null ? null : "0.000000");
       const [secondOutput] = await ctx.db
-        .insert(ingredients)
-        .values({ name: `Segunda ${uid()}`, baseUnit: "unit" })
+        .insert(items)
+        .values({
+          code: crypto.randomUUID(),
+          class: "food",
+          purchasable: true,
+          recipeUsable: true,
+          name: `Segunda ${uid()}`,
+          baseUnit: "unit",
+        })
         .returning();
       const secondRecipe = await recipes.save(actor, {
         requestId: uid(),
         kind: "preparation",
         targetId: secondOutput.id,
         yieldQuantity: "1",
-        lines: [{ options: [{ ingredientId: output.id, quantity: "100" }] }],
+        lines: [{ options: [{ itemId: output.id, quantity: "100" }] }],
       });
       await record({
         recipeId: secondRecipe.id,
@@ -249,7 +264,7 @@ describe("production ledger", () => {
       ); // opening + first production only
       expect(
         (await inventory.getStock(actor)).rows.find(
-          (r) => r.ingredientId === output.id,
+          (r) => r.itemId === output.id,
         )?.physicalQuantity,
       ).toBe("100.000000");
     }
@@ -278,7 +293,7 @@ describe("production ledger", () => {
     await ctx.db
       .update(inventoryLots)
       .set({ blocked: true })
-      .where(eq(inventoryLots.ingredientId, raw.id));
+      .where(eq(inventoryLots.itemId, raw.id));
     expect(
       (await service.preview(actor, { ...input, expiresOn: null })).canConfirm,
     ).toBe(false);
@@ -310,9 +325,7 @@ describe("production ledger", () => {
     ]);
     expect((await inventory.getLots(actor, output.id)).rows).toHaveLength(1);
     expect(
-      (await inventory.getStock(actor)).rows.find(
-        (r) => r.ingredientId === raw.id,
-      ),
+      (await inventory.getStock(actor)).rows.find((r) => r.itemId === raw.id),
     ).toMatchObject({ physicalQuantity: "0.000000", stockValue: "0.000000" });
   });
 });

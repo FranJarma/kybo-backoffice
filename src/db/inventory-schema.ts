@@ -1,3 +1,4 @@
+import { branches } from "./branch-schema";
 import { sql } from "drizzle-orm";
 import {
   pgTable,
@@ -15,7 +16,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 import {
-  ingredients,
+  items,
   suppliers,
   paymentMethods,
   purchasePresentations,
@@ -40,6 +41,9 @@ export const purchaseReceipts = pgTable(
   "purchase_receipts",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
     supplierId: uuid("supplier_id")
       .notNull()
       .references(() => suppliers.id, { onDelete: "restrict" }),
@@ -57,7 +61,12 @@ export const purchaseReceipts = pgTable(
       .defaultNow(),
   },
   (t) => [
-    uniqueIndex("receipt_supplier_document").on(t.supplierId, t.documentNumber),
+    uniqueIndex("receipt_supplier_document").on(
+      t.branchId,
+      t.supplierId,
+      t.documentNumber,
+    ),
+    uniqueIndex("receipt_branch").on(t.id, t.branchId),
     check(
       "receipt_total_positive",
       sql`${t.totalAmount} is null or ${t.totalAmount} >= 0`,
@@ -73,10 +82,10 @@ export const purchaseReceiptLines = pgTable(
       .notNull()
       .references(() => purchaseReceipts.id, { onDelete: "restrict" }),
     position: integer("position").notNull(),
-    ingredientId: uuid("ingredient_id")
+    itemId: uuid("item_id")
       .notNull()
-      .references(() => ingredients.id, { onDelete: "restrict" }),
-    ingredientName: varchar("ingredient_name", { length: 160 }).notNull(),
+      .references(() => items.id, { onDelete: "restrict" }),
+    itemName: varchar("item_name", { length: 160 }).notNull(),
     baseUnit: text("base_unit").notNull(),
     presentationId: uuid("presentation_id").references(
       () => purchasePresentations.id,
@@ -143,9 +152,9 @@ export const purchasePayments = pgTable(
 export const stockBalances = pgTable(
   "stock_balances",
   {
-    ingredientId: uuid("ingredient_id")
+    itemId: uuid("item_id")
       .primaryKey()
-      .references(() => ingredients.id, { onDelete: "restrict" }),
+      .references(() => items.id, { onDelete: "restrict" }),
     physicalQuantity: quantity("physical_quantity").notNull().default("0"),
     stockValue: value("stock_value"),
   },
@@ -161,9 +170,9 @@ export const inventoryLots = pgTable(
   "inventory_lots",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    ingredientId: uuid("ingredient_id")
+    itemId: uuid("item_id")
       .notNull()
-      .references(() => ingredients.id, { onDelete: "restrict" }),
+      .references(() => items.id, { onDelete: "restrict" }),
     receiptId: uuid("receipt_id").references(() => purchaseReceipts.id, {
       onDelete: "restrict",
     }),
@@ -179,7 +188,8 @@ export const inventoryLots = pgTable(
       .defaultNow(),
   },
   (t) => [
-    index("lot_ingredient_expiry").on(t.ingredientId, t.expiresOn),
+    index("lot_item_expiry").on(t.itemId, t.expiresOn),
+    uniqueIndex("lot_item_identity").on(t.id, t.itemId),
     check(
       "lot_quantities_nonnegative",
       sql`${t.initialQuantity} >= 0 and ${t.remainingQuantity} >= 0`,
@@ -190,9 +200,9 @@ export const inventoryMovements = pgTable(
   "inventory_movements",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    ingredientId: uuid("ingredient_id")
+    itemId: uuid("item_id")
       .notNull()
-      .references(() => ingredients.id, { onDelete: "restrict" }),
+      .references(() => items.id, { onDelete: "restrict" }),
     lotId: uuid("lot_id")
       .notNull()
       .references(() => inventoryLots.id, { onDelete: "restrict" }),
@@ -211,7 +221,7 @@ export const inventoryMovements = pgTable(
       .defaultNow(),
   },
   (t) => [
-    index("movement_ingredient_recent").on(t.ingredientId, t.createdAt),
+    index("movement_item_recent").on(t.itemId, t.createdAt),
     check(
       "movement_kind",
       sql`${t.kind} in ('receipt','opening','waste','count','production_in','production_out')`,

@@ -56,12 +56,46 @@ export const definitions: Record<Entity, EntityDefinition> = {
     ],
     columns: ["name", "kind"],
   },
-  ingredients: {
-    title: "Insumos",
-    singular: "insumo",
+  items: {
+    title: "Artículos",
+    singular: "artículo",
     description: "Unidades claras y costos pendientes a la vista.",
     fields: [
       name,
+      { key: "code", label: "Código", type: "text", required: true },
+      {
+        key: "class",
+        label: "Clase",
+        type: "select",
+        required: true,
+        options: [
+          { value: "food", label: "Alimento" },
+          { value: "beverage", label: "Bebida" },
+          { value: "packaging", label: "Envase" },
+          { value: "cleaning", label: "Limpieza" },
+          { value: "other", label: "Otro" },
+        ],
+      },
+      {
+        key: "purchasable",
+        label: "Se puede comprar",
+        type: "select",
+        required: true,
+        options: [
+          { value: "true", label: "Sí" },
+          { value: "false", label: "No" },
+        ],
+      },
+      {
+        key: "recipeUsable",
+        label: "Se usa en recetas",
+        type: "select",
+        required: true,
+        options: [
+          { value: "true", label: "Sí" },
+          { value: "false", label: "No" },
+        ],
+      },
       {
         key: "baseUnit",
         label: "Unidad base",
@@ -80,10 +114,10 @@ export const definitions: Record<Entity, EntityDefinition> = {
         hint: "ARS por g, ml o unidad. Dejá vacío si todavía no lo sabés. Usá coma para decimales.",
       },
     ],
-    columns: ["name", "baseUnit", "unitCost"],
+    columns: ["code", "name", "class", "baseUnit", "unitCost"],
   },
   products: {
-    title: "Productos",
+    title: "Catálogo y precios",
     singular: "producto",
     description: "Precios independientes para mostrador y cada plataforma.",
     fields: [
@@ -106,10 +140,10 @@ export const definitions: Record<Entity, EntityDefinition> = {
     columns: ["name", "priceCounter", "pricePedidosYa", "priceUberEats"],
   },
   presentations: {
-    title: "Presentaciones",
+    title: "Presentaciones de compra",
     singular: "presentación",
     description:
-      "Relacioná cada presentación de compra con su proveedor e insumo.",
+      "Relacioná cada presentación de compra con su proveedor e artículo.",
     fields: [
       name,
       {
@@ -120,10 +154,10 @@ export const definitions: Record<Entity, EntityDefinition> = {
         required: true,
       },
       {
-        key: "ingredientId",
-        label: "Insumo",
+        key: "itemId",
+        label: "Artículo",
         type: "reference",
-        reference: "ingredients",
+        reference: "items",
         required: true,
       },
       {
@@ -131,15 +165,9 @@ export const definitions: Record<Entity, EntityDefinition> = {
         label: "Cantidad en unidad base",
         type: "decimal",
         required: true,
-        hint: "Por ejemplo: un paquete de 800 g equivale a 800 si el insumo está en gramos.",
+        hint: "Por ejemplo: un paquete de 800 g equivale a 800 si el artículo está en gramos.",
       },
     ],
-    columns: [
-      "name",
-      "supplierName",
-      "ingredientName",
-      "baseQuantity",
-      "baseUnit",
-    ],
+    columns: ["name", "supplierName", "itemName", "baseQuantity", "baseUnit"],
   },
 };

@@ -25,10 +25,22 @@ try {
   console.log(
     "User created. Remove the temporary password from the environment.",
   );
-} catch {
-  console.error(
-    "Could not create user. Verify database, input, and email uniqueness.",
-  );
+} catch (error: unknown) {
+  let current: unknown = error;
+
+  for (let i = 0; i < 5 && current instanceof Error; i++) {
+    const detail = current as Error & {
+      code?: string;
+      cause?: unknown;
+    };
+
+    console.error({
+      tipo: detail.name,
+      codigo: detail.code ?? "SIN_CODIGO",
+    });
+
+    current = detail.cause;
+  }
   process.exitCode = 1;
 } finally {
   delete process.env.KYBO_NEW_USER_PASSWORD;

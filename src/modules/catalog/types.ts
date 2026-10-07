@@ -2,7 +2,7 @@ export const entities = [
   "suppliers",
   "customers",
   "payment-methods",
-  "ingredients",
+  "items",
   "products",
   "presentations",
 ] as const;

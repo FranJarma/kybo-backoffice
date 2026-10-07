@@ -2,6 +2,12 @@
 
 Kybo Operations: administración, compras, inventario, recetas, producción, ventas y comandas con Next.js, TypeScript, Shadcn y PostgreSQL compatible con Neon.
 
+## Modificadores 0.6.0-rc.1
+
+Grupos reutilizables con ingredientes o instrucciones, recetas configurables, mínimos/máximos, recargos por canal y costeo por combinación. El POS permite vender distintas configuraciones de un mismo producto y conserva opciones e ingredientes históricos para comandas. La conversión de recetas anteriores requiere revisión y publica todo junto.
+
+Esta entrega requiere validación en navegador y concurrencia en una base PostgreSQL de pruebas antes de uso productivo. Instrucciones de actualización: `docs/modifiers-migration.md`. Resultados y pendientes: `docs/verification-modifiers.md`.
+
 ## Interfaz 0.5.0
 
 La interfaz sigue los prototipos de Kybo: sidebar blanco, header alineado, fondo claro, acciones naranjas, tablas y formularios adaptados a escritorio y celular. Inicio muestra información real del catálogo, inventario y compras; no incluye ventas o márgenes simulados. La fuente Manrope está incluida y se sirve desde la aplicación.

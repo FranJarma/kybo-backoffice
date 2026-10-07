@@ -10,6 +10,7 @@ const optionalText = (max: number) =>
     .transform((v) => v || null);
 const production = z
   .object({
+    locationId: z.uuid(),
     recipeId: z.uuid(),
     revision: z.number().int().positive(),
     multiplier: positiveQuantity,

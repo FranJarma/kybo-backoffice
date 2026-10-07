@@ -1,5 +1,7 @@
 export type RecipeKind = "product" | "preparation";
 export type RecipeInput = {
+  compositionModel?: "legacy" | "configurable";
+  groups?: unknown[];
   requestId: string;
   id?: string;
   revision?: number;
@@ -10,12 +12,12 @@ export type RecipeInput = {
   notes?: string | null;
   lines: {
     optional?: boolean;
-    options: { ingredientId: string; quantity: string; baseUnit?: string }[];
+    options: { itemId: string; quantity: string; baseUnit?: string }[];
   }[];
 };
 export type RecipeOption = {
   id: string;
-  ingredientId: string;
+  itemId: string;
   name: string;
   baseUnit: string;
   quantity: string;
@@ -44,6 +46,8 @@ export type RecipeSummary = {
   archived: boolean;
 };
 export type RecipeDetail = RecipeSummary & {
+  compositionModel: "legacy" | "configurable";
+  configuration?: import("@/modules/modifiers/types").Configuration;
   versionId: string;
   notes: string | null;
   lines: RecipeLine[];

@@ -1,4 +1,8 @@
 "use client";
+
+import { paths } from "@/lib/navigation";
+import { ProductConfigurator } from "./product-configurator";
+import type { PublicConfiguration } from "@/modules/recipes/configuration";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Store, Armchair, Bike, Plus, RotateCw, ArrowLeft } from "lucide-react";
@@ -175,6 +179,28 @@ export function SalesManager({
     setTableId("");
     setNotice("");
   }
+  const [configuring, setConfiguring] = useState<{
+    row: SaleLookup["rows"][number];
+    config: PublicConfiguration;
+    index?: number;
+  } | null>(null);
+  async function configure(row: SaleLookup["rows"][number], index?: number) {
+    if (locked) return;
+    setLoading(true);
+    setError("");
+    try {
+      const config = await getJson<PublicConfiguration>(
+        `/api/sales/products/${row.id}/configuration?channel=${channel}`,
+      );
+      if (config.model === "configurable")
+        setConfiguring({ row, config, index });
+      else if (index === undefined) add(row);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
   function add(row: SaleLookup["rows"][number]) {
     if (locked) return;
     setLines((current) => {
@@ -192,7 +218,20 @@ export function SalesManager({
   function submit(payments: PaymentDraft[] = []) {
     if (locked || !valid) return;
     const linePayload = lines.map(
-      ({ productId, quantity, price, expectedPrice, priceReason, notes }) => ({
+      ({
+        productId,
+        quantity,
+        price,
+        expectedPrice,
+        priceReason,
+        notes,
+        expectedRecipeVersionId,
+        expectedFulfillmentVersionId,
+        modifiers,
+      }) => ({
+        expectedRecipeVersionId,
+        expectedFulfillmentVersionId,
+        modifiers,
         productId,
         quantity,
         price,
@@ -244,6 +283,10 @@ export function SalesManager({
     try {
       const updated = await Promise.all(
         lines.map(async (line) => {
+          if (line.expectedRecipeVersionId && line.modifiers)
+            throw new Error(
+              `Revisá las opciones de ${line.name} con Editar opciones.`,
+            );
           const result = await getJson<SaleLookup>(
               `/api/sales/lookup?kind=products&channel=${channel}&q=${line.productId}`,
             ),
@@ -283,16 +326,60 @@ export function SalesManager({
   const showCart = view === "new" || view === "append";
   return (
     <div className="space-y-5">
+      <Dialog
+        open={!!configuring}
+        onOpenChange={(open) => {
+          if (!open) setConfiguring(null);
+        }}
+      >
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>{configuring?.row.name}</DialogTitle>
+            <DialogDescription>
+              Elegí las opciones de este producto.
+            </DialogDescription>
+          </DialogHeader>
+          {configuring && (
+            <ProductConfigurator
+              key={configuring.config.recipeVersionId}
+              config={configuring.config}
+              initialSelection={
+                configuring.index === undefined
+                  ? undefined
+                  : lines[configuring.index]?.modifiers
+              }
+              onCancel={() => setConfiguring(null)}
+              onConfirm={(data) => {
+                setLines((current) => {
+                  const index = configuring.index;
+                  const item = {
+                    ...(index === undefined
+                      ? newCartLine(configuring.row)
+                      : current[index]),
+                    ...data,
+                    price: inputDecimal(data.expectedPrice),
+                    priceReason: "",
+                  };
+                  return index === undefined
+                    ? [...current, item]
+                    : current.map((l, i) => (i === index ? item : l));
+                });
+                setConfiguring(null);
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
       <div className="page-heading">
         <div>
-          <h1 className="page-title">Ventas</h1>
+          <h1 className="page-title">Punto de venta</h1>
           <p className="page-description">
             Cada pedido, cada cobro, en un solo lugar.
           </p>
         </div>
         <div className="flex shrink-0 gap-2">
           <Button asChild variant="outline">
-            <Link href="/tables">
+            <Link href={paths["tables"]}>
               <Armchair size={17} />
               Mesas
             </Link>
@@ -544,12 +631,18 @@ export function SalesManager({
               <ProductPicker
                 channel={channel}
                 locked={locked || lines.length >= 50}
-                onAdd={add}
+                onAdd={configure}
                 refresh={refresh}
               />
             </div>
             <div className="min-w-0 space-y-3 xl:sticky xl:top-20">
               <Cart
+                onEdit={(index) =>
+                  configure(
+                    { id: lines[index].productId, name: lines[index].name },
+                    index,
+                  )
+                }
                 lines={lines}
                 onChange={setLines}
                 locked={locked}
@@ -656,6 +749,7 @@ export function SalesManager({
           </p>
         ) : detail ? (
           <SaleDetailPanel
+            actorId={actorId}
             sale={detail}
             canCancel={role !== "staff"}
             locked={locked}

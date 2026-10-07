@@ -25,6 +25,7 @@ export function PreparationSettings({
     [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
     [name, setName] = useState(""),
+    [locationId, setLocationId] = useState(""),
     [notice, setNotice] = useState("");
   const [draft, setDraft] = useState<Station | null>(null),
     [routes, setRoutes] = useState<Record<string, string>>({});
@@ -75,6 +76,7 @@ export function PreparationSettings({
       requestId: crypto.randomUUID(),
       ...(draft ? { id: draft.id, revision: draft.revision } : {}),
       name: draft ? draft.name : name,
+      consumptionLocationId: draft ? draft.consumptionLocationId : locationId,
       archived,
     });
   }
@@ -142,6 +144,29 @@ export function PreparationSettings({
                     : setName(e.target.value)
                 }
               />
+            </Control>
+            <Control label="Ubicación de consumo">
+              <select
+                className={selectClass}
+                value={draft ? (draft.consumptionLocationId ?? "") : locationId}
+                onChange={(e) =>
+                  draft
+                    ? setDraft({
+                        ...draft,
+                        consumptionLocationId: e.target.value,
+                      })
+                    : setLocationId(e.target.value)
+                }
+                required
+                disabled={locked}
+              >
+                <option value="">Elegí una ubicación</option>
+                {data?.locations.map((location) => (
+                  <option key={location.id} value={location.id}>
+                    {location.name}
+                  </option>
+                ))}
+              </select>
             </Control>
             <Button
               className="w-full"

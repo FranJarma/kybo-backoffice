@@ -1,7 +1,15 @@
+import {
+  requireCatalogManagement,
+  requireCatalogRead,
+} from "../branches/context";
+import {
+  modifierOptionComponents,
+  recipeModifierOptionComponents,
+  saleLineComponents,
+} from "@/db/modifier-schema";
 import type { AppDb } from "@/db/client";
 import type { Actor } from "@/lib/access";
 import type { Entity, ListResult, CatalogRow } from "./types";
-import { requireCatalogAccess } from "@/lib/access";
 import { AppError } from "@/lib/errors";
 import {
   and,
@@ -17,7 +25,7 @@ import {
   suppliers,
   customers,
   paymentMethods,
-  ingredients,
+  items,
   products,
   productPrices,
   purchasePresentations,
@@ -26,12 +34,14 @@ import {
 import { parseInput, parseUpdate } from "./validation";
 import { recipes, recipeOptions } from "@/db/recipe-schema";
 import { inventoryMovements } from "@/db/inventory-schema";
+import { stockMovements } from "@/db/stock-movement-schema";
+import { productFulfillmentVersions } from "@/db/product-fulfillment-schema";
 
 const tables = {
   suppliers,
   customers,
   "payment-methods": paymentMethods,
-  ingredients,
+  items,
   products,
   presentations: purchasePresentations,
 };
@@ -78,15 +88,12 @@ async function enrich(
       .select({
         id: purchasePresentations.id,
         supplierName: suppliers.name,
-        ingredientName: ingredients.name,
-        baseUnit: ingredients.baseUnit,
+        itemName: items.name,
+        baseUnit: items.baseUnit,
       })
       .from(purchasePresentations)
       .innerJoin(suppliers, eq(suppliers.id, purchasePresentations.supplierId))
-      .innerJoin(
-        ingredients,
-        eq(ingredients.id, purchasePresentations.ingredientId),
-      )
+      .innerJoin(items, eq(items.id, purchasePresentations.itemId))
       .where(inArray(purchasePresentations.id, ids));
     return result.map((row) => ({
       ...row,
@@ -99,7 +106,7 @@ async function enrich(
 async function checkReferences(db: QueryDb, input: DbRow, previous?: DbRow) {
   for (const [key, table] of [
     ["supplierId", suppliers],
-    ["ingredientId", ingredients],
+    ["itemId", items],
   ] as const) {
     const id = input[key] as string;
     const [reference] = await db
@@ -144,7 +151,7 @@ export function createCatalogService(db: AppDb) {
       search = "",
       archived = false,
     ): Promise<ListResult> {
-      requireCatalogAccess(actor);
+      await requireCatalogRead(db, actor);
       const table = tables[entity];
       const query = search
         .trim()
@@ -171,7 +178,7 @@ export function createCatalogService(db: AppDb) {
       entity: Entity,
       input: unknown,
     ): Promise<CatalogRow> {
-      requireCatalogAccess(actor);
+      await requireCatalogManagement(db, actor);
       const values = parseInput(entity, input);
       return db.transaction(async (tx) => {
         if (entity === "presentations") await checkReferences(tx, values);
@@ -202,7 +209,7 @@ export function createCatalogService(db: AppDb) {
       id: string,
       input: unknown,
     ): Promise<CatalogRow> {
-      requireCatalogAccess(actor);
+      await requireCatalogManagement(db, actor);
       if (
         !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
           id,
@@ -232,23 +239,66 @@ export function createCatalogService(db: AppDb) {
         if (entity === "presentations" && change.archived === false)
           await checkReferences(tx, current);
         if (
-          entity === "ingredients" &&
+          entity === "items" &&
           values &&
           values.baseUnit !== before.baseUnit
         ) {
           const [used] = await tx
             .select({ id: purchasePresentations.id })
             .from(purchasePresentations)
-            .where(eq(purchasePresentations.ingredientId, id))
+            .where(eq(purchasePresentations.itemId, id))
             .limit(1);
           const [hasHistory] = await tx
             .select({ id: inventoryMovements.id })
             .from(inventoryMovements)
-            .where(eq(inventoryMovements.ingredientId, id))
+            .where(eq(inventoryMovements.itemId, id))
             .limit(1);
-          const [recipeUse] = await tx.select({ id: recipeOptions.id }).from(recipeOptions).where(eq(recipeOptions.ingredientId, id)).limit(1);
-          const [recipeOutput] = await tx.select({ id: recipes.id }).from(recipes).where(eq(recipes.outputIngredientId, id)).limit(1);
-          if (used || hasHistory || recipeUse || recipeOutput)
+          const [physicalHistory] = await tx
+            .select({ id: stockMovements.id })
+            .from(stockMovements)
+            .where(eq(stockMovements.itemId, id))
+            .limit(1);
+          const [directProduct] = await tx
+            .select({ id: productFulfillmentVersions.id })
+            .from(productFulfillmentVersions)
+            .where(eq(productFulfillmentVersions.itemId, id))
+            .limit(1);
+          const [recipeUse] = await tx
+            .select({ id: recipeOptions.id })
+            .from(recipeOptions)
+            .where(eq(recipeOptions.itemId, id))
+            .limit(1);
+          const [recipeOutput] = await tx
+            .select({ id: recipes.id })
+            .from(recipes)
+            .where(eq(recipes.outputItemId, id))
+            .limit(1);
+          const [modifierUse] = await tx
+            .select({ id: modifierOptionComponents.id })
+            .from(modifierOptionComponents)
+            .where(eq(modifierOptionComponents.itemId, id))
+            .limit(1);
+          const [overrideUse] = await tx
+            .select({ id: recipeModifierOptionComponents.id })
+            .from(recipeModifierOptionComponents)
+            .where(eq(recipeModifierOptionComponents.itemId, id))
+            .limit(1);
+          const [saleUse] = await tx
+            .select({ id: saleLineComponents.id })
+            .from(saleLineComponents)
+            .where(eq(saleLineComponents.itemId, id))
+            .limit(1);
+          if (
+            used ||
+            hasHistory ||
+            physicalHistory ||
+            directProduct ||
+            recipeUse ||
+            recipeOutput ||
+            modifierUse ||
+            overrideUse ||
+            saleUse
+          )
             throw new AppError(
               "UNIT_IN_USE",
               "Este insumo tiene presentaciones, recetas o historial de inventario. Conservá su unidad base.",

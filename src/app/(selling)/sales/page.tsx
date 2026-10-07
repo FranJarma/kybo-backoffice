@@ -1,4 +1,4 @@
-import { requireActor } from "@/lib/auth";
+import { requirePageActor as requireActor } from "@/modules/branches/page-context";
 import { SalesManager } from "@/components/sales/sales-manager";
 export default async function SalesPage({
   searchParams,

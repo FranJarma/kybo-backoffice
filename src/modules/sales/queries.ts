@@ -1,3 +1,4 @@
+import { saleLineModifiers } from "@/db/modifier-schema";
 import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
 import type { AppDb } from "@/db/client";
 import { sales, saleOrders, saleLines, salePayments } from "@/db/sales-schema";
@@ -82,6 +83,17 @@ export async function saleDetail(
       and(eq(saleOrders.id, saleLines.orderId), eq(saleOrders.saleId, id)),
     )
     .orderBy(asc(saleLines.position));
+  const modifiers = lines.length
+    ? await db
+        .select()
+        .from(saleLineModifiers)
+        .where(
+          inArray(
+            saleLineModifiers.saleLineId,
+            lines.map((l) => l.line.id),
+          ),
+        )
+    : [];
   const payments = await db
     .select()
     .from(salePayments)
@@ -100,6 +112,8 @@ export async function saleDetail(
       lines: lines
         .filter((l) => l.orderId === o.id)
         .map(({ line: l }) => ({
+          compositionStatus: l.compositionStatus,
+          modifiers: modifiers.filter((m) => m.saleLineId === l.id),
           id: l.id,
           productId: l.productId,
           name: l.name,

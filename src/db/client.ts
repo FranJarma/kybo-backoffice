@@ -3,6 +3,7 @@ import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
 import { drizzle as drizzlePg } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import * as schema from "./schema";
+import { sql } from "drizzle-orm";
 
 export type AppDb = ReturnType<typeof drizzlePg<typeof schema>>;
 
@@ -17,10 +18,26 @@ const state = (globalDb.__kyboDatabase ??= {});
 
 export async function getDb(): Promise<AppDb> {
   if (!state.connection)
-    state.connection = connect().catch((error: unknown) => {
-      state.connection = undefined;
-      throw error;
-    });
+    state.connection = connect()
+      .then(async (db) => {
+        try {
+          const result = await db.execute(
+            sql`select status from data_model_state where id=1`,
+          );
+          if (result.rows[0]?.status !== "ready")
+            throw new Error("Transition not ready");
+          return db;
+        } catch {
+          await state.close?.();
+          throw new Error(
+            "El modelo de inventario requiere una transición conciliada antes de habilitar la aplicación.",
+          );
+        }
+      })
+      .catch((error: unknown) => {
+        state.connection = undefined;
+        throw error;
+      });
   return state.connection;
 }
 

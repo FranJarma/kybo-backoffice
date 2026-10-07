@@ -1,3 +1,4 @@
+import { saleLineModifiers } from "@/db/modifier-schema";
 import { asc, eq, inArray } from "drizzle-orm";
 import {
   preparationStations,
@@ -15,6 +16,7 @@ export const iso = (d: Date | null) => d?.toISOString() ?? null;
 export const stationView = (
   s: typeof preparationStations.$inferSelect,
 ): Station => ({
+  consumptionLocationId: s.consumptionLocationId,
   id: s.id,
   name: s.name,
   revision: s.revision,
@@ -58,6 +60,17 @@ export async function taskViews(tx: Tx, ids: string[]): Promise<PrepTask[]> {
     .innerJoin(saleLines, eq(saleLines.id, preparationTaskLines.lineId))
     .where(inArray(preparationTaskLines.taskId, ids))
     .orderBy(asc(saleLines.position));
+  const modifiers = lines.length
+    ? await tx
+        .select()
+        .from(saleLineModifiers)
+        .where(
+          inArray(
+            saleLineModifiers.saleLineId,
+            lines.map((l) => l.line.id),
+          ),
+        )
+    : [];
   const siblings = await tx
     .select()
     .from(preparationTasks)
@@ -100,7 +113,19 @@ export async function taskViews(tx: Tx, ids: string[]): Promise<PrepTask[]> {
       readyAt: iso(t.readyAt),
       deliveredAt: iso(t.deliveredAt),
       cancelledAt: iso(t.cancelledAt),
-      lines: lines.filter((l) => l.taskId === t.id).map((l) => l.line),
+      lines: lines
+        .filter((l) => l.taskId === t.id)
+        .map((l) => ({
+          ...l.line,
+          modifiers: modifiers
+            .filter((m) => m.saleLineId === l.line.id)
+            .map((m) => ({
+              groupName: m.groupName,
+              optionName: m.optionName,
+              count: m.count,
+              instruction: m.instruction,
+            })),
+        })),
       siblings: siblings
         .filter((s) => s.orderId === o.id)
         .map((s) => ({

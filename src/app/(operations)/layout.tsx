@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { requireActor } from "@/lib/auth";
+import { shellActor } from "@/modules/branches/page-context";
 import { AppShell } from "@/components/app-shell";
 import { getDb } from "@/db/client";
 import { user } from "@/db/auth-schema";
@@ -11,7 +12,7 @@ export default async function OperationsLayout({
 }) {
   let actor: Awaited<ReturnType<typeof requireActor>>;
   try {
-    actor = await requireActor();
+    actor = await shellActor(await requireActor());
   } catch (error) {
     if (
       typeof error === "object" &&
@@ -22,7 +23,7 @@ export default async function OperationsLayout({
       redirect("/login");
     throw error;
   }
-  if (actor.role === "staff") redirect("/sales");
+
   const [profile] = await (
     await getDb()
   )
@@ -33,11 +34,12 @@ export default async function OperationsLayout({
   const dateLabel = new Intl.DateTimeFormat("es-AR", {
     day: "numeric",
     month: "long",
-    timeZone: "America/Argentina/Salta",
+    timeZone: actor.timeZone ?? "America/Argentina/Buenos_Aires",
   }).format(new Date());
   return (
     <AppShell
       role={actor.role}
+      catalogManager={actor.catalogManager}
       name={profile?.name ?? "Equipo Kybo"}
       dateLabel={dateLabel}
     >

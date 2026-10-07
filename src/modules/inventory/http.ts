@@ -1,5 +1,5 @@
 import { requireCatalogAccess, type Actor } from "@/lib/access";
-import { requireActor } from "@/lib/auth";
+import { operationalActor } from "@/modules/branches/http";
 import {
   errorResponse,
   privateJson,
@@ -11,7 +11,7 @@ export async function inventoryResponse(
   action: (actor: Actor, input: unknown) => Promise<unknown>,
 ): Promise<Response> {
   try {
-    const actor = await requireActor();
+    const actor = await operationalActor(request);
     requireCatalogAccess(actor);
     const input = request ? await requestInput(request) : undefined;
     return privateJson(await action(actor, input));

@@ -1,3 +1,5 @@
+import { items } from "./item-schema";
+export { items } from "./item-schema";
 import { sql } from "drizzle-orm";
 import {
   pgTable,
@@ -52,21 +54,6 @@ export const paymentMethods = pgTable(
     ),
   ],
 );
-export const ingredients = pgTable(
-  "ingredients",
-  {
-    ...common(),
-    baseUnit: text("base_unit").notNull(),
-    unitCost: numeric("unit_cost", { precision: 18, scale: 6 }),
-  },
-  (t) => [
-    check("ingredient_base_unit", sql`${t.baseUnit} in ('g','ml','unit')`),
-    check(
-      "ingredient_cost_nonnegative",
-      sql`${t.unitCost} is null or ${t.unitCost} >= 0`,
-    ),
-  ],
-);
 export const products = pgTable("products", { ...common() });
 export const productPrices = pgTable(
   "product_prices",
@@ -94,9 +81,9 @@ export const purchasePresentations = pgTable(
     supplierId: uuid("supplier_id")
       .notNull()
       .references(() => suppliers.id, { onDelete: "restrict" }),
-    ingredientId: uuid("ingredient_id")
+    itemId: uuid("item_id")
       .notNull()
-      .references(() => ingredients.id, { onDelete: "restrict" }),
+      .references(() => items.id, { onDelete: "restrict" }),
     baseQuantity: numeric("base_quantity", {
       precision: 18,
       scale: 6,
@@ -104,7 +91,7 @@ export const purchasePresentations = pgTable(
   },
   (t) => [
     check("presentation_quantity_positive", sql`${t.baseQuantity} > 0`),
-    index("presentation_ingredient").on(t.ingredientId),
+    index("presentation_item").on(t.itemId),
     index("presentation_supplier").on(t.supplierId),
   ],
 );

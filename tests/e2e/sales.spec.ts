@@ -78,19 +78,17 @@ test("staff reaches POS without administrative catalog access", async ({
     await saveStaffSession(page);
   } else await page.goto("/sales");
   await expect(
-    page.getByRole("heading", { name: "Ventas", exact: true }),
+    page.getByRole("heading", { name: "Punto de venta", exact: true }),
   ).toBeVisible();
   await expect(
     page
       .getByRole("navigation", { name: "Principal" })
-      .getByRole("link", { name: "Insumos" }),
+      .getByRole("link", { name: "Artículos" }),
   ).toHaveCount(0);
   const lookup = await page.request.get("/api/sales/lookup?kind=products");
   expect(lookup.status()).toBe(200);
   expect(await lookup.text()).not.toMatch(/unitCost|marketingOptIn/);
-  expect((await page.request.get("/api/catalog/ingredients")).status()).toBe(
-    403,
-  );
+  expect((await page.request.get("/api/catalog/items")).status()).toBe(403);
   expect((await page.request.get("/api/recipes")).status()).toBe(403);
   const table = await page.request.post("/api/sales/tables", {
     headers: { Origin: new URL(page.url()).origin },
@@ -115,7 +113,7 @@ test("counter sale recovers a lost response without a second sale", async ({
   test.setTimeout(120000);
   await signIn(page);
   await expect(
-    page.getByRole("heading", { name: "Ventas", exact: true }),
+    page.getByRole("heading", { name: "Punto de venta", exact: true }),
   ).toBeVisible();
   const { product, method, customer } = await fixtures(page, "mostrador");
   await page.reload();
@@ -187,7 +185,7 @@ test("table keeps multiple orders in one visit, settles balance and delivery pre
   test.setTimeout(120000);
   await signIn(page);
   const { product, method } = await fixtures(page, "mesa");
-  await page.goto("/tables");
+  await page.goto("/sales/tables");
   await page.getByRole("button", { name: "Editar disposición" }).click();
   await page.getByRole("button", { name: "Celda 2, 2" }).click();
   await page
@@ -222,7 +220,7 @@ test("table keeps multiple orders in one visit, settles balance and delivery pre
   await dialog.getByRole("textbox", { name: "Importe 1" }).fill("4000");
   await dialog.getByRole("button", { name: "Confirmar cobro" }).click();
   await expect(page.getByTestId("sale-balance")).toHaveText(/10\.000/);
-  await page.goto("/tables");
+  await page.goto("/sales/tables");
   await expect(page.getByRole("link", { name: /Mesa jardín/ })).toContainText(
     "2 pedidos",
   );
@@ -248,7 +246,7 @@ test("table keeps multiple orders in one visit, settles balance and delivery pre
     .selectOption(method.id);
   await dialog.getByRole("button", { name: "Confirmar cobro" }).click();
   await expect(page.getByTestId("sale-balance")).toHaveText(/0,00/);
-  await page.goto("/tables");
+  await page.goto("/sales/tables");
   await expect(page.getByRole("link", { name: /Mesa jardín/ })).toContainText(
     "Libre",
   );

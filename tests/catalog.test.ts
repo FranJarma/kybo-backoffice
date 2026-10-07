@@ -5,7 +5,7 @@ import { createCatalogService } from "../src/modules/catalog/service";
 import { user } from "../src/db/auth-schema";
 import {
   auditEvents,
-  ingredients,
+  items,
   suppliers,
   purchasePresentations,
 } from "../src/db/business-schema";
@@ -140,7 +140,7 @@ describe("authorized and durable master records", () => {
 
 describe("costs, prices and purchase units", () => {
   it("preserves unknown costs and independent prices through edits", async () => {
-    const milk = await service.createRecord(admin, "ingredients", {
+    const milk = await service.createRecord(admin, "items", {
       name: "Leche",
       baseUnit: "ml",
       unitCost: "",
@@ -152,14 +152,14 @@ describe("costs, prices and purchase units", () => {
       pricePedidosYa: "7.500",
       priceUberEats: "",
     });
-    const renamed = await service.updateRecord(admin, "ingredients", milk.id, {
+    const renamed = await service.updateRecord(admin, "items", milk.id, {
       revision: 1,
       name: "Leche entera",
       baseUnit: "ml",
       unitCost: "",
     });
     expect(renamed.unitCost).toBeNull();
-    await service.updateRecord(admin, "ingredients", milk.id, {
+    await service.updateRecord(admin, "items", milk.id, {
       revision: 2,
       name: "Leche entera",
       baseUnit: "ml",
@@ -173,7 +173,7 @@ describe("costs, prices and purchase units", () => {
       pricePedidosYa: "7500.00",
       priceUberEats: null,
     });
-    const zero = await service.createRecord(admin, "ingredients", {
+    const zero = await service.createRecord(admin, "items", {
       name: "Costo cero declarado",
       baseUnit: "unit",
       unitCost: "0",
@@ -185,7 +185,7 @@ describe("costs, prices and purchase units", () => {
       ...supplierInput,
       name: "Distribuidora paquetes",
     });
-    const ingredient = await service.createRecord(admin, "ingredients", {
+    const item = await service.createRecord(admin, "items", {
       name: "Taro polvo",
       baseUnit: "g",
       unitCost: "54,208",
@@ -193,7 +193,7 @@ describe("costs, prices and purchase units", () => {
     const input = {
       name: "Paquete de 800 g",
       supplierId: supplier.id,
-      ingredientId: ingredient.id,
+      itemId: item.id,
       baseQuantity: "800",
     };
     const pack = await service.createRecord(admin, "presentations", input);
@@ -211,7 +211,7 @@ describe("costs, prices and purchase units", () => {
       service.createRecord(admin, "presentations", input),
     ).rejects.toMatchObject({ code: "ARCHIVED_REFERENCE" });
     await expect(
-      service.updateRecord(admin, "ingredients", ingredient.id, {
+      service.updateRecord(admin, "items", item.id, {
         revision: 1,
         name: "Taro polvo",
         baseUnit: "ml",
@@ -227,23 +227,36 @@ describe("costs, prices and purchase units", () => {
   });
   it("database rejects invalid numeric and orphan rows", async () => {
     await expect(
-      ctx.db
-        .insert(ingredients)
-        .values({ name: "Negativo", baseUnit: "g", unitCost: "-1" }),
+      ctx.db.insert(items).values({
+        code: crypto.randomUUID(),
+        class: "food",
+        purchasable: true,
+        recipeUsable: true,
+        name: "Negativo",
+        baseUnit: "g",
+        unitCost: "-1",
+      }),
     ).rejects.toThrow();
     const [s] = await ctx.db
       .insert(suppliers)
       .values({ name: "DB supplier" })
       .returning();
     const [i] = await ctx.db
-      .insert(ingredients)
-      .values({ name: "DB ingredient", baseUnit: "unit" })
+      .insert(items)
+      .values({
+        code: crypto.randomUUID(),
+        class: "food",
+        purchasable: true,
+        recipeUsable: true,
+        name: "DB item",
+        baseUnit: "unit",
+      })
       .returning();
     await expect(
       ctx.db.insert(purchasePresentations).values({
         name: "Cero",
         supplierId: s.id,
-        ingredientId: i.id,
+        itemId: i.id,
         baseQuantity: "0",
       }),
     ).rejects.toThrow();
@@ -251,7 +264,7 @@ describe("costs, prices and purchase units", () => {
       ctx.db.insert(purchasePresentations).values({
         name: "Huérfano",
         supplierId: crypto.randomUUID(),
-        ingredientId: i.id,
+        itemId: i.id,
         baseQuantity: "1",
       }),
     ).rejects.toThrow();

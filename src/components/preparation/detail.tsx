@@ -128,6 +128,14 @@ export function PrepDetailDialog({
                   <strong>
                     {l.quantity} × {l.name}
                   </strong>
+                  {l.modifiers?.map((m, i) => (
+                    <p key={i} className="mt-1 text-sm font-medium text-blue">
+                      {m.count} × {m.optionName}
+                      {m.instruction && m.instruction !== m.optionName
+                        ? ` · ${m.instruction}`
+                        : ""}
+                    </p>
+                  ))}
                   {l.notes && (
                     <p className="mt-1 whitespace-pre-wrap text-xs text-muted">
                       {l.notes}

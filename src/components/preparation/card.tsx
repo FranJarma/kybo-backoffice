@@ -139,6 +139,14 @@ export function PrepCard({
                 <p className="break-words text-sm font-bold leading-6 text-brand">
                   {l.name}
                 </p>
+                {l.modifiers?.map((m, i) => (
+                  <p key={i} className="mt-1 text-sm font-medium text-blue">
+                    {m.count} × {m.optionName}
+                    {m.instruction && m.instruction !== m.optionName
+                      ? ` · ${m.instruction}`
+                      : ""}
+                  </p>
+                ))}
                 {l.notes && (
                   <p className="mt-0.5 whitespace-pre-wrap break-words text-xs leading-relaxed text-muted">
                     {l.notes}
