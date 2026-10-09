@@ -1,3 +1,5 @@
+import { lookupProducts } from "./product-lookup";
+import { canSellProduct } from "../products/availability";
 import { requireOperationalContext } from "../branches/context";
 import { resolveFulfillment } from "../products/fulfillment";
 import {
@@ -110,6 +112,20 @@ async function prepareLines(
       .where(eq(products.id, id))
       .for("share");
     if (!product || product.archivedAt) invalid("Elegí productos activos.");
+    const [local] = await tx
+      .select()
+      .from(branchProducts)
+      .where(
+        and(
+          eq(branchProducts.productId, id),
+          eq(branchProducts.branchId, ctx.branchId),
+        ),
+      )
+      .for("share");
+    if (!canSellProduct(product, local, channel))
+      invalid(
+        "El producto está agotado o no está disponible en este canal y sucursal.",
+      );
     const [price] = await tx
       .select()
       .from(productPrices)
@@ -699,6 +715,8 @@ export function createSalesService(db: AppDb) {
       kind: string,
       q = "",
       channel = "counter",
+      category = "",
+      offset = 0,
     ): Promise<SaleLookup> {
       salesAccess(actor);
       const ctx = await requireOperationalContext(
@@ -711,43 +729,15 @@ export function createSalesService(db: AppDb) {
       parse(channelSchema, channel);
       return db.transaction(
         async (tx) => {
-          if (kind === "products") {
-            const filter = and(
-              sql`exists (select 1 from ${branchProducts} where ${branchProducts.productId} = ${products.id} and ${branchProducts.branchId} = ${ctx.branchId} and ${branchProducts.enabled} = true)`,
-              isNull(products.archivedAt),
-              or(
-                ilike(products.name, term(q)),
-                sql`${products.id}::text = ${q}`,
-              ),
+          if (kind === "products")
+            return lookupProducts(
+              tx,
+              ctx.branchId,
+              q,
+              channel,
+              category,
+              offset,
             );
-            const [{ total }] = await tx
-              .select({ total: count() })
-              .from(products)
-              .where(filter);
-            const rows = await tx
-              .select({
-                id: products.id,
-                name: products.name,
-                price: productPrices.amount,
-                fulfillmentVersionId: productFulfillments.versionId,
-              })
-              .from(products)
-              .leftJoin(
-                productFulfillments,
-                eq(productFulfillments.productId, products.id),
-              )
-              .leftJoin(
-                productPrices,
-                and(
-                  eq(productPrices.productId, products.id),
-                  eq(productPrices.channel, channel),
-                ),
-              )
-              .where(filter)
-              .orderBy(asc(products.name), asc(products.id))
-              .limit(30);
-            return { rows, total };
-          }
           const table = kind === "customers" ? customers : paymentMethods;
           const filter = and(
             isNull(table.archivedAt),

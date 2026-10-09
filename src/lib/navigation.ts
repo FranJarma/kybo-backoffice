@@ -60,6 +60,15 @@ export const navigation = [
     access: "catalog",
   },
   {
+    id: "categories",
+    area: "Productos",
+    label: "Categorías",
+    href: "/products/categories",
+    icon: "Layers3",
+    access: "catalog",
+    parent: "products",
+  },
+  {
     id: "recipes",
     area: "Productos",
     label: "Recetas",

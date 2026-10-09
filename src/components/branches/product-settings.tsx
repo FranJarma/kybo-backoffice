@@ -22,6 +22,9 @@ export function BranchProductSettings({
 }) {
   const [product, setProduct] = useState(""),
     [enabled, setEnabled] = useState(false),
+    [soldOut, setSoldOut] = useState(false),
+    [revision, setRevision] = useState<number | null>(null),
+    [loadedFor, setLoadedFor] = useState(""),
     [location, setLocation] = useState(""),
     [version, setVersion] = useState<Version | null>(null),
     [item, setItem] = useState(""),
@@ -32,12 +35,18 @@ export function BranchProductSettings({
   useEffect(() => {
     if (!product) return;
     let live = true;
-    getJson<{ enabled: boolean; dispatchLocationId: string | null }>(
-      `/api/branches/${branchId}/products/${product}`,
-    )
+    getJson<{
+      enabled: boolean;
+      dispatchLocationId: string | null;
+      temporarilySoldOut: boolean;
+      revision: number;
+    }>(`/api/branches/${branchId}/products/${product}`)
       .then((r) => {
         if (live) {
           setEnabled(r.enabled);
+          setSoldOut(r.temporarilySoldOut);
+          setRevision(r.revision);
+          setLoadedFor(`${branchId}:${product}`);
           setLocation(r.dispatchLocationId ?? "");
         }
       })
@@ -62,6 +71,11 @@ export function BranchProductSettings({
   }, [branchId, product, canEditCatalog]);
   async function save(e: FormEvent, direct: boolean) {
     e.preventDefault();
+    if (
+      !direct &&
+      (revision === null || loadedFor !== `${branchId}:${product}`)
+    )
+      return;
     setBusy(true);
     setError("");
     setNotice("");
@@ -73,7 +87,12 @@ export function BranchProductSettings({
             quantity: decimal(amount, 6, true, true),
             expectedVersion: version?.version ?? 0,
           }
-        : { enabled, dispatchLocationId: location || null };
+        : {
+            enabled,
+            dispatchLocationId: location || null,
+            temporarilySoldOut: soldOut,
+            revision,
+          };
       const response = await fetch(
         direct
           ? `/api/products/${product}/fulfillment`
@@ -87,6 +106,7 @@ export function BranchProductSettings({
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? "No se pudo guardar.");
       if (direct) setVersion(result);
+      else setRevision(result.revision);
       setNotice("Configuración guardada.");
     } catch (e) {
       setError(
@@ -107,6 +127,8 @@ export function BranchProductSettings({
         value={product}
         onChange={(id) => {
           setProduct(id);
+          setRevision(null);
+          setLoadedFor("");
           setEnabled(false);
           setVersion(null);
           setNotice("");
@@ -122,7 +144,14 @@ export function BranchProductSettings({
       {product && (
         <>
           <form onSubmit={(e) => void save(e, false)}>
-            <fieldset disabled={busy} className="space-y-3">
+            <fieldset
+              disabled={
+                busy ||
+                revision === null ||
+                loadedFor !== `${branchId}:${product}`
+              }
+              className="space-y-3"
+            >
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -130,6 +159,14 @@ export function BranchProductSettings({
                   onChange={(e) => setEnabled(e.target.checked)}
                 />
                 Habilitado para vender en esta sucursal
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={soldOut}
+                  onChange={(e) => setSoldOut(e.target.checked)}
+                />
+                Agotado temporalmente en esta sucursal
               </label>
               <label className="block text-sm font-semibold">
                 Ubicación de despacho de reventa

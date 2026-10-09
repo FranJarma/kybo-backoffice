@@ -46,11 +46,11 @@ export function ComponentFields({
   onChange: (v: ComponentDraft[]) => void;
 }) {
   return (
-    <div className="space-y-3">
+    <div className="space-y-5">
       {value.map((c, i) => (
         <div
           key={i}
-          className="grid grid-cols-[1fr_100px_36px] items-end gap-2"
+          className="grid grid-cols-[minmax(0,1fr)_40px] items-end gap-5 sm:grid-cols-[minmax(0,1fr)_160px_40px] [&>div:first-child]:col-span-2 sm:[&>div:first-child]:col-span-1"
         >
           <SearchSelect
             entity="items"
@@ -165,7 +165,7 @@ function GroupEditor({
   const [requestId] = useState(() => crypto.randomUUID());
   return (
     <form
-      className="space-y-5"
+      className="space-y-8"
       onSubmit={async (e) => {
         e.preventDefault();
         setBusy(true);
@@ -195,7 +195,7 @@ function GroupEditor({
         }
       }}
     >
-      <fieldset disabled={busy} className="space-y-5">
+      <fieldset disabled={busy} className="space-y-8">
         <Field label="Nombre del grupo">
           <Input
             aria-label="Nombre del grupo"
@@ -212,7 +212,7 @@ function GroupEditor({
         {options.map((o, i) => (
           <section
             key={o.key}
-            className="rounded-xl border border-line bg-surface/40 p-4 space-y-4"
+            className="rounded-xl border border-line bg-surface/40 p-5 space-y-6 sm:p-6"
           >
             <div className="flex items-end gap-2">
               <div className="flex-1">
@@ -440,9 +440,9 @@ export function ModifiersManager() {
           if (!open) setEditor(null);
         }}
       >
-        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>
+        <DialogContent className="max-h-[94dvh] gap-8 overflow-y-auto p-5 sm:max-w-4xl sm:p-8 lg:p-10">
+          <DialogHeader className="gap-3 border-b border-line pb-6 pr-6 text-left">
+            <DialogTitle className="text-2xl">
               {editor?.initial ? "Nueva versión del grupo" : "Nuevo grupo"}
             </DialogTitle>
             <DialogDescription>

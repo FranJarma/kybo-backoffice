@@ -66,7 +66,20 @@ const decimal = (scale: number, required = false, positive = false) =>
         !positive || (value !== null && BigInt(value.replace(".", "")) > 0n),
       "La cantidad debe ser mayor que cero.",
     );
+const order = z.preprocess(
+  (v) => (typeof v === "string" && /^\d+$/.test(v) ? Number(v) : v),
+  z.number().int().min(0).max(2147483647),
+);
+const enabled = z.preprocess(
+  (v) => (v === "true" ? true : v === "false" ? false : v),
+  z.boolean(),
+);
+const optionalId = z.preprocess(
+  (v) => (v === "" ? null : v),
+  z.uuid().nullable(),
+);
 const schemas = {
+  categories: z.object({ name, sortOrder: order.optional() }).strict(),
   suppliers: z
     .object({ name, email, phone, notes: optionalText(2000) })
     .strict(),
@@ -89,6 +102,13 @@ const schemas = {
   products: z
     .object({
       name,
+      categoryId: optionalId.optional(),
+      imageAssetId: optionalId.optional(),
+      description: optionalText(2000).optional(),
+      sortOrder: order.optional(),
+      enabledCounter: enabled.optional(),
+      enabledPedidosYa: enabled.optional(),
+      enabledUberEats: enabled.optional(),
       priceCounter: decimal(2, true),
       pricePedidosYa: decimal(2),
       priceUberEats: decimal(2),

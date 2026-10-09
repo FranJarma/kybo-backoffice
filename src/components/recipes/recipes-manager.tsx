@@ -504,11 +504,11 @@ export function RecipesManager({ actorId }: { actorId: string }) {
         }}
       >
         <DialogContent
-          className="max-h-[90dvh] overflow-y-auto sm:max-w-3xl"
+          className="max-h-[94dvh] gap-8 overflow-y-auto p-5 sm:max-w-5xl sm:p-8 lg:p-10"
           showCloseButton={!operation.locked}
         >
-          <DialogHeader>
-            <DialogTitle>
+          <DialogHeader className="gap-3 border-b border-line pb-6 pr-6 text-left">
+            <DialogTitle className="text-2xl">
               {editor?.recipe ? "Editar receta" : "Nueva receta"}
             </DialogTitle>
             <DialogDescription>
@@ -901,9 +901,9 @@ function RecipeEditor({
     });
   }
   return (
-    <form onSubmit={submit} className="space-y-5">
-      <fieldset disabled={disabled} className="space-y-5">
-        <div className="grid gap-4 sm:grid-cols-2">
+    <form onSubmit={submit} className="space-y-8">
+      <fieldset disabled={disabled} className="space-y-8">
+        <div className="grid gap-7 sm:grid-cols-2">
           <SearchSelect
             entity={kind === "product" ? "products" : "items"}
             label={kind === "product" ? "Producto" : "Preparado a ingresar"}
@@ -939,11 +939,11 @@ function RecipeEditor({
           </Link>{" "}
           antes de armar la receta.
         </p>
-        <div className="space-y-4">
+        <div className="space-y-6">
           {lines.map((line, i) => (
             <section
               key={line.key}
-              className="rounded-xl border border-line bg-surface/50 p-4"
+              className="rounded-xl border border-line bg-surface/50 p-5 sm:p-6"
             >
               <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-sm font-bold">Ingrediente {i + 1}</h3>
@@ -980,7 +980,7 @@ function RecipeEditor({
               {line.options.map((option, j) => (
                 <div
                   key={option.key}
-                  className="mb-3 grid items-end gap-3 sm:grid-cols-[minmax(0,1fr)_150px_40px]"
+                  className="mb-6 grid items-end gap-5 sm:grid-cols-[minmax(0,1fr)_180px_40px]"
                 >
                   <SearchSelect
                     entity="items"

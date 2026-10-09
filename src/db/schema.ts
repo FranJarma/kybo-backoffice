@@ -17,3 +17,5 @@ export * from "./product-fulfillment-schema";
 export * from "./fulfillment-event-schema";
 export * from "./stock-resolution-schema";
 export * from "./transition-schema";
+
+export * from "./media-schema";

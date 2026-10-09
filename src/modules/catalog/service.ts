@@ -1,4 +1,9 @@
 import {
+  productFields,
+  checkProductCategory,
+  bindProductImage,
+} from "./product-fields";
+import {
   requireCatalogManagement,
   requireCatalogRead,
 } from "../branches/context";
@@ -27,6 +32,7 @@ import {
   paymentMethods,
   items,
   products,
+  productCategories,
   productPrices,
   purchasePresentations,
   auditEvents,
@@ -43,6 +49,7 @@ const tables = {
   "payment-methods": paymentMethods,
   items,
   products,
+  categories: productCategories,
   presentations: purchasePresentations,
 };
 type QueryDb = Pick<AppDb, "select" | "insert" | "update" | "delete">;
@@ -70,8 +77,13 @@ async function enrich(
       .select()
       .from(productPrices)
       .where(inArray(productPrices.productId, ids));
+    const categories = await db.select().from(productCategories);
     return result.map((row) => ({
       ...row,
+      categoryName:
+        categories.find((c) => c.id === row.categoryId)?.name ?? null,
+      categoryArchived: !!categories.find((c) => c.id === row.categoryId)
+        ?.archivedAt,
       priceCounter:
         prices.find((p) => p.productId === row.id && p.channel === "counter")
           ?.amount ?? null,
@@ -165,7 +177,15 @@ export function createCatalogService(db: AppDb) {
         .select()
         .from(table)
         .where(condition)
-        .orderBy(asc(table.name), asc(table.id))
+        .orderBy(
+          ...(entity === "products"
+            ? [asc(products.sortOrder)]
+            : entity === "categories"
+              ? [asc(productCategories.sortOrder)]
+              : []),
+          asc(table.name),
+          asc(table.id),
+        )
         .limit(100);
       const [total] = await db
         .select({ value: count() })
@@ -182,16 +202,20 @@ export function createCatalogService(db: AppDb) {
       const values = parseInput(entity, input);
       return db.transaction(async (tx) => {
         if (entity === "presentations") await checkReferences(tx, values);
+        if (entity === "products") await checkProductCategory(tx, values);
         // Validation above whitelists the fields for this table, including required name.
         const inserted =
           entity === "products"
-            ? { name: values.name as string }
+            ? productFields(values)
             : (values as { name: string });
         const [row] = await tx
           .insert(tables[entity])
           .values(inserted)
           .returning();
-        if (entity === "products") await writePrices(tx, row.id, values);
+        if (entity === "products") {
+          await bindProductImage(tx, actor.id, row.id, values);
+          await writePrices(tx, row.id, values);
+        }
         const [after] = await enrich(tx, entity, [row]);
         await tx.insert(auditEvents).values({
           actorId: actor.id,
@@ -305,9 +329,13 @@ export function createCatalogService(db: AppDb) {
               409,
             );
         }
+        if (entity === "products" && values) {
+          await checkProductCategory(tx, values, before);
+          await bindProductImage(tx, actor.id, id, values, before);
+        }
         const fields = values
           ? entity === "products"
-            ? { name: values.name as string }
+            ? productFields(values)
             : values
           : { archivedAt: change.archived ? new Date() : null };
         const [updated] = await tx

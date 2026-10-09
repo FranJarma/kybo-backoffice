@@ -1,3 +1,4 @@
+import { mediaAssets } from "./media-schema";
 import { items } from "./item-schema";
 export { items } from "./item-schema";
 import { sql } from "drizzle-orm";
@@ -54,7 +55,40 @@ export const paymentMethods = pgTable(
     ),
   ],
 );
-export const products = pgTable("products", { ...common() });
+export const productCategories = pgTable(
+  "product_categories",
+  {
+    ...common(),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (t) => [
+    check("category_order", sql`${t.sortOrder} >= 0`),
+    uniqueIndex("category_active_name")
+      .on(sql`lower(trim(${t.name}))`)
+      .where(sql`${t.archivedAt} is null`),
+  ],
+);
+export const products = pgTable(
+  "products",
+  {
+    ...common(),
+    categoryId: uuid("category_id").references(() => productCategories.id, {
+      onDelete: "restrict",
+    }),
+    description: text("description"),
+    imageAssetId: uuid("image_asset_id").references(() => mediaAssets.id, {
+      onDelete: "restrict",
+    }),
+    sortOrder: integer("sort_order").notNull().default(0),
+    enabledCounter: boolean("enabled_counter").notNull().default(true),
+    enabledPedidosYa: boolean("enabled_pedidosya").notNull().default(true),
+    enabledUberEats: boolean("enabled_ubereats").notNull().default(true),
+  },
+  (t) => [
+    check("product_order", sql`${t.sortOrder} >= 0`),
+    uniqueIndex("product_image_unique").on(t.imageAssetId),
+  ],
+);
 export const productPrices = pgTable(
   "product_prices",
   {

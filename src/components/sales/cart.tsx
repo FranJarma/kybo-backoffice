@@ -1,4 +1,6 @@
 "use client";
+import { pageOffset } from "@/modules/products/pagination";
+import { ProductPhoto } from "@/components/products/photo";
 import { useEffect, useState } from "react";
 import { Coffee, Minus, Plus, Search, ShoppingBag, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -44,6 +46,8 @@ export function ProductPicker({
   onAdd: (row: SaleLookup["rows"][number]) => void;
   refresh: number;
 }) {
+  const [category, setCategory] = useState(""),
+    [offset, setOffset] = useState(0);
   const [q, setQ] = useState(""),
     [data, setData] = useState<SaleLookup>({ rows: [], total: 0 }),
     [loading, setLoading] = useState(true),
@@ -54,10 +58,13 @@ export function ProductPicker({
       setLoading(true);
       setError("");
       getJson<SaleLookup>(
-        `/api/sales/lookup?kind=products&channel=${channel}&q=${encodeURIComponent(q)}`,
+        `/api/sales/lookup?kind=products&channel=${channel}&q=${encodeURIComponent(q)}&category=${encodeURIComponent(category)}&offset=${offset}`,
       )
         .then((r) => {
-          if (live) setData(r);
+          if (live) {
+            setData(r);
+            setOffset(pageOffset(offset, r.total));
+          }
         })
         .catch((e) => {
           if (live) setError(e.message);
@@ -70,7 +77,7 @@ export function ProductPicker({
       live = false;
       clearTimeout(timer);
     };
-  }, [channel, q, refresh]);
+  }, [channel, q, refresh, category, offset]);
   return (
     <section className="surface-panel p-4 sm:p-5">
       <div className="mb-5 flex items-center justify-between gap-3">
@@ -91,9 +98,31 @@ export function ProductPicker({
           aria-label="Buscar productos"
           value={q}
           placeholder="Buscar un producto…"
-          onChange={(e) => setQ(e.target.value)}
+          onChange={(e) => {
+            setQ(e.target.value);
+            setOffset(0);
+          }}
         />
       </div>
+      <label className="mb-4 block text-xs font-semibold text-muted">
+        Categoría
+        <select
+          value={category}
+          onChange={(e) => {
+            setCategory(e.target.value);
+            setOffset(0);
+          }}
+          className="form-control mt-2"
+        >
+          <option value="">Todas</option>
+          <option value="none">Sin categoría</option>
+          {data.categories?.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      </label>
       {error ? (
         <p role="alert" className="py-8 text-sm text-red-700">
           {error}
@@ -106,30 +135,35 @@ export function ProductPicker({
         <div className="py-12 text-center">
           <Coffee size={30} className="mx-auto mb-3 text-muted" />
           <p className="text-sm font-semibold text-brand">
-            {q ? "No encontramos ese producto" : "Tu carta todavía está vacía"}
+            {q || category
+              ? "No hay productos con estos filtros"
+              : "Tu carta todavía está vacía"}
           </p>
           <p className="mt-2 text-xs text-muted">
-            {q
-              ? "Probá buscar por otro nombre."
+            {q || category
+              ? "Probá otra categoría o buscá por otro nombre."
               : "Cargá los productos y sus precios para empezar."}
           </p>
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3 2xl:grid-cols-3">
-          {data.rows.map((row, i) => (
+          {data.rows.map((row) => (
             <button
               key={row.id}
               type="button"
-              disabled={locked}
+              disabled={locked || !!row.temporarilySoldOut}
               aria-label={`Agregar ${row.name}`}
               onClick={() => onAdd(row)}
               className="group flex min-h-40 min-w-0 flex-col items-start rounded-xl border border-line bg-white p-4 text-left transition-colors hover:border-orange-300 hover:bg-orange-50/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue disabled:opacity-50"
             >
-              <span
-                className={`mb-3 flex size-9 items-center justify-center rounded-xl ${["bg-violet-50 text-violet-500", "bg-orange-50 text-orange-600", "bg-blue-50 text-blue"][i % 3]}`}
-              >
-                <Coffee size={19} />
+              <span className="mb-3 block w-full">
+                <ProductPhoto id={row.imageAssetId} name={row.name} />
               </span>
+              {row.temporarilySoldOut && (
+                <span className="mb-2 text-xs font-bold text-amber-700">
+                  Agotado temporalmente
+                </span>
+              )}
               <span className="mb-3 line-clamp-2 text-sm font-bold leading-snug text-brand">
                 {row.name}
               </span>
@@ -146,10 +180,29 @@ export function ProductPicker({
         </div>
       )}
       {data.total > 30 && !loading && (
-        <p className="mt-4 text-xs text-muted">
-          Mostrando 30 de {data.total}. Buscá por nombre para encontrar el
-          resto.
-        </p>
+        <div className="mt-4 flex items-center justify-between gap-2 text-xs text-muted">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={offset === 0}
+            onClick={() => setOffset(Math.max(0, offset - 30))}
+          >
+            Anterior
+          </Button>
+          <span>
+            {offset + 1}–{Math.min(offset + 30, data.total)} de {data.total}
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={offset + 30 >= data.total}
+            onClick={() => setOffset(offset + 30)}
+          >
+            Siguiente
+          </Button>
+        </div>
       )}
     </section>
   );

@@ -9,6 +9,8 @@ export async function GET(request: Request) {
       q.get("kind") ?? "products",
       q.get("q") ?? "",
       q.get("channel") ?? "counter",
+      q.get("category") ?? "",
+      Number(q.get("offset") ?? 0),
     );
   });
 }

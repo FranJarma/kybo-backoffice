@@ -185,7 +185,7 @@ export function SalesManager({
     index?: number;
   } | null>(null);
   async function configure(row: SaleLookup["rows"][number], index?: number) {
-    if (locked) return;
+    if (locked || row.temporarilySoldOut) return;
     setLoading(true);
     setError("");
     try {
@@ -202,7 +202,7 @@ export function SalesManager({
     }
   }
   function add(row: SaleLookup["rows"][number]) {
-    if (locked) return;
+    if (locked || row.temporarilySoldOut) return;
     setLines((current) => {
       const present = current.find((l) => l.productId === row.id);
       if (present)
@@ -629,6 +629,7 @@ export function SalesManager({
                 </section>
               )}
               <ProductPicker
+                key={channel}
                 channel={channel}
                 locked={locked || lines.length >= 50}
                 onAdd={configure}

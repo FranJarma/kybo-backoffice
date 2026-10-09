@@ -74,6 +74,10 @@ export const branchProducts = pgTable(
       .notNull()
       .references(() => products.id, { onDelete: "restrict" }),
     enabled: boolean("enabled").notNull().default(false),
+    temporarilySoldOut: boolean("temporarily_sold_out")
+      .notNull()
+      .default(false),
+    revision: integer("revision").notNull().default(1),
     dispatchLocationId: uuid("dispatch_location_id"),
   },
   (t) => [

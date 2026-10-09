@@ -64,10 +64,16 @@ export type SaleDetail = SaleSummary & {
 };
 export type SaleList = { rows: SaleSummary[]; total: number; offset: number };
 export type SaleLookup = {
+  categories?: { id: string; name: string }[];
+  offset?: number;
   rows: {
     id: string;
     name: string;
     price?: string | null;
+    imageAssetId?: string | null;
+    description?: string | null;
+    categoryId?: string | null;
+    temporarilySoldOut?: boolean;
     fulfillmentVersionId?: string | null;
   }[];
   total: number;

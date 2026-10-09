@@ -1,4 +1,5 @@
 "use client";
+import { PhotoEditor, ProductPhoto } from "@/components/products/photo";
 import { useEffect, useId, useState, type FormEvent } from "react";
 import {
   Archive,
@@ -54,7 +55,11 @@ function initialDraft(
         ? field.type === "decimal"
           ? decimalInput(row[field.key])
           : String(row[field.key] ?? "")
-        : "",
+        : field.key === "sortOrder"
+          ? "0"
+          : field.key.startsWith("enabled")
+            ? "true"
+            : "",
     ]),
   );
 }
@@ -80,6 +85,7 @@ async function readError(response: Response) {
 }
 function displayValue(row: CatalogRow, key: string) {
   const value = row[key];
+  if (key === "categoryName" && !value) return "Sin categoría";
   if (key === "unitCost" && value === null) return "Pendiente";
   if (value === null || value === undefined || value === "") return "—";
   if (key === "baseUnit") return value === "unit" ? "unidad" : String(value);
@@ -103,6 +109,8 @@ function displayValue(row: CatalogRow, key: string) {
   return String(value);
 }
 const columnNames: Record<string, string> = {
+  categoryName: "Categoría",
+  sortOrder: "Orden",
   name: "Nombre",
   email: "Correo",
   phone: "Teléfono",
@@ -122,6 +130,7 @@ const entityIcons = {
   "payment-methods": CreditCard,
   items: Box,
   products: CupSoda,
+  categories: Package,
   presentations: Package,
 };
 
@@ -170,6 +179,7 @@ export function CatalogManager({
     [draft, setDraft] = useState<Draft>({}),
     [formError, setFormError] = useState(""),
     [saving, setSaving] = useState(false),
+    [uploading, setUploading] = useState(false),
     [actionId, setActionId] = useState<string | null>(null),
     [referenceLists, setReferenceLists] = useState<RefLists>({}),
     [referenceCache, setReferenceCache] = useState<RefLists>({}),
@@ -287,23 +297,27 @@ export function CatalogManager({
   }, [definition, referenceSearch]);
   function openForm(row: CatalogRow | null) {
     setEditing(row);
-    setDraft(initialDraft(definition.fields, row));
+    setDraft({
+      ...initialDraft(definition.fields, row),
+      imageAssetId: String(row?.imageAssetId ?? ""),
+    });
     setFormError(referenceError);
   }
   function closeForm() {
-    if (!saving) {
+    if (!saving && !uploading) {
       setEditing(undefined);
       setFormError("");
     }
   }
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (editing === undefined) return;
+    if (editing === undefined || uploading || saving) return;
     setSaving(true);
     setFormError("");
     const payload: Record<string, string | number> = Object.fromEntries(
       definition.fields.map((field) => [field.key, draft[field.key] ?? ""]),
     );
+    if (entity === "products") payload.imageAssetId = draft.imageAssetId ?? "";
     if (editing) payload.revision = editing.revision;
     try {
       const response = await fetch(
@@ -396,7 +410,9 @@ export function CatalogManager({
         cached?.name ??
         (field.key === "supplierId"
           ? editing?.supplierName
-          : editing?.itemName);
+          : field.key === "categoryId"
+            ? editing?.categoryName
+            : editing?.itemName);
       return (
         <>
           <Input
@@ -416,7 +432,13 @@ export function CatalogManager({
             {existing && (
               <option value={value}>
                 {String(label ?? "Referencia previa")}
-                {!cached ? " (archivado)" : ""}
+                {(
+                  field.key === "categoryId"
+                    ? editing?.categoryArchived
+                    : !cached
+                )
+                  ? " (archivado)"
+                  : ""}
               </option>
             )}
             {options.map((option) => (
@@ -443,9 +465,11 @@ export function CatalogManager({
       <div
         key={field.key}
         className={
-          field.key === "name" || field.type === "textarea" || field.hint
-            ? "sm:col-span-2"
-            : "min-w-0"
+          field.key === "name" ||
+          field.type === "textarea" ||
+          (entity !== "products" && field.hint)
+            ? "min-w-0 space-y-2.5 sm:col-span-2"
+            : "min-w-0 space-y-2.5"
         }
       >
         <Label htmlFor={`${formId}-${field.key}`}>
@@ -510,10 +534,14 @@ export function CatalogManager({
   }
   const EntityIcon = entityIcons[entity];
   const basicFields = definition.fields.filter(
-    (field) => entity !== "products" || !field.key.startsWith("price"),
+    (field) =>
+      entity !== "products" ||
+      !(field.key.startsWith("price") || field.key.startsWith("enabled")),
   );
   const priceFields = definition.fields.filter(
-    (field) => entity === "products" && field.key.startsWith("price"),
+    (field) =>
+      entity === "products" &&
+      (field.key.startsWith("price") || field.key.startsWith("enabled")),
   );
 
   return (
@@ -693,7 +721,14 @@ export function CatalogManager({
                               <span
                                 className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${entity === "products" ? "bg-orange-50 text-orange-500" : "bg-slate-50 text-[#577195]"}`}
                               >
-                                <EntityIcon size={21} aria-hidden="true" />
+                                {entity === "products" ? (
+                                  <ProductPhoto
+                                    id={String(row.imageAssetId ?? "") || null}
+                                    name={row.name}
+                                  />
+                                ) : (
+                                  <EntityIcon size={21} aria-hidden="true" />
+                                )}
                               </span>
                               <span className="min-w-28 break-words">
                                 {row.name}
@@ -722,6 +757,14 @@ export function CatalogManager({
                     </span>
                     <div className="min-w-0 flex-1">
                       <h2 className="break-words font-semibold text-brand">
+                        <span className="mb-2 block w-16">
+                          {entity === "products" && (
+                            <ProductPhoto
+                              id={String(row.imageAssetId ?? "") || null}
+                              name={row.name}
+                            />
+                          )}
+                        </span>
                         {row.name}
                       </h2>
                       <div className="mt-1.5">
@@ -770,8 +813,8 @@ export function CatalogManager({
         }}
       >
         {editing !== undefined && (
-          <DialogContent className="max-h-[94dvh] gap-0 overflow-y-auto bg-white p-5 sm:max-w-xl sm:p-7">
-            <div className="mb-6 border-b border-line pb-5 pr-5">
+          <DialogContent className="max-h-[94dvh] gap-0 overflow-y-auto bg-white p-5 sm:max-w-4xl sm:p-8 lg:p-10">
+            <div className="mb-8 border-b border-line pb-6 pr-5">
               <p className="eyebrow mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
                 {definition.title}
               </p>
@@ -785,17 +828,49 @@ export function CatalogManager({
                 obligatorios.
               </DialogDescription>
             </div>
-            <form onSubmit={submit} className="space-y-6">
-              <div className="grid gap-5 sm:grid-cols-2">
-                {basicFields.map(renderField)}
+            <form onSubmit={submit} className="space-y-8">
+              <div className="grid gap-x-8 gap-y-7 sm:grid-cols-2">
+                {(entity === "products"
+                  ? [
+                      ...basicFields.filter(
+                        (field) => field.type !== "textarea",
+                      ),
+                      ...basicFields.filter(
+                        (field) => field.type === "textarea",
+                      ),
+                    ]
+                  : basicFields
+                ).map(renderField)}
               </div>
+              {entity === "products" && (
+                <PhotoEditor
+                  value={draft.imageAssetId || null}
+                  onChange={(id) =>
+                    setDraft((d) => ({ ...d, imageAssetId: id ?? "" }))
+                  }
+                  onBusy={setUploading}
+                  disabled={saving || uploading}
+                />
+              )}
               {priceFields.length > 0 && (
-                <fieldset className="rounded-xl border border-line bg-slate-50/60 p-4">
+                <fieldset className="rounded-xl border border-line bg-slate-50/60 p-5 sm:p-6">
                   <legend className="px-2 text-sm font-semibold text-brand">
-                    Precios por canal
+                    Venta por canal
                   </legend>
-                  <div className="grid gap-5 pt-1 sm:grid-cols-2">
-                    {priceFields.map(renderField)}
+                  <div className="grid gap-7 pt-3 lg:grid-cols-3">
+                    {(["Counter", "PedidosYa", "UberEats"] as const).map(
+                      (channel) => (
+                        <div key={channel} className="min-w-0 space-y-6">
+                          {priceFields
+                            .filter(
+                              (field) =>
+                                field.key === `enabled${channel}` ||
+                                field.key === `price${channel}`,
+                            )
+                            .map(renderField)}
+                        </div>
+                      ),
+                    )}
                   </div>
                 </fieldset>
               )}
@@ -822,11 +897,11 @@ export function CatalogManager({
                   type="button"
                   variant="outline"
                   onClick={closeForm}
-                  disabled={saving}
+                  disabled={saving || uploading}
                 >
                   Cancelar
                 </Button>
-                <Button type="submit" disabled={saving}>
+                <Button type="submit" disabled={saving || uploading}>
                   {saving ? "Guardando…" : "Guardar"}
                 </Button>
               </div>

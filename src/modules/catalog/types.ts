@@ -4,6 +4,7 @@ export const entities = [
   "payment-methods",
   "items",
   "products",
+  "categories",
   "presentations",
 ] as const;
 export type Entity = (typeof entities)[number];

@@ -232,7 +232,7 @@ export function ModifierRecipeEditor({
   }
   return (
     <form
-      className="space-y-5"
+      className="space-y-8"
       onSubmit={(e) => {
         e.preventDefault();
         if (!legacyReviewed) return;
@@ -298,7 +298,7 @@ export function ModifierRecipeEditor({
         } as RecipeInput);
       }}
     >
-      <fieldset disabled={disabled || busy} className="space-y-5">
+      <fieldset disabled={disabled || busy} className="space-y-8">
         {!initial && (
           <SearchSelect
             entity="products"
@@ -332,7 +332,7 @@ export function ModifierRecipeEditor({
         {groups.map((g, i) => (
           <section
             key={g.groupVersionId || g.draft?.requestId}
-            className="rounded-xl border border-line bg-surface/30 p-4 space-y-4"
+            className="rounded-xl border border-line bg-surface/30 p-5 space-y-6 sm:p-6"
           >
             <div className="flex items-center justify-between gap-2">
               <h3 className="font-bold text-brand">{g.name}</h3>
@@ -422,7 +422,7 @@ export function ModifierRecipeEditor({
                 onChange={(e) => update(i, { name: e.target.value })}
               />
             </Field>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid gap-5 sm:grid-cols-3">
               <Field label="Mínimo">
                 <Input
                   type="number"
@@ -450,7 +450,7 @@ export function ModifierRecipeEditor({
             {g.options.map((o, j) => (
               <div
                 key={o.key}
-                className="rounded-lg bg-white border border-line p-3 space-y-3"
+                className="rounded-lg bg-white border border-line p-5 space-y-6"
               >
                 <label className="flex items-center gap-2 font-semibold text-sm">
                   <input
@@ -465,7 +465,7 @@ export function ModifierRecipeEditor({
                   />
                   {o.name}
                 </label>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-5 sm:grid-cols-2">
                   <Field label="Cantidad inicial">
                     <Input
                       type="number"
@@ -487,7 +487,7 @@ export function ModifierRecipeEditor({
                     />
                   </Field>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-3">
+                <div className="grid gap-5 sm:grid-cols-3">
                   {(["counter", "pedidosya", "ubereats"] as const).map((c) => (
                     <Field
                       key={c}

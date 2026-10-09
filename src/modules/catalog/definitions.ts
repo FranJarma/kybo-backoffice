@@ -116,12 +116,55 @@ export const definitions: Record<Entity, EntityDefinition> = {
     ],
     columns: ["code", "name", "class", "baseUnit", "unitCost"],
   },
+  categories: {
+    title: "Categorías",
+    singular: "categoría",
+    description: "Organizá la carta sin duplicar productos.",
+    fields: [
+      name,
+      {
+        key: "sortOrder",
+        label: "Orden de visualización",
+        type: "text",
+        hint: "Número entero desde 0. Los menores aparecen primero.",
+      },
+    ],
+    columns: ["name", "sortOrder"],
+  },
   products: {
     title: "Catálogo y precios",
     singular: "producto",
-    description: "Precios independientes para mostrador y cada plataforma.",
+    description: "Ficha comercial, foto y precios independientes por canal.",
     fields: [
       name,
+      {
+        key: "categoryId",
+        label: "Categoría principal",
+        type: "reference",
+        reference: "categories",
+      },
+      { key: "description", label: "Descripción", type: "textarea" },
+      {
+        key: "sortOrder",
+        label: "Orden de visualización",
+        type: "text",
+        hint: "Número entero desde 0. Los menores aparecen primero.",
+      },
+      ...(
+        [
+          ["enabledCounter", "Disponible en mostrador"],
+          ["enabledPedidosYa", "Disponible en PedidosYa"],
+          ["enabledUberEats", "Disponible en Uber Eats"],
+        ] as const
+      ).map(([key, label]) => ({
+        key,
+        label,
+        type: "select" as const,
+        options: [
+          { value: "true", label: "Sí" },
+          { value: "false", label: "No" },
+        ],
+      })),
       {
         key: "priceCounter",
         label: "Precio mostrador",
@@ -137,7 +180,14 @@ export const definitions: Record<Entity, EntityDefinition> = {
       },
       { key: "priceUberEats", label: "Precio Uber Eats", type: "decimal" },
     ],
-    columns: ["name", "priceCounter", "pricePedidosYa", "priceUberEats"],
+    columns: [
+      "name",
+      "categoryName",
+      "sortOrder",
+      "priceCounter",
+      "pricePedidosYa",
+      "priceUberEats",
+    ],
   },
   presentations: {
     title: "Presentaciones de compra",

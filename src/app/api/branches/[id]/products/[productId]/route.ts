@@ -1,8 +1,12 @@
+import {
+  branchProductInput,
+  nextBranchProduct,
+} from "@/modules/products/branch-settings";
 import { and, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db/client";
 import { branchProducts, locations } from "@/db/branch-schema";
-import { products } from "@/db/business-schema";
+import { products, auditEvents } from "@/db/business-schema";
 import { productFulfillments } from "@/db/product-fulfillment-schema";
 import { requireActor } from "@/lib/auth";
 import { requireOperationalContext } from "@/modules/branches/context";
@@ -29,7 +33,14 @@ export async function GET(request: Request, { params }: Params) {
           eq(branchProducts.productId, z.uuid().parse(productId)),
         ),
       );
-    return privateJson(row ?? { enabled: false, dispatchLocationId: null });
+    return privateJson(
+      row ?? {
+        enabled: false,
+        dispatchLocationId: null,
+        temporarilySoldOut: false,
+        revision: 0,
+      },
+    );
   } catch (error) {
     return errorResponse(error);
   }
@@ -39,10 +50,7 @@ export async function PUT(request: Request, { params }: Params) {
     const actor = await requireActor(),
       { id, productId } = await params;
     z.uuid().parse(productId);
-    const input = z
-      .object({ enabled: z.boolean(), dispatchLocationId: z.uuid().nullable() })
-      .strict()
-      .parse(await requestInput(request));
+    const input = branchProductInput.parse(await requestInput(request));
     const db = await getDb();
     return privateJson(
       await db.transaction(async (tx) => {
@@ -57,7 +65,7 @@ export async function PUT(request: Request, { params }: Params) {
           .select()
           .from(products)
           .where(and(eq(products.id, productId), isNull(products.archivedAt)))
-          .for("share");
+          .for("update");
         const [fulfillment] = await tx
           .select()
           .from(productFulfillments)
@@ -87,14 +95,35 @@ export async function PUT(request: Request, { params }: Params) {
               400,
             );
         }
+        const [current] = await tx
+          .select()
+          .from(branchProducts)
+          .where(
+            and(
+              eq(branchProducts.branchId, id),
+              eq(branchProducts.productId, productId),
+            ),
+          )
+          .for("update");
+        const values = nextBranchProduct(input, current);
         const [row] = await tx
           .insert(branchProducts)
-          .values({ branchId: id, productId, ...input })
+          .values({ branchId: id, productId, ...values })
           .onConflictDoUpdate({
             target: [branchProducts.branchId, branchProducts.productId],
-            set: input,
+            set: values,
           })
           .returning();
+        await tx
+          .insert(auditEvents)
+          .values({
+            actorId: actor.id,
+            entity: "branch-products",
+            recordId: productId,
+            action: "update",
+            before: current ?? null,
+            after: row,
+          });
         return row;
       }),
     );
