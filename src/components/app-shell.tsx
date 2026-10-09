@@ -25,7 +25,10 @@ import {
 import { Dialog } from "radix-ui";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { BranchSelector } from "@/components/branches/selector";
+import {
+  BranchSelector,
+  type BranchChoice,
+} from "@/components/branches/selector";
 import { visibleNavigation, breadcrumbs } from "@/lib/navigation";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 const icons = {
@@ -93,12 +96,16 @@ export function AppShell({
   name,
   dateLabel,
   catalogManager = false,
+  branches,
+  selectedBranchId,
 }: {
   children: React.ReactNode;
   role: string;
   name: string;
   dateLabel: string;
   catalogManager?: boolean;
+  branches: BranchChoice[];
+  selectedBranchId: string;
 }) {
   const [open, setOpen] = useState(false);
   const menuButton = useRef<HTMLButtonElement>(null);
@@ -256,7 +263,7 @@ export function AppShell({
       <div className="min-w-0">
         <header
           data-topbar
-          className="sticky top-0 z-20 flex min-h-16 items-center justify-between gap-4 border-b border-line bg-white/95 px-4 py-3 backdrop-blur-sm sm:px-7"
+          className="sticky top-0 z-20 flex min-h-16 flex-wrap items-center justify-between gap-3 border-b border-line bg-white/95 px-4 py-3 backdrop-blur-sm sm:flex-nowrap sm:px-7"
         >
           <div className="flex min-w-0 items-center gap-3">
             <Button
@@ -272,13 +279,14 @@ export function AppShell({
             </Button>
             <Breadcrumb items={breadcrumbs(path, { role, catalogManager })} />
           </div>
-          <div className="flex items-center gap-5">
-            <span className="hidden text-xs font-medium text-muted sm:block">
+          <div className="flex w-full min-w-0 items-center gap-3 sm:w-auto sm:shrink-0">
+            <BranchSelector rows={branches} selected={selectedBranchId} />
+            <span className="hidden text-xs font-medium text-muted xl:block">
               {dateLabel}
             </span>
             <span
               title={name}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-[#f0f5fa] text-muted"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#f0f5fa] text-muted"
             >
               <UserRound size={18} aria-hidden="true" />
               <span className="sr-only">{name}</span>
@@ -286,9 +294,6 @@ export function AppShell({
           </div>
         </header>
         <main id="main-content" className="page-container">
-          <div className="mb-6 max-w-sm">
-            <BranchSelector />
-          </div>
           {children}
         </main>
       </div>

@@ -52,6 +52,14 @@ export const purchaseReceipts = pgTable(
     documentNumber: varchar("document_number", { length: 120 }),
     notes: text("notes"),
     totalAmount: amount("total_amount"),
+    shippingAmount: amount("shipping_amount").notNull().default("0"),
+    shippingSupplierId: uuid("shipping_supplier_id").references(
+      () => suppliers.id,
+      { onDelete: "restrict" },
+    ),
+    shippingSupplierName: varchar("shipping_supplier_name", { length: 160 }),
+    shippingAllocation: text("shipping_allocation").notNull().default("value"),
+    shippingPaidAmount: amount("shipping_paid_amount").notNull().default("0"),
     paidAmount: amount("paid_amount").notNull().default("0"),
     actorId: text("actor_id")
       .notNull()
@@ -72,6 +80,14 @@ export const purchaseReceipts = pgTable(
       sql`${t.totalAmount} is null or ${t.totalAmount} >= 0`,
     ),
     check("receipt_paid_nonnegative", sql`${t.paidAmount} >= 0`),
+    check(
+      "receipt_shipping_valid",
+      sql`${t.shippingAmount} >= 0 and ${t.shippingPaidAmount} >= 0 and ${t.shippingAllocation} in ('value','manual') and ((${t.shippingAmount}=0 and ${t.shippingSupplierId} is null and ${t.shippingSupplierName} is null and ${t.shippingPaidAmount}=0) or (${t.shippingAmount}>0 and ${t.shippingSupplierId} is not null and ${t.shippingSupplierName} is not null and ${t.totalAmount} is not null))`,
+    ),
+    check(
+      "receipt_shipping_paid_limit",
+      sql`(${t.shippingSupplierId} = ${t.supplierId} and ${t.shippingPaidAmount}=0) or (${t.shippingSupplierId} is distinct from ${t.supplierId} and ${t.shippingPaidAmount} <= ${t.shippingAmount})`,
+    ),
   ],
 );
 export const purchaseReceiptLines = pgTable(
@@ -98,6 +114,7 @@ export const purchaseReceiptLines = pgTable(
     unitPrice: quantity("unit_price"),
     discount: amount("discount").notNull().default("0"),
     lineTotal: amount("line_total"),
+    shippingAmount: amount("shipping_amount").notNull().default("0"),
     lotId: uuid("lot_id")
       .notNull()
       .references(() => inventoryLots.id, { onDelete: "restrict" }),
@@ -119,6 +136,10 @@ export const purchaseReceiptLines = pgTable(
       "receipt_line_cost_valid",
       sql`${t.discount} >= 0 and (${t.lineTotal} is null or ${t.lineTotal} >= 0)`,
     ),
+    check(
+      "receipt_line_shipping_valid",
+      sql`${t.shippingAmount} >= 0 and (${t.shippingAmount}=0 or ${t.lineTotal} is not null)`,
+    ),
   ],
 );
 export const purchasePayments = pgTable(
@@ -134,6 +155,7 @@ export const purchasePayments = pgTable(
     paymentMethodName: varchar("payment_method_name", {
       length: 160,
     }).notNull(),
+    target: text("target").notNull().default("supplier"),
     amount: amount("amount").notNull(),
     paidOn: date("paid_on").notNull(),
     reference: varchar("reference", { length: 160 }),
@@ -147,6 +169,7 @@ export const purchasePayments = pgTable(
   (t) => [
     index("payments_receipt").on(t.receiptId),
     check("payment_amount_positive", sql`${t.amount} > 0`),
+    check("payment_target_valid", sql`${t.target} in ('supplier','shipping')`),
   ],
 );
 export const stockBalances = pgTable(

@@ -18,6 +18,7 @@ import {
   finishProduction,
 } from "../src/modules/production/orders";
 import { stockOperations, locationStockBalances } from "../src/db/stock-schema";
+import { createPreparationSettings } from "../src/modules/preparation/settings";
 
 let ctx: Awaited<ReturnType<typeof createDataModelTestContext>>;
 const actor: Actor = { id: "waste-test", role: "admin" };
@@ -41,6 +42,39 @@ afterAll(async () => {
 });
 
 describe("merma versionada y costos", () => {
+  it("la ficha consulta y asigna la estación del producto exacto en su sucursal", async () => {
+    const productRows = await ctx.db
+      .insert(products)
+      .values([
+        { name: "Ficha de producto" },
+        { name: "Ficha de producto similar" },
+      ])
+      .returning();
+    const scoped = { ...actor, branchId: ctx.mapping.initialBranch.id };
+    const settings = createPreparationSettings(ctx.db);
+    const station = await settings.saveStation(scoped, {
+      requestId: randomUUID(),
+      name: "Barra ficha",
+      consumptionLocationId: ctx.mapping.initialLocation.id,
+    });
+    const before = await settings.list(scoped, {
+      productId: productRows[0].id,
+    });
+    expect(before.total).toBe(1);
+    expect(before.products[0].id).toBe(productRows[0].id);
+    await settings.routeProduct(scoped, {
+      requestId: randomUUID(),
+      productId: productRows[0].id,
+      stationId: station.id,
+      revision: before.products[0].revision,
+    });
+    const after = await settings.list(scoped, { productId: productRows[0].id });
+    expect(after.products[0].stationId).toBe(station.id);
+    const untouched = await settings.list(scoped, {
+      productId: productRows[1].id,
+    });
+    expect(untouched.products[0].stationId).toBeNull();
+  });
   it("separa ingredientes de descartables sin excluirlos del costo de la receta", async () => {
     const records = await ctx.db
       .insert(items)

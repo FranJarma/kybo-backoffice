@@ -5,6 +5,7 @@ import { AppShell } from "@/components/app-shell";
 import { getDb } from "@/db/client";
 import { user } from "@/db/auth-schema";
 import { eq } from "drizzle-orm";
+import { listAccessibleBranches } from "@/modules/branches/list";
 export default async function OperationsLayout({
   children,
 }: {
@@ -42,6 +43,10 @@ export default async function OperationsLayout({
       catalogManager={actor.catalogManager}
       name={profile?.name ?? "Equipo Kybo"}
       dateLabel={dateLabel}
+      branches={(await listAccessibleBranches(await getDb(), actor)).map(
+        ({ id, name }) => ({ id, name }),
+      )}
+      selectedBranchId={actor.branchId ?? ""}
     >
       {children}
     </AppShell>

@@ -59,6 +59,7 @@ function branchHeaders(): Record<string, string> {
   return branchId ? { "X-Kybo-Branch-Id": branchId } : {};
 }
 type OperationKind =
+  | "item-sourcing"
   | "reservation"
   | "recall"
   | "transfer"
@@ -76,48 +77,50 @@ type OperationKind =
   | "preparation-settings"
   | "table";
 const urlFor = (kind: OperationKind, url: string) =>
-  kind === "reservation"
-    ? url === "/api/inventory/reservations"
-    : kind === "recall"
-      ? url === "/api/inventory/recalls"
-      : kind === "production-order"
-        ? url === "/api/production/orders" ||
-          /^\/api\/production\/orders\/[0-9a-f-]{36}$/.test(url)
-        : kind === "transfer"
-          ? url === "/api/transfers" ||
-            /^\/api\/transfers\/[0-9a-f-]{36}\/(dispatch|receive|resolve|cancel)$/.test(
-              url,
-            )
-          : kind === "internal-use"
-            ? url === "/api/inventory/internal-use"
-            : kind === "fulfillment"
-              ? /^\/api\/fulfillment\/(complete|deliver|return)$/.test(url)
-              : kind === "stock-resolution"
-                ? /^\/api\/stock-resolutions\/[0-9a-f-]{36}$/.test(url)
-                : kind === "preparation"
-                  ? /^\/api\/preparation\/[0-9a-f-]{36}$/.test(url)
-                  : kind === "preparation-settings"
-                    ? /^\/api\/preparation\/settings\/(stations|routes)$/.test(
-                        url,
-                      )
-                    : kind === "sale"
-                      ? url === "/api/sales" ||
-                        /^\/api\/sales\/[0-9a-f-]{36}\/(orders|payments|cancel)$/.test(
+  kind === "item-sourcing"
+    ? /^\/api\/items\/[0-9a-f-]{36}\/suppliers$/.test(url)
+    : kind === "reservation"
+      ? url === "/api/inventory/reservations"
+      : kind === "recall"
+        ? url === "/api/inventory/recalls"
+        : kind === "production-order"
+          ? url === "/api/production/orders" ||
+            /^\/api\/production\/orders\/[0-9a-f-]{36}$/.test(url)
+          : kind === "transfer"
+            ? url === "/api/transfers" ||
+              /^\/api\/transfers\/[0-9a-f-]{36}\/(dispatch|receive|resolve|cancel)$/.test(
+                url,
+              )
+            : kind === "internal-use"
+              ? url === "/api/inventory/internal-use"
+              : kind === "fulfillment"
+                ? /^\/api\/fulfillment\/(complete|deliver|return)$/.test(url)
+                : kind === "stock-resolution"
+                  ? /^\/api\/stock-resolutions\/[0-9a-f-]{36}$/.test(url)
+                  : kind === "preparation"
+                    ? /^\/api\/preparation\/[0-9a-f-]{36}$/.test(url)
+                    : kind === "preparation-settings"
+                      ? /^\/api\/preparation\/settings\/(stations|routes)$/.test(
                           url,
                         )
-                      : kind === "table"
-                        ? url === "/api/sales/tables"
-                        : kind === "recipe"
-                          ? url === "/api/recipes"
-                          : kind === "production"
-                            ? url === "/api/production"
-                            : kind === "receipt"
-                              ? url === "/api/purchases"
-                              : kind === "adjustment"
-                                ? url === "/api/inventory/adjustments"
-                                : /^\/api\/purchases\/[0-9a-f-]{36}\/payments$/.test(
-                                    url,
-                                  );
+                      : kind === "sale"
+                        ? url === "/api/sales" ||
+                          /^\/api\/sales\/[0-9a-f-]{36}\/(orders|payments|cancel)$/.test(
+                            url,
+                          )
+                        : kind === "table"
+                          ? url === "/api/sales/tables"
+                          : kind === "recipe"
+                            ? url === "/api/recipes"
+                            : kind === "production"
+                              ? url === "/api/production"
+                              : kind === "receipt"
+                                ? url === "/api/purchases"
+                                : kind === "adjustment"
+                                  ? url === "/api/inventory/adjustments"
+                                  : /^\/api\/purchases\/[0-9a-f-]{36}\/payments$/.test(
+                                      url,
+                                    );
 function validPending<T>(
   kind: OperationKind,
   value: unknown,

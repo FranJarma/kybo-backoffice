@@ -40,6 +40,7 @@ export const listSchema = z
   .strict();
 export const settingsSchema = z
   .object({
+    productId: uuid.optional(),
     q: z.string().max(160).default(""),
     includeArchived: z.boolean().default(false),
     offset: z.number().int().min(0).max(1000000).default(0),

@@ -5,6 +5,7 @@ import { requireActor } from "@/lib/auth";
 import { shellActor } from "@/modules/branches/page-context";
 import { getDb } from "@/db/client";
 import { user } from "@/db/auth-schema";
+import { listAccessibleBranches } from "@/modules/branches/list";
 export default async function SellingLayout({
   children,
 }: {
@@ -35,6 +36,10 @@ export default async function SellingLayout({
       role={actor.role}
       catalogManager={actor.catalogManager}
       name={profile?.name ?? "Equipo Kybo"}
+      branches={(await listAccessibleBranches(await getDb(), actor)).map(
+        ({ id, name }) => ({ id, name }),
+      )}
+      selectedBranchId={actor.branchId ?? ""}
       dateLabel={new Intl.DateTimeFormat("es-AR", {
         day: "numeric",
         month: "long",

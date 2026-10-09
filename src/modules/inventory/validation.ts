@@ -37,6 +37,15 @@ const receive = z
       (v) => v?.toLocaleUpperCase("es-AR") ?? null,
     ),
     notes: optionalText(2000),
+    shipping: z
+      .object({
+        amount: amount(true, true),
+        supplierId: id,
+        allocation: z.enum(["value", "manual"]),
+        amounts: z.array(amount(true)).min(1).max(30).optional(),
+      })
+      .strict()
+      .optional(),
     lines: z
       .array(
         z
@@ -60,6 +69,7 @@ const receive = z
 const payment = z
   .object({
     requestId,
+    target: z.enum(["supplier", "shipping"]).optional(),
     paymentMethodId: id,
     paidOn: date,
     amount: amount(true, true),
@@ -69,6 +79,9 @@ const payment = z
 const opening = z
   .object({
     kind: z.literal("opening"),
+    entryUnit: z.enum(["l", "ml", "kg", "g", "unit"]).optional(),
+    presentationId: id.optional(),
+    presentationRevision: z.number().int().positive().optional(),
     locationId: id,
     requestId,
     itemId: id,

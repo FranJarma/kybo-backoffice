@@ -19,3 +19,4 @@ export * from "./stock-resolution-schema";
 export * from "./transition-schema";
 
 export * from "./media-schema";
+export * from "./sourcing-schema";

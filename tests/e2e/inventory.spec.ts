@@ -68,7 +68,7 @@ test("receives two packages as base stock, pays separately, then records waste a
     .selectOption(presentation.id);
   await page.getByRole("textbox", { name: "Cantidad recibida" }).fill("2");
   await page
-    .getByRole("textbox", { name: "Precio por presentación o unidad" })
+    .getByRole("textbox", { name: "Precio por presentación", exact: true })
     .fill("1000");
   await page.getByRole("button", { name: "Revisar recepción" }).click();
   await expect(page.getByText(/1\.600.*g/i)).toBeVisible();
@@ -309,7 +309,7 @@ test("opening another receipt clears the previous receipt payment draft", async 
     .selectOption(item.id);
   await page.getByRole("textbox", { name: "Cantidad recibida" }).fill("1");
   await page
-    .getByRole("textbox", { name: "Precio por presentación o unidad" })
+    .getByRole("textbox", { name: /^Precio por / })
     .fill("100");
   await page.getByRole("button", { name: "Revisar recepción" }).click();
   await page.getByRole("button", { name: "Confirmar recepción" }).click();

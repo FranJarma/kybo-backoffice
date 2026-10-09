@@ -56,6 +56,7 @@ export function createPreparationSettings(db: AppDb) {
             .where(eq(preparationStations.branchId, ctx.branchId))
             .orderBy(asc(preparationStations.name));
           const where = and(
+            input.productId ? eq(products.id, input.productId) : undefined,
             input.includeArchived ? undefined : isNull(products.archivedAt),
             ilike(
               products.name,

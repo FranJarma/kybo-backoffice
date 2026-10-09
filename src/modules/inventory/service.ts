@@ -41,6 +41,7 @@ import {
   six,
 } from "./decimal";
 import { parsePayment, parseReceive } from "./validation";
+import { allocateShipping } from "./shipping";
 import { stockOperations } from "@/db/stock-schema";
 import { requireOperationalContext } from "../branches/context";
 import type {
@@ -299,18 +300,48 @@ function summary(
   row: typeof purchaseReceipts.$inferSelect,
   lineCount: number,
 ): ReceiptSummary {
+  const sameSupplier = row.shippingSupplierId === row.supplierId;
+  const payable =
+    row.totalAmount === null
+      ? null
+      : cents(
+          integer(row.totalAmount) +
+            (sameSupplier ? integer(row.shippingAmount) : 0n),
+        );
   return {
+    merchandiseAmount: row.totalAmount,
+    outstandingAmount:
+      row.totalAmount === null
+        ? null
+        : cents(
+            integer(row.totalAmount) +
+              integer(row.shippingAmount) -
+              integer(row.paidAmount) -
+              integer(row.shippingPaidAmount),
+          ),
+    landedAmount:
+      row.totalAmount === null
+        ? null
+        : cents(integer(row.totalAmount) + integer(row.shippingAmount)),
+    shippingAmount: row.shippingAmount,
+    shippingSupplierId: row.shippingSupplierId,
+    shippingSupplierName: row.shippingSupplierName,
+    shippingAllocation: row.shippingAllocation,
+    shippingPaidAmount: row.shippingPaidAmount,
+    shippingBalanceDue: sameSupplier
+      ? "0.00"
+      : cents(integer(row.shippingAmount) - integer(row.shippingPaidAmount)),
     id: row.id,
     supplierId: row.supplierId,
     supplierName: row.supplierName,
     receivedOn: row.receivedOn,
     documentNumber: row.documentNumber,
-    totalAmount: row.totalAmount,
+    totalAmount: payable,
     paidAmount: row.paidAmount,
     balanceDue:
-      row.totalAmount === null
+      payable === null
         ? null
-        : cents(integer(row.totalAmount) - integer(row.paidAmount)),
+        : cents(integer(payable) - integer(row.paidAmount)),
     lineCount,
     createdAt: iso(row.createdAt),
   };
@@ -341,6 +372,11 @@ async function detail(
     ...summary(row, lines.length),
     notes: row.notes,
     lines: lines.map((l) => ({
+      shippingAmount: l.shippingAmount,
+      landedTotal:
+        l.lineTotal === null
+          ? null
+          : cents(integer(l.lineTotal) + integer(l.shippingAmount)),
       id: l.id,
       itemId: l.itemId,
       itemName: l.itemName,
@@ -358,6 +394,7 @@ async function detail(
       expiresOn: l.expiresOn,
     })),
     payments: payments.map((p) => ({
+      target: p.target,
       id: p.id,
       paymentMethodName: p.paymentMethodName,
       amount: p.amount,
@@ -470,14 +507,28 @@ export function createInventoryService(
           if (!p) notFound();
           presentations.set(id, p);
         }
-        const [supplier] = await tx
-          .select()
-          .from(suppliers)
-          .where(eq(suppliers.id, input.supplierId))
-          .for("update");
-        if (!supplier) notFound();
-        if (supplier.archivedAt)
-          invalid("Elegí un proveedor activo.", "ARCHIVED_REFERENCE", 409);
+        const vendorRows = new Map<string, typeof suppliers.$inferSelect>();
+        for (const id of [
+          ...new Set([
+            input.supplierId,
+            ...(input.shipping ? [input.shipping.supplierId] : []),
+          ]),
+        ].sort()) {
+          const [vendor] = await tx
+            .select()
+            .from(suppliers)
+            .where(eq(suppliers.id, id))
+            .for("update");
+          if (!vendor) notFound();
+          if (vendor.archivedAt)
+            invalid(
+              "Elegí un proveedor o transportista activo.",
+              "ARCHIVED_REFERENCE",
+              409,
+            );
+          vendorRows.set(id, vendor);
+        }
+        const supplier = vendorRows.get(input.supplierId)!;
         if (input.documentNumber) {
           const [duplicate] = await tx
             .select({ id: purchaseReceipts.id })
@@ -560,6 +611,19 @@ export function createInventoryService(
           ? null
           : prepared.reduce((n, p) => n + p.net!, 0n);
         if (total !== null) safeScaled(total, 18);
+        const shipping = input.shipping;
+        if (
+          shipping &&
+          (shipping.allocation === "manual") !== !!shipping.amounts
+        )
+          invalid("Revisá el método de reparto del envío.");
+        const freight = shipping ? integer(shipping.amount!) : 0n;
+        const allocations = allocateShipping(
+          freight,
+          prepared.map((p) => p.net),
+          shipping?.amounts?.map((a) => integer(a!)),
+        );
+        if (total !== null) safeScaled(total + freight, 18);
         const [r] = await tx
           .insert(purchaseReceipts)
           .values({
@@ -571,6 +635,12 @@ export function createInventoryService(
             documentNumber: input.documentNumber,
             notes: input.notes,
             totalAmount: total === null ? null : cents(total),
+            shippingAmount: cents(freight),
+            shippingSupplierId: shipping?.supplierId ?? null,
+            shippingSupplierName: shipping
+              ? vendorRows.get(shipping.supplierId)!.name
+              : null,
+            shippingAllocation: shipping?.allocation ?? "value",
             actorId: actor.id,
           })
           .returning();
@@ -606,6 +676,7 @@ export function createInventoryService(
             unitPrice: line.unitPrice,
             discount: line.discount,
             lineTotal: net === null ? null : cents(net),
+            shippingAmount: cents(allocations[position]),
             lotId: lot.id,
             lotCode: line.lotCode,
             expiresOn: line.expiresOn,
@@ -622,13 +693,20 @@ export function createInventoryService(
                 locationId: input.locationId,
                 quantity: six(baseQty),
                 direction: "in",
-                incomingValue: net === null ? null : six(net * 10000n),
+                incomingValue:
+                  net === null
+                    ? null
+                    : six((net + allocations[position]) * 10000n),
               },
             ],
           });
         }
         await audit(tx, actor, "purchase_receipts", r.id, "receive", {
           totalAmount: total === null ? null : cents(total),
+          shippingAmount: cents(freight),
+          shippingSupplierId: shipping?.supplierId ?? null,
+          shippingAllocation: shipping?.allocation ?? "value",
+          shippingAmounts: allocations.map(cents),
           lineCount: prepared.length,
         });
         return detail(tx, r.id, ctx.branchId);
@@ -682,12 +760,25 @@ export function createInventoryService(
         if (!method) notFound();
         if (method.archivedAt)
           invalid("Elegí un medio de pago activo.", "ARCHIVED_REFERENCE", 409);
-        if (receipt.totalAmount === null)
+        const shippingPayment = input.target === "shipping";
+        if (
+          shippingPayment &&
+          (!receipt.shippingSupplierId ||
+            receipt.shippingSupplierId === receipt.supplierId)
+        )
+          conflict("El envío se paga junto con el proveedor de mercadería.");
+        const payable = shippingPayment
+          ? receipt.shippingAmount
+          : summary(receipt, 0).totalAmount;
+        if (payable === null)
           conflict(
             "El total está pendiente; completá el costo antes de pagar.",
           );
-        const newPaid = integer(receipt.paidAmount) + integer(input.amount!);
-        if (newPaid > integer(receipt.totalAmount!))
+        const newPaid =
+          integer(
+            shippingPayment ? receipt.shippingPaidAmount : receipt.paidAmount,
+          ) + integer(input.amount!);
+        if (newPaid > integer(payable!))
           conflict("El pago supera el saldo pendiente.");
         const [payment] = await tx
           .insert(purchasePayments)
@@ -696,6 +787,7 @@ export function createInventoryService(
             receiptId,
             paymentMethodId: method.id,
             paymentMethodName: method.name,
+            target: shippingPayment ? "shipping" : "supplier",
             amount: input.amount!,
             paidOn: input.paidOn,
             reference: input.reference,
@@ -704,7 +796,11 @@ export function createInventoryService(
           .returning();
         await tx
           .update(purchaseReceipts)
-          .set({ paidAmount: cents(newPaid) })
+          .set(
+            shippingPayment
+              ? { shippingPaidAmount: cents(newPaid) }
+              : { paidAmount: cents(newPaid) },
+          )
           .where(
             and(
               eq(purchaseReceipts.id, receiptId),
@@ -714,6 +810,7 @@ export function createInventoryService(
         await audit(tx, actor, "purchase_payments", payment.id, "pay", {
           receiptId,
           amount: payment.amount,
+          target: payment.target,
         });
         return detail(tx, receiptId, ctx.branchId);
       });

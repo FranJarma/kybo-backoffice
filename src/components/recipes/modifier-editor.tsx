@@ -53,14 +53,18 @@ export function ModifierRecipeEditor({
   onCancel,
   disabled,
   error,
+  productId,
 }: {
   initial?: RecipeDetail;
   onSave: (input: RecipeInput) => void;
   onCancel: () => void;
   disabled: boolean;
   error: string;
+  productId?: string;
 }) {
-  const [targetId, setTargetId] = useState(initial?.targetId ?? "");
+  const [targetId, setTargetId] = useState(
+    initial?.targetId ?? productId ?? "",
+  );
   const [fixed, setFixed] = useState<ComponentDraft[]>(
     () =>
       initial?.lines
@@ -341,7 +345,7 @@ export function ModifierRecipeEditor({
         ]}
       />
       <fieldset disabled={disabled || busy} className="space-y-8">
-        {!initial && (
+        {!initial && !productId && (
           <SearchSelect
             entity="products"
             label="Producto"

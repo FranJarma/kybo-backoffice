@@ -321,15 +321,16 @@ export default async function HomePage() {
                       {r.documentNumber ?? "Sin referencia"}
                     </td>
                     <td className="px-5 py-4 font-bold tabular-nums">
-                      {amount(r.totalAmount)}
+                      {amount(r.landedAmount)}
                     </td>
                     <td className="px-5 py-4">
                       <span
-                        className={`status-pill ${r.balanceDue !== null && Number(r.balanceDue) === 0 ? "bg-emerald-50 text-emerald-700" : "bg-orange-50 text-orange-800"}`}
+                        className={`status-pill ${r.outstandingAmount !== null && Number(r.outstandingAmount) === 0 ? "bg-emerald-50 text-emerald-700" : "bg-orange-50 text-orange-800"}`}
                       >
-                        {r.balanceDue !== null && Number(r.balanceDue) === 0
+                        {r.outstandingAmount !== null &&
+                        Number(r.outstandingAmount) === 0
                           ? "Pagado"
-                          : amount(r.balanceDue)}
+                          : amount(r.outstandingAmount)}
                       </span>
                     </td>
                   </tr>

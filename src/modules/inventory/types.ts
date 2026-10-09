@@ -17,8 +17,15 @@ export type ReceiveInput = {
   documentNumber?: string | null;
   notes?: string | null;
   lines: ReceiptLineInput[];
+  shipping?: {
+    amount: string;
+    supplierId: string;
+    allocation: "value" | "manual";
+    amounts?: string[];
+  };
 };
 export type PaymentInput = {
+  target?: "supplier" | "shipping";
   requestId: string;
   paymentMethodId: string;
   paidOn: string;
@@ -29,6 +36,9 @@ export type AdjustmentInput =
   | {
       requestId: string;
       kind: "opening";
+      entryUnit?: "l" | "ml" | "kg" | "g" | "unit";
+      presentationId?: string;
+      presentationRevision?: number;
       locationId: string;
       itemId: string;
       quantity: string;
@@ -67,6 +77,15 @@ export type AdjustmentInput =
     };
 
 export type ReceiptSummary = {
+  outstandingAmount: string | null;
+  merchandiseAmount: string | null;
+  landedAmount: string | null;
+  shippingAmount: string;
+  shippingSupplierId: string | null;
+  shippingSupplierName: string | null;
+  shippingAllocation: string;
+  shippingPaidAmount: string;
+  shippingBalanceDue: string;
   id: string;
   supplierId: string;
   supplierName: string;
@@ -79,6 +98,8 @@ export type ReceiptSummary = {
   createdAt: string;
 };
 export type ReceiptLine = {
+  shippingAmount: string;
+  landedTotal: string | null;
   id: string;
   itemId: string;
   itemName: string;
@@ -96,6 +117,7 @@ export type ReceiptLine = {
   expiresOn: string | null;
 };
 export type PurchasePayment = {
+  target: string;
   id: string;
   paymentMethodName: string;
   amount: string;

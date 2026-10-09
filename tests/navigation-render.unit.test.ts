@@ -11,7 +11,8 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), refresh: vi.fn() }),
 }));
 vi.mock("@/components/branches/selector", () => ({
-  BranchSelector: () => null,
+  BranchSelector: () =>
+    React.createElement("span", { "data-branch-selector": true }),
 }));
 
 describe("navegación renderizada", () => {
@@ -34,6 +35,8 @@ describe("navegación renderizada", () => {
       role: "admin",
       name: "Prueba",
       dateLabel: "28 de septiembre",
+      branches: [],
+      selectedBranchId: "",
       children: "Contenido",
     };
     const html = renderToStaticMarkup(React.createElement(AppShell, props));
@@ -44,5 +47,13 @@ describe("navegación renderizada", () => {
     expect(html).toContain('aria-expanded="false"');
     expect(html).toContain('href="#main-content"');
     expect(html).not.toContain("Administración</");
+    const header = html.slice(
+      html.indexOf("<header"),
+      html.indexOf("</header>"),
+    );
+    expect(header).toContain("data-branch-selector");
+    expect(html.slice(html.indexOf("<main"))).not.toContain(
+      "data-branch-selector",
+    );
   });
 });

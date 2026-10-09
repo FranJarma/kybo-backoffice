@@ -9,10 +9,11 @@ export async function CatalogPage({
   entity: Entity;
   ingredientsOnly?: boolean;
 }) {
-  await requireCatalogPage();
+  const actor = await requireCatalogPage();
   return (
     <CatalogManager
       entity={entity}
+      actorId={actor.id}
       ingredientsOnly={ingredientsOnly}
       definition={
         ingredientsOnly

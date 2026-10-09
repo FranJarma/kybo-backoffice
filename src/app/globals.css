@@ -38,6 +38,7 @@
   * {
     box-sizing: border-box;
     border-color: var(--line);
+    scrollbar-color: var(--line) var(--surface);
   }
 }
 html,
@@ -273,5 +274,17 @@ a {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* Keep the whole form reachable on short viewports and with an on-screen keyboard. */
+@media (max-height: 640px) {
+  .catalog-dialog {
+    display: block;
+    overflow-y: auto;
+  }
+  .catalog-dialog .catalog-scroll-region {
+    overflow: visible;
+    scrollbar-gutter: auto;
   }
 }

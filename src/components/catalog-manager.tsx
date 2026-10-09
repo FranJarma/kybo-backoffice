@@ -1,13 +1,24 @@
 "use client";
+import dynamic from "next/dynamic";
+import {
+  entryUnits,
+  costUnitLabels,
+  displayCost,
+  toBaseCost,
+  changeCostUnit,
+} from "@/modules/catalog/entry-units";
 import { itemClasses, itemClassLabel } from "@/modules/catalog/item-classes";
+import { suggestItemCode } from "@/modules/items/code";
 import { SearchCombobox } from "@/components/ui/search-combobox";
 import { PhotoEditor, ProductPhoto } from "@/components/products/photo";
 import { useEffect, useId, useState, type FormEvent } from "react";
 import {
   Archive,
+  ArrowRight,
   ArchiveRestore,
   Box,
   CreditCard,
+  Copy,
   CupSoda,
   Package,
   Pencil,
@@ -37,6 +48,19 @@ import type {
 } from "@/modules/catalog/types";
 
 type Draft = Record<string, string>;
+const formTabClassName =
+  "min-h-11 shrink-0 border-b-2 border-transparent bg-transparent px-1 py-3 text-sm font-medium whitespace-nowrap text-muted transition-colors hover:text-blue aria-selected:border-blue aria-selected:font-semibold aria-selected:text-blue focus-visible:rounded-sm disabled:cursor-not-allowed disabled:text-slate-400 disabled:hover:text-slate-400";
+const ItemSuppliersTab = dynamic(() =>
+  import("@/components/items/suppliers-tab").then((m) => m.ItemSuppliersTab),
+);
+const ProductRecipeTab = dynamic(() =>
+  import("@/components/products/recipe-tab").then((m) => m.ProductRecipeTab),
+);
+const ProductPreparationTab = dynamic(() =>
+  import("@/components/products/preparation-tab").then(
+    (m) => m.ProductPreparationTab,
+  ),
+);
 type RefLists = Partial<Record<Entity, CatalogRow[]>>;
 function decimalInput(value: unknown) {
   return value === null || value === undefined
@@ -168,16 +192,19 @@ export function CatalogManager({
   entity,
   definition,
   ingredientsOnly = false,
+  actorId = "",
 }: {
   entity: Entity;
   definition: EntityDefinition;
   ingredientsOnly?: boolean;
+  actorId?: string;
 }) {
   const [rows, setRows] = useState<CatalogRow[]>([]),
     [total, setTotal] = useState(0),
     [loading, setLoading] = useState(true),
     [loadError, setLoadError] = useState("");
   const [search, setSearch] = useState(""),
+    [copiedFrom, setCopiedFrom] = useState(""),
     [itemClass, setItemClass] = useState(""),
     [archived, setArchived] = useState(false),
     [refresh, setRefresh] = useState(0);
@@ -197,6 +224,17 @@ export function CatalogManager({
     [referenceError, setReferenceError] = useState(""),
     [referenceWarning, setReferenceWarning] = useState("");
   const formId = useId();
+  const [productTab, setProductTab] = useState<
+    "product" | "recipe" | "preparation"
+  >("product");
+  const [recipeOpened, setRecipeOpened] = useState(false);
+  const [preparationOpened, setPreparationOpened] = useState(false);
+  const [recipeBusy, setRecipeBusy] = useState(false);
+  const [preparationBusy, setPreparationBusy] = useState(false);
+  const [itemTab, setItemTab] = useState<"details" | "suppliers">("details");
+  const [suppliersOpened, setSuppliersOpened] = useState(false);
+  const [suppliersBusy, setSuppliersBusy] = useState(false);
+  const [manualCode, setManualCode] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
     const timer = setTimeout(
@@ -305,10 +343,38 @@ export function CatalogManager({
       clearTimeout(timer);
     };
   }, [definition, referenceSearch]);
-  function openForm(row: CatalogRow | null) {
-    setEditing(row);
+  function openForm(row: CatalogRow | null, duplicate = false) {
+    setManualCode(Boolean(row && !duplicate));
+    setItemTab("details");
+    setSuppliersOpened(false);
+    setSuppliersBusy(false);
+    setProductTab("product");
+    setRecipeOpened(false);
+    setPreparationOpened(false);
+    setRecipeBusy(false);
+    setPreparationBusy(false);
+    setEditing(duplicate ? null : row);
+    setCopiedFrom(duplicate && row ? row.name : "");
     setDraft({
       ...initialDraft(definition.fields, row),
+      ...(entity === "items" && row
+        ? {
+            baseUnit:
+              row.baseUnit === "ml"
+                ? "l"
+                : row.baseUnit === "g"
+                  ? "kg"
+                  : String(row.baseUnit),
+            unitCost: displayCost(
+              row.baseUnit === "ml"
+                ? "l"
+                : row.baseUnit === "g"
+                  ? "kg"
+                  : "unit",
+              row.unitCost === null ? null : String(row.unitCost),
+            ),
+          }
+        : {}),
       ...(!row && entity === "items"
         ? {
             purchasable: "true",
@@ -319,17 +385,34 @@ export function CatalogManager({
         ? { recipeUsable: "true", class: "food" }
         : {}),
       imageAssetId: String(row?.imageAssetId ?? ""),
+      ...(duplicate ? { name: "", code: "" } : {}),
     });
     setFormError(referenceError);
   }
   function closeForm() {
-    if (!saving && !uploading) {
+    if (
+      !saving &&
+      !uploading &&
+      !recipeBusy &&
+      !preparationBusy &&
+      !suppliersBusy
+    ) {
       setEditing(undefined);
       setFormError("");
     }
   }
   async function submit(event: FormEvent) {
     event.preventDefault();
+    const continueWithSuppliers =
+      entity === "items" &&
+      (event.nativeEvent as SubmitEvent).submitter?.getAttribute(
+        "data-next-tab",
+      ) === "suppliers";
+    const continueWithRecipe =
+      entity === "products" &&
+      (event.nativeEvent as SubmitEvent).submitter?.getAttribute(
+        "data-next-tab",
+      ) === "recipe";
     if (editing === undefined || uploading || saving) return;
     setSaving(true);
     setFormError("");
@@ -339,6 +422,20 @@ export function CatalogManager({
     if (entity === "products") payload.imageAssetId = draft.imageAssetId ?? "";
     if (ingredientsOnly) payload.recipeUsable = "true";
     if (editing) payload.revision = editing.revision;
+    if (entity === "items") {
+      try {
+        Object.assign(
+          payload,
+          toBaseCost(draft.baseUnit, draft.unitCost ?? ""),
+        );
+      } catch (error) {
+        setFormError(
+          error instanceof Error ? error.message : "Revisá el costo ingresado.",
+        );
+        setSaving(false);
+        return;
+      }
+    }
     try {
       const response = await fetch(
         editing
@@ -354,7 +451,19 @@ export function CatalogManager({
         setFormError(await readError(response));
         return;
       }
-      setEditing(undefined);
+      if (continueWithSuppliers) {
+        const { row } = (await response.json()) as { row: CatalogRow };
+        if (editing) setEditing(row);
+        else openForm(row);
+        setSuppliersOpened(true);
+        setItemTab("suppliers");
+      } else if (continueWithRecipe) {
+        const { row } = (await response.json()) as { row: CatalogRow };
+        if (editing) setEditing(row);
+        else openForm(row);
+        setRecipeOpened(true);
+        setProductTab("recipe");
+      } else setEditing(undefined);
       setRefresh((n) => n + 1);
     } catch {
       setFormError(
@@ -392,8 +501,41 @@ export function CatalogManager({
   function fieldControl(field: FieldDefinition) {
     const id = `${formId}-${field.key}`;
     const value = draft[field.key] ?? "";
-    const update = (value: string) =>
-      setDraft((current) => ({ ...current, [field.key]: value }));
+    const update = (value: string) => {
+      if (entity === "items" && field.key === "code") {
+        setManualCode(true);
+      }
+      if (
+        entity === "items" &&
+        field.key === "name" &&
+        !editing &&
+        !manualCode
+      ) {
+        setDraft((current) => ({
+          ...current,
+          name: value,
+          code: suggestItemCode(value),
+        }));
+        return;
+      }
+      if (entity === "items" && field.key === "baseUnit") {
+        try {
+          const unitCost = changeCostUnit(
+            draft.baseUnit,
+            value,
+            draft.unitCost ?? "",
+          );
+          setDraft((current) => ({ ...current, baseUnit: value, unitCost }));
+          setFormError("");
+        } catch (error) {
+          setFormError(
+            error instanceof Error
+              ? error.message
+              : "Revisá el costo antes de cambiar la unidad.",
+          );
+        }
+      } else setDraft((current) => ({ ...current, [field.key]: value }));
+    };
     const common = {
       id,
       name: field.key,
@@ -468,7 +610,9 @@ export function CatalogManager({
         type={field.type === "email" ? "email" : "text"}
         inputMode={field.type === "decimal" ? "decimal" : undefined}
         autoComplete="off"
-        maxLength={field.key === "name" ? 160 : undefined}
+        maxLength={
+          field.key === "name" ? 160 : field.key === "code" ? 64 : undefined
+        }
       />
     );
   }
@@ -494,6 +638,25 @@ export function CatalogManager({
           )}
         </Label>
         {fieldControl(field)}
+        {entity === "items" &&
+          field.key === "code" &&
+          !editing &&
+          manualCode && (
+            <Button
+              type="button"
+              variant="ghost"
+              className="h-auto px-0 py-1 text-xs text-blue"
+              onClick={() => {
+                setManualCode(false);
+                setDraft((current) => ({
+                  ...current,
+                  code: suggestItemCode(current.name ?? ""),
+                }));
+              }}
+            >
+              Usar código del nombre
+            </Button>
+          )}
         {field.hint && (
           <p className="mt-2 text-xs leading-relaxed text-muted">
             {field.hint}
@@ -527,6 +690,18 @@ export function CatalogManager({
           <Pencil size={15} aria-hidden="true" />
           Editar
         </Button>
+        {ingredientsOnly && !row.archivedAt && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => openForm(row, true)}
+            aria-label={`Duplicar ingrediente ${row.name}`}
+            className="text-muted hover:bg-blue-50 hover:text-blue"
+          >
+            <Copy size={15} aria-hidden="true" />
+            Duplicar
+          </Button>
+        )}
         <Button
           size="sm"
           variant="ghost"
@@ -846,7 +1021,7 @@ export function CatalogManager({
       >
         {editing !== undefined && (
           <DialogContent
-            className={`max-h-[94dvh] gap-0 bg-white p-5 sm:max-w-4xl sm:p-8 lg:p-10 ${entity === "items" ? "flex flex-col overflow-hidden" : "overflow-y-auto"}`}
+            className={`gap-0 bg-white p-5 sm:p-8 ${entity === "items" ? "catalog-dialog flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] flex-col overflow-hidden sm:max-w-6xl lg:px-10" : "max-h-[94dvh] overflow-y-auto sm:max-w-5xl lg:p-10"}`}
             onEscapeKeyDown={(event) => {
               if (
                 event.target instanceof HTMLElement &&
@@ -855,7 +1030,7 @@ export function CatalogManager({
                 event.preventDefault();
             }}
           >
-            <div className="mb-6 shrink-0 border-b border-line pb-6 pr-5">
+            <div className="mb-4 shrink-0 border-b border-line pb-5 pr-5">
               <p className="eyebrow mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
                 {definition.title}
               </p>
@@ -865,14 +1040,253 @@ export function CatalogManager({
                   : `Nuevo ${definition.singular}`}
               </DialogTitle>
               <DialogDescription className="mt-2 text-sm leading-relaxed text-muted">
-                {entity === "items"
-                  ? ingredientsOnly
-                    ? "Una sola ficha para tus recetas y tu inventario. No necesitás crear otro artículo."
-                    : "Definí qué es, cómo lo medís y dónde lo usás."
-                  : "Completá los datos del registro. Los campos con * son obligatorios."}
+                {copiedFrom
+                  ? `Basado en ${copiedFrom}. Completá otro nombre y código, y revisá el costo. El nuevo ingrediente tendrá stock e historial independientes.`
+                  : entity === "items"
+                    ? ingredientsOnly
+                      ? "Una sola ficha para tus recetas y tu inventario. No necesitás crear otro artículo."
+                      : "Definí qué es, cómo lo medís y dónde lo usás."
+                    : "Completá los datos del registro. Los campos con * son obligatorios."}
               </DialogDescription>
             </div>
+            {entity === "items" && (
+              <>
+                <div
+                  role="tablist"
+                  aria-label={
+                    ingredientsOnly
+                      ? "Ficha del ingrediente"
+                      : "Ficha del artículo"
+                  }
+                  className="mb-4 flex shrink-0 gap-5 overflow-x-auto overflow-y-hidden border-b border-line sm:gap-7"
+                  onKeyDown={(event) => {
+                    if (
+                      !["ArrowLeft", "ArrowRight", "Home", "End"].includes(
+                        event.key,
+                      )
+                    )
+                      return;
+                    const tabs = Array.from(
+                      event.currentTarget.querySelectorAll<HTMLButtonElement>(
+                        '[role="tab"]:not(:disabled)',
+                      ),
+                    );
+                    const current = tabs.indexOf(
+                      document.activeElement as HTMLButtonElement,
+                    );
+                    if (current < 0) return;
+                    event.preventDefault();
+                    const next =
+                      event.key === "Home"
+                        ? 0
+                        : event.key === "End"
+                          ? tabs.length - 1
+                          : (current +
+                              (event.key === "ArrowRight" ? 1 : -1) +
+                              tabs.length) %
+                            tabs.length;
+                    tabs[next].focus();
+                    tabs[next].click();
+                  }}
+                >
+                  {(
+                    [
+                      [
+                        "details",
+                        ingredientsOnly
+                          ? "Datos del ingrediente"
+                          : "Datos del artículo",
+                      ],
+                      ["suppliers", "Proveedores y compras"],
+                    ] as const
+                  ).map(([tab, label]) => (
+                    <button
+                      key={tab}
+                      type="button"
+                      role="tab"
+                      id={`${formId}-tab-${tab}`}
+                      aria-controls={`${formId}-panel-${tab}`}
+                      aria-selected={itemTab === tab}
+                      tabIndex={itemTab === tab ? 0 : -1}
+                      className={formTabClassName}
+                      disabled={
+                        saving ||
+                        suppliersBusy ||
+                        (tab === "suppliers" && !editing)
+                      }
+                      onClick={() => {
+                        setItemTab(tab);
+                        if (tab === "suppliers") setSuppliersOpened(true);
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {!editing && (
+                  <p className="mb-4 shrink-0 text-xs leading-relaxed text-muted">
+                    Guardá el ingrediente y continuá para vincular sus
+                    proveedores y presentaciones.
+                  </p>
+                )}
+                {editing && suppliersOpened && (
+                  <div
+                    role="tabpanel"
+                    id={`${formId}-panel-suppliers`}
+                    aria-labelledby={`${formId}-tab-suppliers`}
+                    hidden={itemTab !== "suppliers"}
+                    className={
+                      itemTab === "suppliers"
+                        ? "flex min-h-0 flex-1 flex-col"
+                        : "hidden"
+                    }
+                  >
+                    <ItemSuppliersTab
+                      key={editing.id}
+                      itemId={editing.id}
+                      revision={editing.revision}
+                      actorId={actorId}
+                      onBusy={setSuppliersBusy}
+                    />
+                  </div>
+                )}
+              </>
+            )}
+            {entity === "products" && (
+              <>
+                <div
+                  role="tablist"
+                  aria-label="Ficha del producto"
+                  onKeyDown={(event) => {
+                    if (
+                      !["ArrowLeft", "ArrowRight", "Home", "End"].includes(
+                        event.key,
+                      )
+                    )
+                      return;
+                    const tabs = Array.from(
+                      event.currentTarget.querySelectorAll<HTMLButtonElement>(
+                        '[role="tab"]:not(:disabled)',
+                      ),
+                    );
+                    const current = tabs.indexOf(
+                      document.activeElement as HTMLButtonElement,
+                    );
+                    if (!tabs.length || current < 0) return;
+                    event.preventDefault();
+                    const next =
+                      event.key === "Home"
+                        ? 0
+                        : event.key === "End"
+                          ? tabs.length - 1
+                          : (current +
+                              (event.key === "ArrowRight" ? 1 : -1) +
+                              tabs.length) %
+                            tabs.length;
+                    tabs[next].focus();
+                    tabs[next].click();
+                  }}
+                  className="mb-6 flex shrink-0 gap-5 overflow-x-auto overflow-y-hidden border-b border-line sm:gap-7"
+                >
+                  {(
+                    [
+                      { id: "product", label: "Producto" },
+                      { id: "recipe", label: "Receta y costo" },
+                      { id: "preparation", label: "Preparación" },
+                    ] as const
+                  ).map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      role="tab"
+                      id={`${formId}-tab-${tab.id}`}
+                      aria-controls={`${formId}-panel-${tab.id}`}
+                      aria-selected={productTab === tab.id}
+                      tabIndex={productTab === tab.id ? 0 : -1}
+                      className={formTabClassName}
+                      disabled={
+                        saving ||
+                        uploading ||
+                        recipeBusy ||
+                        preparationBusy ||
+                        (!editing && tab.id !== "product")
+                      }
+                      onClick={() => {
+                        setProductTab(tab.id);
+                        if (tab.id === "recipe") setRecipeOpened(true);
+                        if (tab.id === "preparation")
+                          setPreparationOpened(true);
+                      }}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+                {!editing && (
+                  <p className="mb-5 text-xs text-muted">
+                    Guardá los datos del producto para agregar su receta y
+                    elegir dónde se prepara.
+                  </p>
+                )}
+                {editing && recipeOpened && (
+                  <div
+                    hidden={productTab !== "recipe"}
+                    role="tabpanel"
+                    id={`${formId}-panel-recipe`}
+                    aria-labelledby={`${formId}-tab-recipe`}
+                  >
+                    <ProductRecipeTab
+                      key={editing.id}
+                      productId={editing.id}
+                      actorId={actorId}
+                      onBusy={setRecipeBusy}
+                      onBack={() => setProductTab("product")}
+                    />
+                  </div>
+                )}
+                {editing && preparationOpened && (
+                  <div
+                    hidden={productTab !== "preparation"}
+                    role="tabpanel"
+                    id={`${formId}-panel-preparation`}
+                    aria-labelledby={`${formId}-tab-preparation`}
+                  >
+                    <ProductPreparationTab
+                      key={editing.id}
+                      productId={editing.id}
+                      actorId={actorId}
+                      onBusy={setPreparationBusy}
+                    />
+                  </div>
+                )}
+              </>
+            )}
             <form
+              id={
+                entity === "products"
+                  ? `${formId}-panel-product`
+                  : entity === "items"
+                    ? `${formId}-panel-details`
+                    : undefined
+              }
+              role={
+                entity === "products" || entity === "items"
+                  ? "tabpanel"
+                  : undefined
+              }
+              aria-labelledby={
+                entity === "products"
+                  ? `${formId}-tab-product`
+                  : entity === "items"
+                    ? `${formId}-tab-details`
+                    : undefined
+              }
+              style={
+                (entity === "products" && productTab !== "product") ||
+                (entity === "items" && itemTab !== "details")
+                  ? { display: "none" }
+                  : undefined
+              }
               onSubmit={submit}
               className={
                 entity === "items"
@@ -883,7 +1297,7 @@ export function CatalogManager({
               <div
                 className={
                   entity === "items"
-                    ? "min-h-0 space-y-7 overflow-y-auto pr-2 pb-6"
+                    ? "catalog-scroll-region min-h-0 space-y-7 overflow-y-auto overscroll-contain px-2 pt-2 pb-6 [scrollbar-gutter:stable]"
                     : "space-y-8"
                 }
               >
@@ -921,8 +1335,10 @@ export function CatalogManager({
                         Unidad y costo
                       </h3>
                       <p className="mb-5 text-xs leading-relaxed text-muted">
-                        Elegí la unidad con la que vas a medir el stock y las
-                        cantidades de las recetas.
+                        Cargá el costo en la unidad que te resulte cómoda: leche
+                        por litro o harina por kilo. Kybo convierte
+                        automáticamente a ml o g para el inventario y las
+                        recetas.
                       </p>
                       <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
                         {basicFields
@@ -932,10 +1348,14 @@ export function CatalogManager({
                           .map((field) =>
                             renderField(
                               field.key === "baseUnit"
-                                ? { ...field, label: "Unidad de medida" }
+                                ? {
+                                    ...field,
+                                    label: "Unidad de carga",
+                                    options: entryUnits,
+                                  }
                                 : {
                                     ...field,
-                                    label: `Costo por ${draft.baseUnit === "g" ? "gramo" : draft.baseUnit === "ml" ? "mililitro" : draft.baseUnit === "unit" ? "unidad" : "unidad de medida"}`,
+                                    label: `Costo por ${costUnitLabels[draft.baseUnit] ?? "unidad de medida"}`,
                                     hint: "En pesos. Usá coma para decimales; dejalo vacío si todavía no lo sabés.",
                                   },
                             ),
@@ -1057,19 +1477,57 @@ export function CatalogManager({
                 )}
               </div>
               <div
-                className={`flex shrink-0 justify-end gap-3 border-t border-line bg-white pt-5 ${entity === "items" ? "mt-0" : ""}`}
+                className={`flex shrink-0 flex-wrap justify-end gap-3 border-t border-line bg-white pt-5 ${entity === "items" ? "mt-0" : ""}`}
               >
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="ghost"
+                  className="mr-auto text-muted"
                   onClick={closeForm}
                   disabled={saving || uploading}
                 >
                   Cancelar
                 </Button>
-                <Button type="submit" disabled={saving || uploading}>
+                <Button
+                  type="submit"
+                  variant={
+                    entity === "products" ||
+                    (entity === "items" && draft.purchasable === "true")
+                      ? "outline"
+                      : "default"
+                  }
+                  className={
+                    entity === "products" ||
+                    (entity === "items" && draft.purchasable === "true")
+                      ? "border-line bg-white text-brand shadow-none"
+                      : undefined
+                  }
+                  disabled={saving || uploading}
+                >
                   {saving ? "Guardando…" : "Guardar"}
                 </Button>
+                {entity === "items" && draft.purchasable === "true" && (
+                  <Button
+                    type="submit"
+                    data-next-tab="suppliers"
+                    className="max-w-full whitespace-normal text-center"
+                    disabled={saving || uploading}
+                  >
+                    Guardar y continuar con proveedores
+                    <ArrowRight aria-hidden="true" />
+                  </Button>
+                )}
+                {entity === "products" && (
+                  <Button
+                    type="submit"
+                    data-next-tab="recipe"
+                    className="max-w-full whitespace-normal text-center"
+                    disabled={saving || uploading}
+                  >
+                    Guardar y continuar con la receta
+                    <ArrowRight aria-hidden="true" />
+                  </Button>
+                )}
               </div>
             </form>
           </DialogContent>

@@ -21,9 +21,12 @@ import { lockStock } from "./locking";
 import { postMovement } from "./ledger";
 import { parseAdjustment } from "./validation";
 import { businessDate } from "../operations/business-date";
-import { integer, six, roundedDivision, SCALE } from "./decimal";
+import { integer, six, roundedDivision } from "./decimal";
 import { scopedLot } from "./scoped-queries";
 import { AppError } from "@/lib/errors";
+import { purchasePresentations } from "@/db/business-schema";
+import { baseUnit } from "../catalog/entry-units";
+import { openingQuantity } from "./opening-quantity";
 function fail(message: string): never {
   throw new AppError("STOCK_CONFLICT", message, 409);
 }
@@ -56,12 +59,45 @@ export async function adjustAt(
       if (input.kind === "opening") {
         if (input.receivedOn > today) fail("La fecha no puede ser futura.");
         itemId = input.itemId;
+        if (input.presentationId && input.entryUnit)
+          fail("Elegí una unidad o una presentación, no ambas.");
+        if (!input.presentationId && input.presentationRevision !== undefined)
+          fail("Elegí la presentación correspondiente.");
+        // Catalog updates lock the presentation before the item; keep that order.
+        const [pack] = input.presentationId
+          ? await tx
+              .select()
+              .from(purchasePresentations)
+              .where(eq(purchasePresentations.id, input.presentationId))
+              .for("share")
+          : [];
+        if (
+          input.presentationId &&
+          (!pack ||
+            pack.archivedAt ||
+            pack.itemId !== itemId ||
+            pack.revision !== input.presentationRevision)
+        )
+          fail(
+            "La presentación cambió o ya no está disponible. Volvé a seleccionarla.",
+          );
         await lockStock(tx, ctx, [{ itemId, locationId: input.locationId }]);
-        delta = integer(input.quantity!);
-        incoming =
-          input.unitCost === null
-            ? null
-            : roundedDivision(delta * integer(input.unitCost), SCALE);
+        const [item] = await tx
+          .select()
+          .from(items)
+          .where(eq(items.id, itemId));
+        if (input.entryUnit && baseUnit(input.entryUnit) !== item.baseUnit)
+          fail("La unidad de carga no corresponde a este artículo.");
+        const converted = openingQuantity(
+          input.quantity!,
+          input.unitCost,
+          pack?.baseQuantity ??
+            (input.entryUnit === "l" || input.entryUnit === "kg"
+              ? "1000.000000"
+              : "1.000000"),
+        );
+        delta = integer(converted.quantity);
+        incoming = converted.value === null ? null : integer(converted.value);
         const [lot] = await tx
           .insert(inventoryLots)
           .values({

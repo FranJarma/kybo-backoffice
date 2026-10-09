@@ -64,7 +64,13 @@ export const definitions: Record<Entity, EntityDefinition> = {
       "Todos los artículos: alimentos, bebidas, descartables y limpieza. Clasificá cada uno y definí cómo se utiliza.",
     fields: [
       name,
-      { key: "code", label: "Código", type: "text", required: true },
+      {
+        key: "code",
+        label: "Código",
+        type: "text",
+        required: true,
+        hint: "Al crear la ficha se completa desde el nombre, por ejemplo TE-CHAI. Podés editarlo; debe ser único y no llevar espacios, tildes ni ñ.",
+      },
       {
         key: "class",
         label: "Clase",
@@ -191,7 +197,7 @@ export const definitions: Record<Entity, EntityDefinition> = {
     title: "Presentaciones de compra",
     singular: "presentación",
     description:
-      "Relacioná cada presentación de compra con su proveedor e artículo.",
+      "Definí cómo comprás cada artículo: por envase, paquete o caja. El inventario se convierte automáticamente a g, ml o unidades.",
     fields: [
       name,
       {
@@ -210,10 +216,10 @@ export const definitions: Record<Entity, EntityDefinition> = {
       },
       {
         key: "baseQuantity",
-        label: "Cantidad en unidad base",
+        label: "Contenido total de la presentación",
         type: "decimal",
         required: true,
-        hint: "Por ejemplo: un paquete de 800 g equivale a 800 si el artículo está en gramos.",
+        hint: "Usá la unidad del artículo (g, ml o unidad). Leche en ml: envase de 1 litro = 1000; caja de 12 envases de 1 litro = 12000. Configuralo una vez y en Compras cargá cuántos envases o cajas recibiste.",
       },
     ],
     columns: ["name", "supplierName", "itemName", "baseQuantity", "baseUnit"],

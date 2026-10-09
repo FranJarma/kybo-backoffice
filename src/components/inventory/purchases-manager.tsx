@@ -1,5 +1,10 @@
 "use client";
 import { LocationSelect } from "@/components/branches/location-select";
+import {
+  ShippingEditor,
+  blankShipping,
+  shippingPreview,
+} from "./shipping-editor";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
   Plus,
@@ -123,8 +128,12 @@ function PaymentStatus({ receipt }: { receipt: ReceiptSummary }) {
   const paid =
     !pendingCost &&
     receipt.balanceDue !== null &&
-    integer(receipt.balanceDue) === 0n;
-  const partial = !pendingCost && !paid && integer(receipt.paidAmount) > 0n;
+    integer(receipt.balanceDue) === 0n &&
+    integer(receipt.shippingBalanceDue) === 0n;
+  const partial =
+    !pendingCost &&
+    !paid &&
+    integer(receipt.paidAmount) + integer(receipt.shippingPaidAmount) > 0n;
   return (
     <span
       className={`inline-flex w-fit items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold ${pendingCost ? "bg-slate-100 text-slate-600" : paid ? "bg-emerald-50 text-emerald-700" : partial ? "bg-blue-50 text-blue-700" : "bg-amber-50 text-amber-700"}`}
@@ -167,6 +176,10 @@ export function PurchasesManager({
     [reference, setReference] = useState("");
   const [refreshWarning, setRefreshWarning] = useState("");
   const [reviewError, setReviewError] = useState("");
+  const [shipping, setShipping] = useState(blankShipping);
+  const [paymentTarget, setPaymentTarget] = useState<"supplier" | "shipping">(
+    "supplier",
+  );
   const refreshList = useCallback(async () => {
     try {
       const data = await getJson<{ rows: ReceiptSummary[]; total: number }>(
@@ -259,6 +272,7 @@ export function PurchasesManager({
       current.map((row, i) => (i === index ? { ...row, ...change } : row)),
     );
   function begin() {
+    setShipping(blankShipping());
     setPayment(false);
     setPaymentMethodId("");
     setAmount("");
@@ -282,6 +296,15 @@ export function PurchasesManager({
         if (line.unitPrice.trim()) decimal(line.unitPrice, 6);
         if (line.discount.trim()) decimal(line.discount, 2);
       });
+      const preview = shippingPreview(lines, shipping);
+      if (
+        preview.cost > 0n &&
+        shipping.recipient === "carrier" &&
+        (!shipping.carrierId || shipping.carrierId === supplierId)
+      )
+        throw new Error(
+          "Elegí un transportista distinto o indicá que cobra el proveedor de mercadería.",
+        );
       setReviewError("");
       setView("review");
     } catch (error) {
@@ -298,6 +321,21 @@ export function PurchasesManager({
       receivedOn,
       documentNumber: documentNumber.trim() || null,
       notes: notes.trim() || null,
+      ...(shippingPreview(lines, shipping).cost > 0n
+        ? {
+            shipping: {
+              amount: shipping.amount,
+              supplierId:
+                shipping.recipient === "supplier"
+                  ? supplierId
+                  : shipping.carrierId,
+              allocation: shipping.allocation,
+              ...(shipping.allocation === "manual"
+                ? { amounts: lines.map((_, i) => shipping.amounts[i] || "0") }
+                : {}),
+            },
+          }
+        : {}),
       lines: lines.map((line): ReceiptLineInput => ({
         itemId: line.itemId,
         itemRevision: line.item?.revision,
@@ -316,6 +354,7 @@ export function PurchasesManager({
     event.preventDefault();
     if (!detail) return;
     paymentOperation.submit(`/api/purchases/${detail.id}/payments`, {
+      target: paymentTarget,
       requestId: crypto.randomUUID(),
       paidOn,
       paymentMethodId,
@@ -483,13 +522,19 @@ export function PurchasesManager({
                               Total
                             </span>
                             <p className="whitespace-nowrap font-semibold text-brand tabular-nums">
-                              {money(row.totalAmount)}
+                              {money(row.landedAmount)}
                             </p>
                           </td>
                           <td className="min-w-0 lg:px-4 lg:py-5">
                             <PaymentStatus receipt={row} />
                             <p className="mt-1.5 text-xs text-muted tabular-nums">
                               Saldo: {money(row.balanceDue)}
+                              {Number(row.shippingBalanceDue) > 0 && (
+                                <span className="block">
+                                  Envío pendiente:{" "}
+                                  {money(row.shippingBalanceDue)}
+                                </span>
+                              )}
                             </p>
                           </td>
                           <td className="col-span-2 border-t border-line pt-3 text-right lg:border-0 lg:px-5 lg:py-5">
@@ -654,9 +699,17 @@ export function PurchasesManager({
                           type="button"
                           variant="ghost"
                           className="text-muted hover:text-red-700"
-                          onClick={() =>
-                            setLines((old) => old.filter((_, i) => i !== index))
-                          }
+                          onClick={() => {
+                            setLines((old) =>
+                              old.filter((_, i) => i !== index),
+                            );
+                            setShipping((old) => ({
+                              ...old,
+                              amounts: old.amounts.filter(
+                                (_, i) => i !== index,
+                              ),
+                            }));
+                          }}
                         >
                           <Trash2 aria-hidden="true" className="size-4" />{" "}
                           Quitar
@@ -698,7 +751,11 @@ export function PurchasesManager({
                       </div>
                       <div className="grid gap-4 sm:grid-cols-2">
                         <Field
-                          label="Cantidad recibida"
+                          label={
+                            line.presentationId
+                              ? "Cantidad recibida (presentaciones)"
+                              : "Cantidad recibida"
+                          }
                           required
                           inputMode="decimal"
                           unit={
@@ -715,7 +772,11 @@ export function PurchasesManager({
                           placeholder="0"
                         />
                         <Field
-                          label="Precio por presentación o unidad"
+                          label={
+                            line.presentationId
+                              ? "Precio por presentación"
+                              : `Precio por ${line.item?.baseUnit === "unit" ? "unidad" : line.item?.baseUnit || "unidad base"}`
+                          }
                           inputMode="decimal"
                           unit="ARS"
                           value={line.unitPrice}
@@ -755,9 +816,28 @@ export function PurchasesManager({
                           className="mt-0.5 size-4 shrink-0 text-blue-600"
                         />
                         <span>
-                          Sin presentación, cantidad y precio corresponden a la
-                          unidad base {line.item?.baseUnit || "del artículo"}. Usá
-                          coma para los decimales.
+                          {line.presentation ? (
+                            <>
+                              Cada presentación de «
+                              {String(line.presentation.name)}» equivale a{" "}
+                              {quantity(
+                                String(line.presentation.baseQuantity),
+                                String(line.item?.baseUnit || ""),
+                              )}
+                              . Cargá la cantidad de presentaciones y el precio
+                              de una. Por ejemplo, si elegiste una caja de 12
+                              envases, ingresá 1 por cada caja recibida. El
+                              inventario se convierte automáticamente.
+                            </>
+                          ) : (
+                            <>
+                              Elegí una presentación para comprar por envase o
+                              caja. Sin presentación, cantidad y precio
+                              corresponden a la unidad base{" "}
+                              {line.item?.baseUnit || "del artículo"}.
+                            </>
+                          )}{" "}
+                          Usá coma para los decimales.
                         </span>
                       </p>
                     </div>
@@ -772,6 +852,12 @@ export function PurchasesManager({
                 >
                   <Plus aria-hidden="true" /> Agregar renglón
                 </Button>
+                <ShippingEditor
+                  lines={lines}
+                  draft={shipping}
+                  onChange={setShipping}
+                  supplierName={supplier?.name ?? ""}
+                />
               </fieldset>
               <aside className="space-y-4 xl:sticky xl:top-24">
                 <Card className="gap-5 p-5 sm:p-6">
@@ -954,6 +1040,13 @@ export function PurchasesManager({
                     ))}
                   </div>
                 </Card>
+                <ShippingEditor
+                  lines={lines}
+                  draft={shipping}
+                  onChange={setShipping}
+                  supplierName={supplier?.name ?? ""}
+                  readOnly
+                />
               </div>
               <aside className="space-y-4 xl:sticky xl:top-24">
                 <Card className="gap-4 p-5 sm:p-6">
@@ -961,13 +1054,13 @@ export function PurchasesManager({
                     Confirmar ingreso
                   </h3>
                   <div className="rounded-lg bg-surface p-4">
-                    <p className="text-xs text-muted">Total de la recepción</p>
+                    <p className="text-xs text-muted">Costo de la recepción</p>
                     <p className="mt-1 font-semibold text-brand">
-                      Se calcula al confirmar
+                      Incluye mercadería y envío
                     </p>
                     <p className="mt-2 text-xs leading-5 text-muted">
-                      El servidor calcula el total definitivo con los precios y
-                      descuentos informados.
+                      Revisá el desglose de mercadería y envío antes de
+                      confirmar.
                     </p>
                   </div>
                   <p className="flex items-start gap-2 text-xs leading-5 text-muted">
@@ -1091,7 +1184,7 @@ export function PurchasesManager({
                           </p>
                         </div>
                         <strong className="ml-auto shrink-0 text-sm text-brand tabular-nums">
-                          {money(line.lineTotal)}
+                          {money(line.landedTotal)}
                         </strong>
                       </div>
                       <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted sm:pl-[52px]">
@@ -1107,6 +1200,10 @@ export function PurchasesManager({
                             : "Sin fecha"}
                         </span>
                         <span>Descuento: {money(line.discount)}</span>
+                        <span>Mercadería: {money(line.lineTotal)}</span>
+                        <span>
+                          Envío asignado: {money(line.shippingAmount)}
+                        </span>
                       </div>
                     </div>
                   ))}
@@ -1145,6 +1242,11 @@ export function PurchasesManager({
                         <div className="min-w-0">
                           <p className="font-semibold text-brand">
                             {item.paymentMethodName}
+                            <span className="block text-xs font-normal text-muted">
+                              {item.target === "shipping"
+                                ? detail.shippingSupplierName
+                                : detail.supplierName}
+                            </span>
                           </p>
                           <p className="mt-1 break-words text-xs text-muted">
                             {date(item.paidOn)} ·{" "}
@@ -1176,38 +1278,76 @@ export function PurchasesManager({
                 <PaymentStatus receipt={detail} />
                 <dl className="divide-y divide-line text-sm">
                   <div className="flex items-center justify-between gap-4 pb-4">
-                    <dt className="text-muted">Total</dt>
+                    <dt className="text-muted">Costo final de la recepción</dt>
                     <dd className="text-xl font-bold text-brand tabular-nums">
-                      {money(detail.totalAmount)}
+                      {money(detail.landedAmount)}
                     </dd>
                   </div>
                   <div className="flex justify-between gap-4 py-4">
-                    <dt className="text-muted">Pagado</dt>
+                    <dt className="text-muted">Pagado al proveedor</dt>
                     <dd className="font-semibold text-brand tabular-nums">
                       {money(detail.paidAmount)}
                     </dd>
                   </div>
                   <div className="flex justify-between gap-4 pt-4">
                     <dt className="font-semibold text-brand">
-                      Saldo pendiente
+                      Saldo con {detail.supplierName}
                     </dt>
                     <dd className="font-bold text-brand tabular-nums">
                       {money(detail.balanceDue)}
                     </dd>
                   </div>
                 </dl>
+                {Number(detail.shippingAmount) > 0 && (
+                  <div className="space-y-2 rounded-lg bg-surface p-4 text-sm">
+                    <p>
+                      Mercadería:{" "}
+                      <strong>{money(detail.merchandiseAmount)}</strong>
+                    </p>
+                    <p>
+                      Envío: <strong>{money(detail.shippingAmount)}</strong>
+                    </p>
+                    <p>Cobra el envío: {detail.shippingSupplierName}</p>
+                    <p>
+                      Reparto:{" "}
+                      {detail.shippingAllocation === "manual"
+                        ? "Manual"
+                        : "Por valor de mercadería"}
+                    </p>
+                    {detail.shippingSupplierId !== detail.supplierId ? (
+                      <>
+                        <p>
+                          Pagado al transportista:{" "}
+                          {money(detail.shippingPaidAmount)}
+                        </p>
+                        <p>
+                          Saldo del transportista:{" "}
+                          <strong>{money(detail.shippingBalanceDue)}</strong>
+                        </p>
+                      </>
+                    ) : (
+                      <p>El envío está incluido en el saldo del proveedor.</p>
+                    )}
+                  </div>
+                )}
                 {detail.totalAmount === null ? (
                   <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">
                     El costo está pendiente. Los pagos se habilitarán cuando una
                     futura corrección auditada complete el total.
                   </p>
                 ) : detail.balanceDue !== null &&
-                  Number(detail.balanceDue) > 0 &&
+                  (Number(detail.balanceDue) > 0 ||
+                    Number(detail.shippingBalanceDue) > 0) &&
                   !payment ? (
                   <Button
                     type="button"
                     className="w-full"
-                    onClick={() => setPayment(true)}
+                    onClick={() => {
+                      setPaymentTarget(
+                        Number(detail.balanceDue) > 0 ? "supplier" : "shipping",
+                      );
+                      setPayment(true);
+                    }}
                   >
                     <Plus aria-hidden="true" /> Registrar pago
                   </Button>
@@ -1228,6 +1368,31 @@ export function PurchasesManager({
                       className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1"
                       disabled={paymentOperation.locked}
                     >
+                      <label className="text-sm font-medium">
+                        Pago a
+                        <select
+                          className="form-control mt-2"
+                          value={paymentTarget}
+                          onChange={(e) => {
+                            setPaymentTarget(
+                              e.target.value as "supplier" | "shipping",
+                            );
+                            setAmount("");
+                          }}
+                        >
+                          <option value="supplier">
+                            {detail.supplierName} · saldo{" "}
+                            {money(detail.balanceDue)}
+                          </option>
+                          {detail.shippingSupplierId &&
+                            detail.shippingSupplierId !== detail.supplierId && (
+                              <option value="shipping">
+                                {detail.shippingSupplierName} · saldo{" "}
+                                {money(detail.shippingBalanceDue)}
+                              </option>
+                            )}
+                        </select>
+                      </label>
                       <SearchSelect
                         entity="payment-methods"
                         label="Medio de pago"

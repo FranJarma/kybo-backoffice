@@ -815,7 +815,7 @@ const blankOption = (): OptionDraft => ({
   quantity: "",
   wastePercent: "0",
 });
-function RecipeEditor({
+export function RecipeEditor({
   kind,
   initial,
   disabled,

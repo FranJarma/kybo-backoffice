@@ -24,6 +24,13 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  baseUnit,
+  entryUnits,
+  costUnitLabels,
+} from "@/modules/catalog/entry-units";
+import { decimal } from "@/modules/inventory/decimal";
+import { openingQuantity } from "@/modules/inventory/opening-quantity";
 import type {
   AdjustmentInput,
   LotRow,
@@ -46,6 +53,18 @@ type Detail = {
   movements: { rows: MovementRow[]; total: number };
 };
 type Action = "opening" | "waste" | "count" | "block";
+type OpeningOptions = {
+  item: { id: string; baseUnit: string };
+  suppliers: { id: string; name: string; archived: boolean }[];
+  presentations: {
+    id: string;
+    name: string;
+    supplierId: string;
+    revision: number;
+    baseQuantity: string;
+    archived: boolean;
+  }[];
+};
 const actionLabels = {
   opening: "Ingreso manual",
   waste: "Registrar merma",
@@ -89,6 +108,11 @@ function TextField({
         className="mt-1"
         value={value}
         onChange={(event) => set(event.target.value)}
+        onInput={
+          type === "date"
+            ? (event) => set(event.currentTarget.value)
+            : undefined
+        }
         required={required}
         type={type}
         disabled={disabled}
@@ -153,6 +177,61 @@ export function InventoryManager({
   const [blocked, setBlocked] = useState(false),
     [notice, setNotice] = useState("");
   const stockRequest = useRef(0);
+  const [openingOptions, setOpeningOptions] = useState<OpeningOptions | null>(
+    null,
+  );
+  const [entryChoice, setEntryChoice] = useState("");
+  const [optionsError, setOptionsError] = useState("");
+  const [optionsVersion, setOptionsVersion] = useState(0);
+  useEffect(() => {
+    if (action !== "opening" || !itemId) return;
+    let live = true;
+    getJson<OpeningOptions>(`/api/items/${itemId}/suppliers`)
+      .then((data) => {
+        if (!live) return;
+        setOpeningOptions(data);
+        setEntryChoice(
+          data.item.baseUnit === "ml"
+            ? "l"
+            : data.item.baseUnit === "g"
+              ? "kg"
+              : "unit",
+        );
+        setOptionsError("");
+      })
+      .catch(() => {
+        if (live)
+          setOptionsError(
+            "No pudimos cargar las unidades y presentaciones. Reintentá la carga.",
+          );
+      });
+    return () => {
+      live = false;
+    };
+  }, [action, itemId, optionsVersion]);
+  const openingReady = openingOptions?.item.id === itemId && !!entryChoice;
+  const chosenPack = openingOptions?.presentations.find(
+    (p) => `pack:${p.id}` === entryChoice,
+  );
+  let openingPreview = "";
+  if (openingReady && quantityInput.trim()) {
+    try {
+      const converted = openingQuantity(
+        decimal(quantityInput, 6, true, true)!,
+        decimal(unitCost.trim(), 6, false),
+        chosenPack?.baseQuantity ??
+          (entryChoice === "l" || entryChoice === "kg"
+            ? "1000.000000"
+            : "1.000000"),
+      );
+      openingPreview = `Ingresarán ${quantity(converted.quantity, openingOptions!.item.baseUnit)}. ${converted.value === null ? "Costo pendiente." : `Valor total: ${money(converted.value)}.`}`;
+    } catch (error) {
+      openingPreview =
+        error instanceof Error
+          ? error.message
+          : "Revisá la cantidad y el costo.";
+    }
+  }
   const detailRequest = useRef(0);
   const loadStock = useCallback(async () => {
     const sequence = ++stockRequest.current;
@@ -223,6 +302,9 @@ export function InventoryManager({
     setAction(kind);
     setLot(row || null);
     setItemId(selected?.itemId || "");
+    setOpeningOptions(null);
+    setEntryChoice("");
+    setOptionsError("");
     setReceivedOn(today(timeZone));
     setExpiresOn("");
     setLotCode("");
@@ -235,6 +317,7 @@ export function InventoryManager({
   function submit(event: FormEvent) {
     event.preventDefault();
     if (!action) return;
+    if (action === "opening" && !openingReady) return;
     const requestId = crypto.randomUUID();
     let input: AdjustmentInput;
     if (action === "opening")
@@ -243,6 +326,12 @@ export function InventoryManager({
         kind: "opening",
         locationId,
         itemId,
+        ...(chosenPack
+          ? {
+              presentationId: chosenPack.id,
+              presentationRevision: chosenPack.revision,
+            }
+          : { entryUnit: entryChoice as "l" | "ml" | "kg" | "g" | "unit" }),
         quantity: quantityInput,
         unitCost: unitCost.trim() || null,
         receivedOn,
@@ -877,7 +966,7 @@ export function InventoryManager({
             role="dialog"
             aria-modal="true"
             aria-label={actionLabels[action]}
-            className="max-h-[94dvh] w-full max-w-xl gap-4 overflow-y-auto rounded-2xl bg-white p-5 shadow-xl sm:p-7"
+            className="max-h-[94dvh] w-full max-w-4xl gap-5 overflow-y-auto overscroll-contain rounded-2xl bg-white p-5 shadow-xl sm:p-8"
           >
             <h2 className="text-xl font-bold text-brand">
               {actionLabels[action]}
@@ -887,21 +976,32 @@ export function InventoryManager({
                 ? "El ingreso genera un lote y movimiento con motivo. El costo puede quedar pendiente."
                 : `${lot?.itemName} · lote ${lot?.lotCode || "Sin código"} · remanente ${lot ? quantity(lot.remainingQuantity, lot.baseUnit) : ""}`}
             </p>
-            <form onSubmit={submit} className="space-y-4">
+            <form onSubmit={submit} className="space-y-6">
               {action === "opening" && (
-                <LocationSelect value={locationId} onChange={setLocationId} />
+                <LocationSelect
+                  value={locationId}
+                  onChange={setLocationId}
+                  disabled={operation.locked}
+                />
               )}
               <fieldset
                 disabled={operation.locked}
-                className="grid gap-4 sm:grid-cols-2"
+                className="grid gap-x-8 gap-y-6 sm:grid-cols-2"
               >
                 {action === "opening" && (
                   <>
                     <SearchSelect
                       entity="items"
-                      label="Insumo"
+                      label="Artículo o ingrediente"
                       value={itemId}
-                      onChange={setItemId}
+                      onChange={(id) => {
+                        setItemId(id);
+                        setOpeningOptions(null);
+                        setEntryChoice("");
+                        setQuantityInput("");
+                        setUnitCost("");
+                        setOptionsError("");
+                      }}
                       required
                     />
                     <TextField
@@ -922,11 +1022,102 @@ export function InventoryManager({
                       value={expiresOn}
                       set={setExpiresOn}
                     />
-                    <TextField
-                      label="Costo por unidad base"
-                      value={unitCost}
-                      set={setUnitCost}
-                    />
+                    <div className="min-w-0 text-sm font-semibold">
+                      <label htmlFor="opening-entry-unit">
+                        Cargar cantidad en *
+                      </label>
+                      <select
+                        id="opening-entry-unit"
+                        className="form-control mt-2"
+                        value={entryChoice}
+                        required
+                        disabled={!openingReady}
+                        onChange={(event) => {
+                          setEntryChoice(event.target.value);
+                          setQuantityInput("");
+                          setUnitCost("");
+                        }}
+                      >
+                        <option value="">
+                          {itemId
+                            ? "Cargando unidades…"
+                            : "Elegí un artículo primero"}
+                        </option>
+                        {openingOptions?.item.id === itemId && (
+                          <>
+                            <optgroup label="Unidades de medida">
+                              {entryUnits
+                                .filter(
+                                  (u) =>
+                                    baseUnit(u.value) ===
+                                    openingOptions.item.baseUnit,
+                                )
+                                .map((u) => (
+                                  <option key={u.value} value={u.value}>
+                                    {u.label}
+                                  </option>
+                                ))}
+                            </optgroup>
+                            <optgroup label="Presentaciones de compra">
+                              {openingOptions.presentations
+                                .filter((p) => !p.archived)
+                                .map((p) => (
+                                  <option key={p.id} value={`pack:${p.id}`}>
+                                    {p.name} ·{" "}
+                                    {
+                                      openingOptions.suppliers.find(
+                                        (s) => s.id === p.supplierId,
+                                      )?.name
+                                    }
+                                  </option>
+                                ))}
+                            </optgroup>
+                          </>
+                        )}
+                      </select>
+                      {openingReady && (
+                        <Button
+                          className="mt-2"
+                          type="button"
+                          variant="ghost"
+                          disabled={operation.locked}
+                          onClick={() => {
+                            setOpeningOptions(null);
+                            setEntryChoice("");
+                            setQuantityInput("");
+                            setUnitCost("");
+                            setOptionsVersion((v) => v + 1);
+                          }}
+                        >
+                          Actualizar presentaciones
+                        </Button>
+                      )}
+                    </div>
+                    <div>
+                      <TextField
+                        label={
+                          chosenPack
+                            ? "Costo por presentación"
+                            : `Costo por ${costUnitLabels[entryChoice] ?? "unidad elegida"}`
+                        }
+                        value={unitCost}
+                        set={setUnitCost}
+                        disabled={!openingReady}
+                      />
+                      <p className="mt-2 text-xs text-muted">
+                        En pesos. Opcional: dejalo vacío si todavía no lo sabés.
+                      </p>
+                    </div>
+                    {chosenPack && (
+                      <p className="text-sm text-muted sm:col-span-2">
+                        Cada presentación contiene{" "}
+                        {quantity(
+                          chosenPack.baseQuantity,
+                          openingOptions!.item.baseUnit,
+                        )}
+                        .
+                      </p>
+                    )}
                   </>
                 )}
                 {action !== "block" && (
@@ -936,7 +1127,9 @@ export function InventoryManager({
                         ? "Cantidad a descartar"
                         : action === "count"
                           ? "Cantidad contada"
-                          : "Cantidad ingresada"
+                          : chosenPack
+                            ? "Cantidad de presentaciones"
+                            : `Cantidad (${entryChoice || "unidad elegida"})`
                     }
                     value={quantityInput}
                     set={setQuantityInput}
@@ -965,6 +1158,30 @@ export function InventoryManager({
                   required
                 />
               </fieldset>
+              {action === "opening" && optionsError && (
+                <div role="alert" className="text-sm text-red-700">
+                  {optionsError}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={operation.locked}
+                    onClick={() => {
+                      setOptionsError("");
+                      setOptionsVersion((v) => v + 1);
+                    }}
+                  >
+                    Reintentar carga
+                  </Button>
+                </div>
+              )}
+              {action === "opening" && openingPreview && (
+                <p
+                  aria-live="polite"
+                  className="rounded-lg bg-blue-50 p-4 text-sm text-brand"
+                >
+                  {openingPreview}
+                </p>
+              )}
               <p className="text-xs text-muted">
                 Se registrará la diferencia y la persona responsable. Los lotes
                 vencidos o bloqueados siguen en el físico hasta registrar merma.
@@ -995,7 +1212,13 @@ export function InventoryManager({
                     Reintentar desde este formulario
                   </Button>
                 ) : (
-                  <Button type="submit" disabled={operation.locked}>
+                  <Button
+                    type="submit"
+                    disabled={
+                      operation.locked ||
+                      (action === "opening" && !openingReady)
+                    }
+                  >
                     {action === "opening"
                       ? "Confirmar ingreso"
                       : action === "waste"

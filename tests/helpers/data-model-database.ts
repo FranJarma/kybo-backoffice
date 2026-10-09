@@ -26,6 +26,11 @@ export async function createDataModelTestContext(
       await client.exec(
         await readFile("drizzle/0010_recipe_waste.sql", "utf8"),
       );
+    // Shipping only extends the existing receipt tables (no sourcing dependency).
+    if (!options.legacyCatalog && !options.legacyWaste)
+      await client.exec(
+        await readFile("drizzle/0012_purchase_shipping.sql", "utf8"),
+      );
     return {
       ...fixture,
       client,
