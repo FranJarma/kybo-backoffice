@@ -282,6 +282,7 @@ export function useOperation<T>(
 
 export function SearchSelect({
   entity,
+  itemScope = "",
   label,
   value,
   onChange,
@@ -291,6 +292,7 @@ export function SearchSelect({
   initial,
 }: {
   entity: Entity;
+  itemScope?: "" | "ingredients" | "recipe";
   label: string;
   value: string;
   onChange: (id: string, row?: CatalogRow) => void;
@@ -314,7 +316,7 @@ export function SearchSelect({
       () => {
         setLoading(true);
         getJson<ListResult>(
-          `/api/catalog/${entity}?archived=0&q=${encodeURIComponent(search)}`,
+          `/api/catalog/${entity}?archived=0&itemScope=${itemScope}&q=${encodeURIComponent(search)}`,
         )
           .then((data) => {
             if (live) {
@@ -337,7 +339,7 @@ export function SearchSelect({
       live = false;
       clearTimeout(timer);
     };
-  }, [entity, search, label]);
+  }, [entity, search, label, itemScope]);
   const options = [
     ...(cached ? [cached] : []),
     ...items.filter((r) => !cached || r.id !== cached.id),

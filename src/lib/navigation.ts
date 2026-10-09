@@ -69,6 +69,15 @@ export const navigation = [
     parent: "products",
   },
   {
+    id: "ingredients",
+    area: "Productos",
+    label: "Ingredientes",
+    href: "/products/ingredients",
+    icon: "Boxes",
+    access: "catalog",
+    parent: "products",
+  },
+  {
     id: "recipes",
     area: "Productos",
     label: "Recetas",
@@ -97,7 +106,7 @@ export const navigation = [
   {
     id: "items",
     area: "Inventario y compras",
-    label: "Artículos",
+    label: "Catálogo de inventario",
     href: "/inventory/items",
     icon: "Boxes",
     access: "catalog",

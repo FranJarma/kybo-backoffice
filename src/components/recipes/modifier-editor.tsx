@@ -1,4 +1,5 @@
 "use client";
+import { CostPreview } from "./cost-preview";
 import { Control as Field } from "@/components/sales/shared";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -67,6 +68,7 @@ export function ModifierRecipeEditor({
         .map((l) => ({
           ...l.options[0],
           quantity: inputDecimal(l.options[0].quantity),
+          wastePercent: inputDecimal(l.options[0].wastePercent ?? "0.00"),
         })) ?? [],
   );
   const [groups, setGroups] = useState<GroupDraft[]>(
@@ -92,6 +94,7 @@ export function ModifierRecipeEditor({
               ? o.components.map((c) => ({
                   ...c,
                   quantity: inputDecimal(c.quantity),
+                  wastePercent: inputDecimal(c.wastePercent ?? "0.00"),
                 }))
               : [],
           components:
@@ -99,6 +102,7 @@ export function ModifierRecipeEditor({
               ? o.components.map((c) => ({
                   ...c,
                   quantity: inputDecimal(c.quantity),
+                  wastePercent: inputDecimal(c.wastePercent ?? "0.00"),
                 }))
               : [],
           prices: {
@@ -156,6 +160,7 @@ export function ModifierRecipeEditor({
         inherited: o.components.map((c) => ({
           ...c,
           quantity: inputDecimal(c.quantity),
+          wastePercent: inputDecimal(c.wastePercent ?? "0.00"),
         })),
         components: [],
         prices: { counter: "", pedidosya: "", ubereats: "" },
@@ -182,6 +187,7 @@ export function ModifierRecipeEditor({
         proposed.fixed.map((l) => ({
           ...l.options[0],
           quantity: inputDecimal(l.options[0].quantity),
+          wastePercent: inputDecimal(l.options[0].wastePercent ?? "0.00"),
         })),
       );
       setGroups(
@@ -202,6 +208,7 @@ export function ModifierRecipeEditor({
               components: o.components.map((c) => ({
                 ...c,
                 quantity: inputDecimal(c.quantity),
+                wastePercent: inputDecimal(c.wastePercent ?? "0.00"),
               })),
             })),
           },
@@ -218,6 +225,7 @@ export function ModifierRecipeEditor({
             inherited: o.components.map((c) => ({
               ...c,
               quantity: inputDecimal(c.quantity),
+              wastePercent: inputDecimal(c.wastePercent ?? "0.00"),
             })),
             prices: { counter: "", pedidosya: "", ubereats: "" },
           })),
@@ -252,6 +260,7 @@ export function ModifierRecipeEditor({
               {
                 itemId: c.itemId,
                 quantity: c.quantity,
+                wastePercent: c.wastePercent,
                 baseUnit: c.baseUnit,
               },
             ],
@@ -265,9 +274,10 @@ export function ModifierRecipeEditor({
                   options: g.draft.options.map((o) => ({
                     ...o,
                     components: o.components.map(
-                      ({ itemId, quantity, baseUnit }) => ({
+                      ({ itemId, quantity, wastePercent, baseUnit }) => ({
                         itemId,
                         quantity,
+                        wastePercent,
                         baseUnit,
                       }),
                     ),
@@ -286,9 +296,10 @@ export function ModifierRecipeEditor({
               maxCount: o.maxCount,
               mode: o.mode,
               components: o.components.map(
-                ({ itemId, quantity, baseUnit }) => ({
+                ({ itemId, quantity, wastePercent, baseUnit }) => ({
                   itemId,
                   quantity,
+                  wastePercent,
                   baseUnit,
                 }),
               ),
@@ -298,6 +309,37 @@ export function ModifierRecipeEditor({
         } as RecipeInput);
       }}
     >
+      <CostPreview
+        rows={[
+          ...fixed.map((c) => ({
+            itemId: c.itemId,
+            name: c.name,
+            itemClass: c.itemClass,
+            baseUnit: c.baseUnit,
+            quantity: c.quantity,
+            wastePercent: c.wastePercent,
+          })),
+          ...groups.flatMap((g) =>
+            g.options
+              .filter((o) => o.enabled)
+              .flatMap((o) =>
+                (o.mode === "inherit" ? (o.inherited ?? []) : o.components).map(
+                  (c) => ({
+                    itemId: c.itemId,
+                    name: c.name || o.name,
+                    itemClass: c.itemClass,
+                    baseUnit: c.baseUnit,
+                    quantity: c.quantity,
+                    wastePercent: c.wastePercent,
+                    multiplier: o.mode === "inherit" ? g.factor : "1",
+                    count: o.defaultCount > 0 ? o.defaultCount : 1,
+                    include: o.defaultCount > 0,
+                  }),
+                ),
+              ),
+          ),
+        ]}
+      />
       <fieldset disabled={disabled || busy} className="space-y-8">
         {!initial && (
           <SearchSelect
@@ -322,10 +364,11 @@ export function ModifierRecipeEditor({
           </div>
         )}
         <section className="rounded-xl border border-line p-4">
-          <h3 className="mb-3 font-bold text-brand">Ingredientes fijos</h3>
+          <h3 className="mb-3 font-bold text-brand">Composición fija</h3>
           <p className="mb-4 text-xs text-muted">
-            Solo lo que siempre lleva el producto. Las alternativas se agregan
-            en grupos.
+            Ingredientes y descartables que siempre lleva el producto. Ambos
+            suman costo y consumo de stock. Las alternativas se agregan en
+            grupos.
           </p>
           <ComponentFields value={fixed} onChange={setFixed} />
         </section>

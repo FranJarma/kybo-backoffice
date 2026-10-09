@@ -10,6 +10,7 @@ type GroupVersion = {
       name: string;
       baseUnit: string;
       quantity: string;
+      wastePercent?: string;
     }[];
   }[];
 };
@@ -39,6 +40,10 @@ export function diffGroupVersions(
     )) {
       const a = old.components.find((c) => c.itemId === id),
         b = next.components.find((c) => c.itemId === id);
+      if ((a?.wastePercent ?? "0.00") !== (b?.wastePercent ?? "0.00"))
+        changes.push(
+          `${next.name} · ${b?.name ?? a?.name}: merma ${a?.wastePercent ?? "0.00"}% → ${b?.wastePercent ?? "0.00"}%`,
+        );
       if (a?.quantity !== b?.quantity || a?.baseUnit !== b?.baseUnit)
         changes.push(
           `${next.name} · ${b?.name ?? a?.name}: ${a ? `${a.quantity} ${a.baseUnit}` : "sin ingrediente"} → ${b ? `${b.quantity} ${b.baseUnit}` : "sin ingrediente"}`,

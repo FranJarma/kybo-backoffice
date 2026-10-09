@@ -1,3 +1,4 @@
+import { consumptionQuantity } from "./waste";
 import {
   requireCatalogManagement,
   requireCatalogRead,
@@ -84,7 +85,11 @@ export async function recipeDefinition(
     .orderBy(asc(recipeLines.position));
   const options = lines.length
     ? await db
-        .select({ option: recipeOptions, archivedAt: items.archivedAt })
+        .select({
+          option: recipeOptions,
+          archivedAt: items.archivedAt,
+          itemClass: items.class,
+        })
         .from(recipeOptions)
         .innerJoin(items, eq(items.id, recipeOptions.itemId))
         .where(
@@ -117,11 +122,13 @@ export async function recipeDefinition(
       optional: line.optional,
       options: options
         .filter((o) => o.option.lineId === line.id)
-        .map(({ option, archivedAt }) => ({
+        .map(({ option, archivedAt, itemClass }) => ({
+          itemClass,
           id: option.id,
           itemId: option.itemId,
           name: option.itemName,
           quantity: option.quantity,
+          wastePercent: option.wastePercent,
           baseUnit: option.baseUnit,
           archived: !!archivedAt,
           unitCost: null,
@@ -206,7 +213,11 @@ export async function costContext(db: ReadDb) {
         const cost = estimate(o.itemId, [...path, id]);
         cost.missing.forEach((n) => missing.add(n));
         if (cost.value !== null)
-          total += roundedDivision(cost.value * integer(o.quantity), SCALE);
+          total += roundedDivision(
+            cost.value *
+              integer(consumptionQuantity(o.quantity, o.wastePercent)),
+            SCALE,
+          );
       }
       result = {
         value: missing.size
@@ -265,7 +276,13 @@ async function calculate(
       cost.value === null
         ? null
         : safeScaled(
-            roundedDivision(cost.value * integer(option.quantity), SCALE),
+            roundedDivision(
+              cost.value *
+                integer(
+                  consumptionQuantity(option.quantity, option.wastePercent),
+                ),
+              SCALE,
+            ),
             24,
           );
     if (value !== null) total += value;
@@ -514,6 +531,7 @@ export function createRecipeService(db: AppDb) {
               itemName: locked.get(option.itemId)!.name,
               baseUnit: locked.get(option.itemId)!.baseUnit,
               quantity: option.quantity,
+              wastePercent: option.wastePercent,
             })),
           );
         }
@@ -677,7 +695,13 @@ export function createRecipeService(db: AppDb) {
                 if (cost.value === null) pending = true;
                 else
                   totalCost += roundedDivision(
-                    cost.value * integer(option.quantity),
+                    cost.value *
+                      integer(
+                        consumptionQuantity(
+                          option.quantity,
+                          option.wastePercent,
+                        ),
+                      ),
                     SCALE,
                   );
               }

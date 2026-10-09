@@ -1,3 +1,4 @@
+import { consumptionQuantity } from "@/modules/recipes/waste";
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import type { Tx } from "@/db/types";
@@ -19,12 +20,7 @@ import type { OperationalContext } from "../operations/types";
 import { reserveStock, settleReservation } from "../inventory/reservations";
 import { postMovement } from "../inventory/ledger";
 import { lockStock } from "../inventory/locking";
-import {
-  integer,
-  six,
-  safeQuantity,
-  exactDivision,
-} from "../inventory/decimal";
+import { integer, six } from "../inventory/decimal";
 import { businessDate } from "../operations/business-date";
 import { AppError } from "@/lib/errors";
 import { lotLocationBalances } from "@/db/stock-schema";
@@ -98,11 +94,11 @@ export async function confirmProduction(
         ),
       );
     if (!option) fail("La alternativa no pertenece a esta línea.");
-    const quantity = safeQuantity(
-      exactDivision(
-        integer(option.quantity) * integer(input.plannedQuantity),
-        integer(recipe.version.yieldQuantity),
-      ),
+    const quantity = consumptionQuantity(
+      option.quantity,
+      option.wastePercent,
+      integer(input.plannedQuantity),
+      integer(recipe.version.yieldQuantity),
     );
     components.push({ itemId: option.itemId, quantity });
   }

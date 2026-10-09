@@ -1,3 +1,4 @@
+import { parseWaste } from "@/modules/recipes/waste";
 import { z } from "zod";
 import { decimal } from "@/modules/inventory/decimal";
 import { AppError } from "@/lib/errors";
@@ -11,6 +12,7 @@ export const componentInput = z
   .object({
     itemId: z.uuid(),
     quantity: z.unknown().transform((v) => decimal(v, 6, true, true)!),
+    wastePercent: z.unknown().transform(parseWaste),
     baseUnit: z.enum(["g", "ml", "unit"]).optional(),
   })
   .strict();

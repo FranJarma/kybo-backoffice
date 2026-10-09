@@ -1,4 +1,7 @@
 "use client";
+import { recipeSection } from "@/modules/catalog/item-classes";
+import { consumptionQuantity } from "@/modules/recipes/waste";
+import { CostPreview } from "./cost-preview";
 
 import { paths } from "@/lib/navigation";
 import {
@@ -641,7 +644,7 @@ function RecipePanel({
         </div>
       )}
       <h3 className="mb-3 text-sm font-bold">
-        Ingredientes por {recipe.kind === "product" ? "unidad" : "receta base"}
+        Composición por {recipe.kind === "product" ? "unidad" : "receta base"}
       </h3>
       <div className="rounded-xl border border-line px-4">
         {recipe.lines.map((line, i) => {
@@ -655,11 +658,14 @@ function RecipePanel({
               <div className="flex items-start justify-between gap-3">
                 <span className="text-sm font-medium">
                   {option?.name ?? "Sin ingrediente"}
+                  <span className="block text-xs font-normal text-muted">
+                    {recipeSection(option?.itemClass)}
+                  </span>
                   {option?.archived && " (archivado)"}
                 </span>
-                <span className="shrink-0 text-xs text-muted tabular-nums">
+                <span className="max-w-[60%] text-right text-xs text-muted tabular-nums">
                   {option
-                    ? quantity(option.quantity, option.baseUnit)
+                    ? `${quantity(option.quantity, option.baseUnit)} útiles · ${option.wastePercent ?? "0.00"}% merma · ${quantity(consumptionQuantity(option.quantity, option.wastePercent), option.baseUnit)} consumo`
                     : "Omitido"}
                 </span>
               </div>
@@ -800,12 +806,14 @@ type OptionDraft = {
   itemId: string;
   item?: CatalogRow;
   quantity: string;
+  wastePercent: string;
 };
 type LineDraft = { key: string; optional: boolean; options: OptionDraft[] };
 const blankOption = (): OptionDraft => ({
   key: crypto.randomUUID(),
   itemId: "",
   quantity: "",
+  wastePercent: "0",
 });
 function RecipeEditor({
   kind,
@@ -849,9 +857,11 @@ function RecipeEditor({
             key: o.id,
             itemId: o.itemId,
             quantity: inputDecimal(o.quantity),
+            wastePercent: inputDecimal(o.wastePercent ?? "0.00"),
             item: {
               id: o.itemId,
               name: o.name,
+              class: o.itemClass ?? "unclassified",
               baseUnit: o.baseUnit,
               revision: 1,
               archivedAt: o.archived ? "archived" : null,
@@ -895,6 +905,7 @@ function RecipeEditor({
         options: l.options.map((o) => ({
           itemId: o.itemId,
           quantity: o.quantity,
+          wastePercent: o.wastePercent,
           baseUnit: String(o.item?.baseUnit ?? "g"),
         })),
       })),
@@ -902,6 +913,20 @@ function RecipeEditor({
   }
   return (
     <form onSubmit={submit} className="space-y-8">
+      <CostPreview
+        yieldQuantity={kind === "product" ? "1" : yieldQuantity}
+        rows={lines.flatMap((line) =>
+          line.options.map((o, index) => ({
+            itemId: o.itemId,
+            name: String(o.item?.name ?? ""),
+            itemClass: String(o.item?.class ?? ""),
+            baseUnit: String(o.item?.baseUnit ?? "g"),
+            quantity: o.quantity,
+            wastePercent: o.wastePercent,
+            include: index === 0,
+          })),
+        )}
+      />
       <fieldset disabled={disabled} className="space-y-8">
         <div className="grid gap-7 sm:grid-cols-2">
           <SearchSelect
@@ -935,7 +960,10 @@ function RecipeEditor({
             href={kind === "product" ? paths.products : paths.items}
             className="font-semibold text-blue-700 underline"
           >
-            Creala en {kind === "product" ? "Productos" : "Artículos"}
+            Creala en{" "}
+            {kind === "product"
+              ? "Catálogo y precios"
+              : "Catálogo de inventario"}
           </Link>{" "}
           antes de armar la receta.
         </p>
@@ -946,7 +974,10 @@ function RecipeEditor({
               className="rounded-xl border border-line bg-surface/50 p-5 sm:p-6"
             >
               <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-sm font-bold">Ingrediente {i + 1}</h3>
+                <h3 className="text-sm font-bold">
+                  {recipeSection(String(line.options[0]?.item?.class ?? ""))} ·{" "}
+                  {i + 1}
+                </h3>
                 <div className="flex items-center gap-3">
                   <label className="flex min-h-10 items-center gap-2 text-xs">
                     <input
@@ -980,11 +1011,12 @@ function RecipeEditor({
               {line.options.map((option, j) => (
                 <div
                   key={option.key}
-                  className="mb-6 grid items-end gap-5 sm:grid-cols-[minmax(0,1fr)_180px_40px]"
+                  className="mb-6 grid items-end gap-5 sm:grid-cols-[minmax(0,1fr)_150px_120px_40px]"
                 >
                   <SearchSelect
                     entity="items"
-                    label={`Ingrediente ${i + 1}.${j + 1}`}
+                    itemScope="recipe"
+                    label={`Ingrediente o descartable ${i + 1}.${j + 1}`}
                     value={option.itemId}
                     initial={option.item}
                     required
@@ -998,6 +1030,13 @@ function RecipeEditor({
                     value={option.quantity}
                     onChange={(v) => update(i, j, { quantity: v })}
                     unit={String(option.item?.baseUnit ?? "g")}
+                    required
+                  />
+                  <Field
+                    label={`Merma % ${i + 1}.${j + 1}`}
+                    value={option.wastePercent}
+                    onChange={(v) => update(i, j, { wastePercent: v })}
+                    unit="%"
                     required
                   />
                   {j > 0 ? (
@@ -1066,7 +1105,7 @@ function RecipeEditor({
           }
         >
           <Plus />
-          Agregar ingrediente
+          Agregar ingrediente o descartable
         </Button>
         <label className="block text-xs font-semibold">
           Indicaciones de preparación

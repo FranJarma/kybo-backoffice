@@ -1,4 +1,6 @@
 "use client";
+import { itemClasses, itemClassLabel } from "@/modules/catalog/item-classes";
+import { SearchCombobox } from "@/components/ui/search-combobox";
 import { PhotoEditor, ProductPhoto } from "@/components/products/photo";
 import { useEffect, useId, useState, type FormEvent } from "react";
 import {
@@ -89,6 +91,7 @@ function displayValue(row: CatalogRow, key: string) {
   if (key === "unitCost" && value === null) return "Pendiente";
   if (value === null || value === undefined || value === "") return "—";
   if (key === "baseUnit") return value === "unit" ? "unidad" : String(value);
+  if (key === "class") return itemClassLabel(value);
   if (key === "kind")
     return (
       (
@@ -109,6 +112,8 @@ function displayValue(row: CatalogRow, key: string) {
   return String(value);
 }
 const columnNames: Record<string, string> = {
+  code: "Código",
+  class: "Clase",
   categoryName: "Categoría",
   sortOrder: "Orden",
   name: "Nombre",
@@ -162,15 +167,18 @@ function RecordValue({ row, column }: { row: CatalogRow; column: string }) {
 export function CatalogManager({
   entity,
   definition,
+  ingredientsOnly = false,
 }: {
   entity: Entity;
   definition: EntityDefinition;
+  ingredientsOnly?: boolean;
 }) {
   const [rows, setRows] = useState<CatalogRow[]>([]),
     [total, setTotal] = useState(0),
     [loading, setLoading] = useState(true),
     [loadError, setLoadError] = useState("");
   const [search, setSearch] = useState(""),
+    [itemClass, setItemClass] = useState(""),
     [archived, setArchived] = useState(false),
     [refresh, setRefresh] = useState(0);
   const [editing, setEditing] = useState<CatalogRow | null | undefined>(
@@ -198,6 +206,8 @@ export function CatalogManager({
         try {
           const query = new URLSearchParams({
             q: search,
+            itemScope: ingredientsOnly ? "ingredients" : "",
+            class: entity === "items" ? itemClass : "",
             archived: archived ? "1" : "0",
           });
           const response = await fetch(`/api/catalog/${entity}?${query}`, {
@@ -225,7 +235,7 @@ export function CatalogManager({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [entity, search, archived, refresh]);
+  }, [entity, search, archived, refresh, ingredientsOnly, itemClass]);
   useEffect(() => {
     const references = [
       ...new Set(
@@ -288,7 +298,7 @@ export function CatalogManager({
                 "No pudimos cargar proveedores o artículos. Probá de nuevo más tarde.",
               );
           }),
-      referenceSearch.suppliers || referenceSearch.items ? 250 : 0,
+      Object.values(referenceSearch).some(Boolean) ? 250 : 0,
     );
     return () => {
       live = false;
@@ -299,6 +309,15 @@ export function CatalogManager({
     setEditing(row);
     setDraft({
       ...initialDraft(definition.fields, row),
+      ...(!row && entity === "items"
+        ? {
+            purchasable: "true",
+            recipeUsable: ingredientsOnly ? "true" : "false",
+          }
+        : {}),
+      ...(!row && ingredientsOnly
+        ? { recipeUsable: "true", class: "food" }
+        : {}),
       imageAssetId: String(row?.imageAssetId ?? ""),
     });
     setFormError(referenceError);
@@ -318,6 +337,7 @@ export function CatalogManager({
       definition.fields.map((field) => [field.key, draft[field.key] ?? ""]),
     );
     if (entity === "products") payload.imageAssetId = draft.imageAssetId ?? "";
+    if (ingredientsOnly) payload.recipeUsable = "true";
     if (editing) payload.revision = editing.revision;
     try {
       const response = await fetch(
@@ -402,7 +422,6 @@ export function CatalogManager({
       );
     if (field.type === "reference") {
       const options = referenceLists[field.reference!] ?? [];
-      const existing = value && !options.some((option) => option.id === value);
       const cached = referenceCache[field.reference!]?.find(
         (option) => option.id === value,
       );
@@ -413,41 +432,34 @@ export function CatalogManager({
           : field.key === "categoryId"
             ? editing?.categoryName
             : editing?.itemName);
+      const archived =
+        field.key === "categoryId"
+          ? value === editing?.categoryId && editing?.categoryArchived
+          : cached?.archivedAt;
       return (
-        <>
-          <Input
-            aria-label={`Buscar ${field.label.toLowerCase()}`}
-            placeholder={`Buscar ${field.label.toLowerCase()}`}
-            value={referenceSearch[field.reference!] ?? ""}
-            onChange={(event) =>
-              setReferenceSearch((current) => ({
-                ...current,
-                [field.reference!]: event.target.value,
-              }))
-            }
-            className="mb-2"
-          />
-          <select {...common} className="form-control">
-            <option value="">Seleccioná una opción</option>
-            {existing && (
-              <option value={value}>
-                {String(label ?? "Referencia previa")}
-                {(
-                  field.key === "categoryId"
-                    ? editing?.categoryArchived
-                    : !cached
-                )
-                  ? " (archivado)"
-                  : ""}
-              </option>
-            )}
-            {options.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.name}
-              </option>
-            ))}
-          </select>
-        </>
+        <SearchCombobox
+          id={id}
+          label={field.label}
+          value={value}
+          selectedLabel={
+            value
+              ? `${String(label ?? "Referencia previa")}${archived ? " (archivado)" : ""}`
+              : ""
+          }
+          options={options.map((option) => ({
+            id: option.id,
+            name: String(option.name),
+          }))}
+          required={field.required}
+          onChange={update}
+          onSearch={(query) =>
+            setReferenceSearch((current) =>
+              current[field.reference!] === query
+                ? current
+                : { ...current, [field.reference!]: query },
+            )
+          }
+        />
       );
     }
     return (
@@ -467,7 +479,7 @@ export function CatalogManager({
         className={
           field.key === "name" ||
           field.type === "textarea" ||
-          (entity !== "products" && field.hint)
+          (entity !== "products" && entity !== "items" && field.hint)
             ? "min-w-0 space-y-2.5 sm:col-span-2"
             : "min-w-0 space-y-2.5"
         }
@@ -576,6 +588,24 @@ export function CatalogManager({
             className="h-12 bg-white pl-11"
           />
         </div>
+        {entity === "items" && !ingredientsOnly && (
+          <label className="text-xs font-medium text-brand">
+            Clase de artículo
+            <select
+              className="form-control mt-1"
+              value={itemClass}
+              onChange={(event) => setItemClass(event.target.value)}
+            >
+              <option value="">Todas las clases</option>
+              {itemClasses.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+              <option value="unclassified">Sin clasificar</option>
+            </select>
+          </label>
+        )}
         <div className="flex min-w-0 items-center gap-3">
           <div
             className="flex rounded-xl border border-line bg-white p-1"
@@ -688,7 +718,9 @@ export function CatalogManager({
                           ? entity === "products"
                             ? "Producto"
                             : entity === "items"
-                              ? "Insumo"
+                              ? ingredientsOnly
+                                ? "Ingrediente"
+                                : "Artículo"
                               : columnNames[column]
                           : (columnNames[column] ?? column)}
                       </TableHead>
@@ -813,8 +845,17 @@ export function CatalogManager({
         }}
       >
         {editing !== undefined && (
-          <DialogContent className="max-h-[94dvh] gap-0 overflow-y-auto bg-white p-5 sm:max-w-4xl sm:p-8 lg:p-10">
-            <div className="mb-8 border-b border-line pb-6 pr-5">
+          <DialogContent
+            className={`max-h-[94dvh] gap-0 bg-white p-5 sm:max-w-4xl sm:p-8 lg:p-10 ${entity === "items" ? "flex flex-col overflow-hidden" : "overflow-y-auto"}`}
+            onEscapeKeyDown={(event) => {
+              if (
+                event.target instanceof HTMLElement &&
+                event.target.matches('[role="combobox"][aria-expanded="true"]')
+              )
+                event.preventDefault();
+            }}
+          >
+            <div className="mb-6 shrink-0 border-b border-line pb-6 pr-5">
               <p className="eyebrow mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
                 {definition.title}
               </p>
@@ -824,75 +865,200 @@ export function CatalogManager({
                   : `Nuevo ${definition.singular}`}
               </DialogTitle>
               <DialogDescription className="mt-2 text-sm leading-relaxed text-muted">
-                Completá los datos del registro. Los campos con * son
-                obligatorios.
+                {entity === "items"
+                  ? ingredientsOnly
+                    ? "Una sola ficha para tus recetas y tu inventario. No necesitás crear otro artículo."
+                    : "Definí qué es, cómo lo medís y dónde lo usás."
+                  : "Completá los datos del registro. Los campos con * son obligatorios."}
               </DialogDescription>
             </div>
-            <form onSubmit={submit} className="space-y-8">
-              <div className="grid gap-x-8 gap-y-7 sm:grid-cols-2">
-                {(entity === "products"
-                  ? [
-                      ...basicFields.filter(
-                        (field) => field.type !== "textarea",
-                      ),
-                      ...basicFields.filter(
-                        (field) => field.type === "textarea",
-                      ),
-                    ]
-                  : basicFields
-                ).map(renderField)}
-              </div>
-              {entity === "products" && (
-                <PhotoEditor
-                  value={draft.imageAssetId || null}
-                  onChange={(id) =>
-                    setDraft((d) => ({ ...d, imageAssetId: id ?? "" }))
-                  }
-                  onBusy={setUploading}
-                  disabled={saving || uploading}
-                />
-              )}
-              {priceFields.length > 0 && (
-                <fieldset className="rounded-xl border border-line bg-slate-50/60 p-5 sm:p-6">
-                  <legend className="px-2 text-sm font-semibold text-brand">
-                    Venta por canal
-                  </legend>
-                  <div className="grid gap-7 pt-3 lg:grid-cols-3">
-                    {(["Counter", "PedidosYa", "UberEats"] as const).map(
-                      (channel) => (
-                        <div key={channel} className="min-w-0 space-y-6">
-                          {priceFields
-                            .filter(
-                              (field) =>
-                                field.key === `enabled${channel}` ||
-                                field.key === `price${channel}`,
-                            )
-                            .map(renderField)}
-                        </div>
-                      ),
-                    )}
+            <form
+              onSubmit={submit}
+              className={
+                entity === "items"
+                  ? "flex min-h-0 flex-1 flex-col"
+                  : "space-y-8"
+              }
+            >
+              <div
+                className={
+                  entity === "items"
+                    ? "min-h-0 space-y-7 overflow-y-auto pr-2 pb-6"
+                    : "space-y-8"
+                }
+              >
+                {entity === "items" ? (
+                  <>
+                    <section aria-labelledby={`${formId}-basic`}>
+                      <h3
+                        id={`${formId}-basic`}
+                        className="mb-5 text-sm font-semibold text-brand"
+                      >
+                        Datos básicos
+                      </h3>
+                      <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
+                        {basicFields
+                          .filter((field) =>
+                            ["name", "code", "class"].includes(field.key),
+                          )
+                          .map((field) =>
+                            renderField(
+                              field.key === "class"
+                                ? { ...field, label: "Tipo", hint: undefined }
+                                : field,
+                            ),
+                          )}
+                      </div>
+                    </section>
+                    <section
+                      aria-labelledby={`${formId}-units`}
+                      className="border-t border-line pt-6"
+                    >
+                      <h3
+                        id={`${formId}-units`}
+                        className="mb-2 text-sm font-semibold text-brand"
+                      >
+                        Unidad y costo
+                      </h3>
+                      <p className="mb-5 text-xs leading-relaxed text-muted">
+                        Elegí la unidad con la que vas a medir el stock y las
+                        cantidades de las recetas.
+                      </p>
+                      <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
+                        {basicFields
+                          .filter((field) =>
+                            ["baseUnit", "unitCost"].includes(field.key),
+                          )
+                          .map((field) =>
+                            renderField(
+                              field.key === "baseUnit"
+                                ? { ...field, label: "Unidad de medida" }
+                                : {
+                                    ...field,
+                                    label: `Costo por ${draft.baseUnit === "g" ? "gramo" : draft.baseUnit === "ml" ? "mililitro" : draft.baseUnit === "unit" ? "unidad" : "unidad de medida"}`,
+                                    hint: "En pesos. Usá coma para decimales; dejalo vacío si todavía no lo sabés.",
+                                  },
+                            ),
+                          )}
+                      </div>
+                    </section>
+                    <fieldset className="border-t border-line pt-5">
+                      <legend className="pr-3 text-sm font-semibold text-brand">
+                        Usos
+                      </legend>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        {basicFields
+                          .filter((field) =>
+                            ["purchasable", "recipeUsable"].includes(field.key),
+                          )
+                          .map((field) => (
+                            <label
+                              key={field.key}
+                              className="flex cursor-pointer items-start gap-3 rounded-xl border border-line p-4 has-[:checked]:border-blue-300 has-[:checked]:bg-blue-50/50"
+                            >
+                              <input
+                                type="checkbox"
+                                className="mt-0.5 size-4 shrink-0 accent-blue-700"
+                                checked={draft[field.key] === "true"}
+                                onChange={(event) =>
+                                  setDraft((current) => ({
+                                    ...current,
+                                    [field.key]: String(event.target.checked),
+                                  }))
+                                }
+                              />
+                              <span>
+                                <span className="block text-sm font-medium text-brand">
+                                  {field.key === "purchasable"
+                                    ? "Lo compro a proveedores"
+                                    : "Lo uso en recetas"}
+                                </span>
+                                <span className="mt-1 block text-xs leading-relaxed text-muted">
+                                  {field.key === "purchasable"
+                                    ? "Para recibirlo mediante compras."
+                                    : "Suma costo y consumo como ingrediente o descartable."}
+                                </span>
+                              </span>
+                            </label>
+                          ))}
+                        {ingredientsOnly && (
+                          <p className="self-center text-xs leading-relaxed text-muted">
+                            Este ingrediente ya está habilitado para recetas y
+                            también aparece en el catálogo de inventario.
+                          </p>
+                        )}
+                      </div>
+                    </fieldset>
+                  </>
+                ) : (
+                  <div className="grid gap-x-8 gap-y-7 sm:grid-cols-2">
+                    {(entity === "products"
+                      ? [
+                          ...basicFields.filter(
+                            (field) => field.type !== "textarea",
+                          ),
+                          ...basicFields.filter(
+                            (field) => field.type === "textarea",
+                          ),
+                        ]
+                      : basicFields
+                    ).map(renderField)}
                   </div>
-                </fieldset>
-              )}
-              {referenceWarning && (
-                <p className="rounded-xl bg-amber-50 p-3 text-xs leading-relaxed text-amber-800">
-                  {referenceWarning}
-                </p>
-              )}
-              {entity === "customers" && (
-                <p className="rounded-xl bg-blue-50 p-3 text-xs leading-relaxed text-muted">
-                  Agregar un cliente no autoriza el envío de promociones.
-                </p>
-              )}
-              {formError && (
-                <p
-                  role="alert"
-                  className="rounded-xl bg-red-50 p-3 text-sm leading-relaxed text-red-700"
-                >
-                  {formError}
-                </p>
-              )}
-              <div className="flex justify-end gap-3 border-t border-line pt-5">
+                )}
+                {entity === "products" && (
+                  <PhotoEditor
+                    value={draft.imageAssetId || null}
+                    onChange={(id) =>
+                      setDraft((d) => ({ ...d, imageAssetId: id ?? "" }))
+                    }
+                    onBusy={setUploading}
+                    disabled={saving || uploading}
+                  />
+                )}
+                {priceFields.length > 0 && (
+                  <fieldset className="rounded-xl border border-line bg-slate-50/60 p-5 sm:p-6">
+                    <legend className="px-2 text-sm font-semibold text-brand">
+                      Venta por canal
+                    </legend>
+                    <div className="grid gap-7 pt-3 lg:grid-cols-3">
+                      {(["Counter", "PedidosYa", "UberEats"] as const).map(
+                        (channel) => (
+                          <div key={channel} className="min-w-0 space-y-6">
+                            {priceFields
+                              .filter(
+                                (field) =>
+                                  field.key === `enabled${channel}` ||
+                                  field.key === `price${channel}`,
+                              )
+                              .map(renderField)}
+                          </div>
+                        ),
+                      )}
+                    </div>
+                  </fieldset>
+                )}
+                {referenceWarning && (
+                  <p className="rounded-xl bg-amber-50 p-3 text-xs leading-relaxed text-amber-800">
+                    {referenceWarning}
+                  </p>
+                )}
+                {entity === "customers" && (
+                  <p className="rounded-xl bg-blue-50 p-3 text-xs leading-relaxed text-muted">
+                    Agregar un cliente no autoriza el envío de promociones.
+                  </p>
+                )}
+                {formError && (
+                  <p
+                    role="alert"
+                    className="rounded-xl bg-red-50 p-3 text-sm leading-relaxed text-red-700"
+                  >
+                    {formError}
+                  </p>
+                )}
+              </div>
+              <div
+                className={`flex shrink-0 justify-end gap-3 border-t border-line bg-white pt-5 ${entity === "items" ? "mt-0" : ""}`}
+              >
                 <Button
                   type="button"
                   variant="outline"

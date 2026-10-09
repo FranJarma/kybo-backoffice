@@ -1,0 +1,6 @@
+ALTER TABLE "recipe_options" ADD COLUMN "waste_percent" numeric(5, 2) DEFAULT '0' NOT NULL;--> statement-breakpoint
+ALTER TABLE "modifier_option_components" ADD COLUMN "waste_percent" numeric(5, 2) DEFAULT '0' NOT NULL;--> statement-breakpoint
+ALTER TABLE "recipe_modifier_option_components" ADD COLUMN "waste_percent" numeric(5, 2) DEFAULT '0' NOT NULL;--> statement-breakpoint
+ALTER TABLE "recipe_options" ADD CONSTRAINT "recipe_option_waste_range" CHECK ("recipe_options"."waste_percent" >= 0 and "recipe_options"."waste_percent" < 100);--> statement-breakpoint
+ALTER TABLE "modifier_option_components" ADD CONSTRAINT "modifier_option_components_waste_range" CHECK ("modifier_option_components"."waste_percent" >= 0 and "modifier_option_components"."waste_percent" < 100);--> statement-breakpoint
+ALTER TABLE "recipe_modifier_option_components" ADD CONSTRAINT "recipe_modifier_option_components_waste_range" CHECK ("recipe_modifier_option_components"."waste_percent" >= 0 and "recipe_modifier_option_components"."waste_percent" < 100);

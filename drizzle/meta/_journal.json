@@ -71,6 +71,13 @@
       "when": 1791548215886,
       "tag": "0009_product_catalog",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791552008561,
+      "tag": "0010_recipe_waste",
+      "breakpoints": true
     }
   ]
 }

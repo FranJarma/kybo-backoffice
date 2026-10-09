@@ -9,7 +9,7 @@ import {
   requireMigrationTestPermission,
 } from "./data-model-fixture";
 export async function createDataModelTestContext(
-  options: { legacyCatalog?: boolean } = {},
+  options: { legacyCatalog?: boolean; legacyWaste?: boolean } = {},
 ) {
   requireMigrationTestPermission();
   const client = new PGlite();
@@ -22,6 +22,10 @@ export async function createDataModelTestContext(
         await readFile("drizzle/0009_product_catalog.sql", "utf8"),
       );
     }
+    if (!options.legacyCatalog && !options.legacyWaste)
+      await client.exec(
+        await readFile("drizzle/0010_recipe_waste.sql", "utf8"),
+      );
     return {
       ...fixture,
       client,

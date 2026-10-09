@@ -98,10 +98,17 @@ export const recipeOptions = pgTable(
     itemName: text("item_name").notNull(),
     baseUnit: text("base_unit").notNull(),
     quantity: numeric("quantity", { precision: 18, scale: 6 }).notNull(),
+    wastePercent: numeric("waste_percent", { precision: 5, scale: 2 })
+      .notNull()
+      .default("0"),
   },
   (t) => [
     uniqueIndex("recipe_option_position").on(t.lineId, t.position),
     index("recipe_option_item").on(t.itemId),
     check("recipe_option_quantity_positive", sql`${t.quantity} > 0`),
+    check(
+      "recipe_option_waste_range",
+      sql`${t.wastePercent} >= 0 and ${t.wastePercent} < 100`,
+    ),
   ],
 );

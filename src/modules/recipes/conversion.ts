@@ -32,6 +32,7 @@ export async function proposeConversion(
         options: l.options.map((o) => ({
           ...o,
           quantity: perUnit(o.quantity),
+          wastePercent: o.wastePercent,
         })),
       })),
     groups: r.lines
@@ -52,8 +53,10 @@ export async function proposeConversion(
             {
               itemId: o.itemId,
               name: o.name,
+              itemClass: o.itemClass,
               baseUnit: o.baseUnit,
               quantity: perUnit(o.quantity),
+              wastePercent: o.wastePercent,
             },
           ],
         })),

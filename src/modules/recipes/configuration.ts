@@ -94,6 +94,7 @@ export async function loadConfiguration(
         mode: b.mode as ConfiguredOption["mode"],
         components: components.map((c) => ({
           ...c,
+          itemClass: stock.get(c.itemId)?.class,
           archived:
             !stock.get(c.itemId) ||
             !!stock.get(c.itemId)?.archivedAt ||
@@ -227,6 +228,7 @@ export async function saveBindings(
           name: i.name,
           baseUnit: i.baseUnit,
           quantity: c.quantity,
+          wastePercent: c.wastePercent,
         });
       }
       for (const channel of channels)

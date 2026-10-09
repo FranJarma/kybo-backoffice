@@ -1,4 +1,6 @@
 "use client";
+import { decimal, integer } from "@/modules/inventory/decimal";
+import { consumptionQuantity } from "@/modules/recipes/waste";
 
 import { paths } from "@/lib/navigation";
 import { ProductionOrdersPanel } from "./orders-panel";
@@ -523,7 +525,12 @@ function ProductionForm({
     recipe.lines.map((line) => ({
       lineId: line.id,
       optionId: line.options[0].id as string | null,
-      quantity: inputDecimal(line.options[0].quantity),
+      quantity: inputDecimal(
+        consumptionQuantity(
+          line.options[0].quantity,
+          line.options[0].wastePercent,
+        ),
+      ),
     })),
   );
   const [expiresOn, setExpiry] = useState(""),
@@ -562,7 +569,13 @@ function ProductionForm({
           return {
             ...s,
             quantity: option
-              ? inputDecimal(scaledQuantity(option.quantity, value))
+              ? inputDecimal(
+                  consumptionQuantity(
+                    option.quantity,
+                    option.wastePercent,
+                    integer(decimal(value, 6, true, true)!),
+                  ),
+                )
               : "0",
           };
         }),
@@ -694,7 +707,11 @@ function ProductionForm({
                           if (chosen) {
                             try {
                               qty = inputDecimal(
-                                scaledQuantity(chosen.quantity, multiplier),
+                                consumptionQuantity(
+                                  chosen.quantity,
+                                  chosen.wastePercent,
+                                  integer(decimal(multiplier, 6, true, true)!),
+                                ),
                               );
                             } catch {
                               qty = inputDecimal(chosen.quantity);

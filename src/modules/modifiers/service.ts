@@ -61,10 +61,16 @@ export async function groupDefinition(
     options: await Promise.all(
       opts.map(async (o) => ({
         ...o,
-        components: await db
-          .select()
-          .from(modifierOptionComponents)
-          .where(eq(modifierOptionComponents.optionId, o.id)),
+        components: (
+          await db
+            .select({
+              component: modifierOptionComponents,
+              itemClass: items.class,
+            })
+            .from(modifierOptionComponents)
+            .innerJoin(items, eq(items.id, modifierOptionComponents.itemId))
+            .where(eq(modifierOptionComponents.optionId, o.id))
+        ).map(({ component, itemClass }) => ({ ...component, itemClass })),
       })),
     ),
   };
@@ -211,6 +217,7 @@ export async function publishGroup(
         name: item.name,
         baseUnit: item.baseUnit,
         quantity: c.quantity,
+        wastePercent: c.wastePercent,
       });
     }
   }

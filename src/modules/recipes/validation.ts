@@ -1,3 +1,4 @@
+import { parseWaste } from "@/modules/recipes/waste";
 import { bindingInput } from "@/modules/modifiers/validation";
 import { z } from "zod";
 import { AppError } from "@/lib/errors";
@@ -34,6 +35,7 @@ const recipe = z
                   .object({
                     itemId: z.uuid(),
                     quantity: positiveQuantity,
+                    wastePercent: z.unknown().transform(parseWaste),
                     baseUnit: unit.optional(),
                   })
                   .strict(),

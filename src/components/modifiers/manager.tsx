@@ -1,4 +1,5 @@
 "use client";
+import { recipeSection } from "@/modules/catalog/item-classes";
 
 import { paths } from "@/lib/navigation";
 import { Control as Field } from "@/components/sales/shared";
@@ -19,8 +20,10 @@ import { inputDecimal } from "@/components/recipes/shared";
 import type { groupDefinition } from "@/modules/modifiers/service";
 export type GroupDetail = Awaited<ReturnType<typeof groupDefinition>>;
 export type ComponentDraft = {
+  itemClass?: string;
   itemId: string;
   quantity: string;
+  wastePercent?: string;
   baseUnit?: string;
   name?: string;
 };
@@ -47,77 +50,107 @@ export function ComponentFields({
 }) {
   return (
     <div className="space-y-5">
-      {value.map((c, i) => (
-        <div
-          key={i}
-          className="grid grid-cols-[minmax(0,1fr)_40px] items-end gap-5 sm:grid-cols-[minmax(0,1fr)_160px_40px] [&>div:first-child]:col-span-2 sm:[&>div:first-child]:col-span-1"
-        >
-          <SearchSelect
-            entity="items"
-            label={`Insumo ${i + 1}`}
-            value={c.itemId}
-            initial={
-              c.itemId && c.name
-                ? {
-                    id: c.itemId,
-                    name: c.name,
-                    baseUnit: c.baseUnit ?? null,
-                    revision: 1,
-                    archivedAt: null,
+      {["Ingredientes", "Descartables", "Otros componentes"].map((section) => {
+        const entries = value
+          .map((c, i) => ({ c, i }))
+          .filter(({ c }) => recipeSection(c.itemClass) === section);
+        if (!entries.length) return null;
+        return (
+          <section key={section} className="space-y-5" aria-label={section}>
+            <h4 className="text-sm font-semibold text-brand">{section}</h4>
+            {entries.map(({ c, i }) => (
+              <div
+                key={i}
+                className="grid grid-cols-2 items-end gap-5 sm:grid-cols-[minmax(0,1fr)_140px_100px_40px] [&>div:first-child]:col-span-2 sm:[&>div:first-child]:col-span-1"
+              >
+                <SearchSelect
+                  entity="items"
+                  itemScope="recipe"
+                  label={`Componente ${i + 1}`}
+                  value={c.itemId}
+                  initial={
+                    c.itemId && c.name
+                      ? {
+                          id: c.itemId,
+                        name: c.name,
+                        class: c.itemClass ?? "unclassified",
+                          baseUnit: c.baseUnit ?? null,
+                          revision: 1,
+                          archivedAt: null,
+                        }
+                      : undefined
                   }
-                : undefined
-            }
-            onChange={(id, row) =>
-              onChange(
-                value.map((x, j) =>
-                  j === i
-                    ? {
-                        ...x,
-                        itemId: id,
-                        baseUnit: String(row?.baseUnit ?? "g"),
-                        name: String(row?.name ?? ""),
-                      }
-                    : x,
-                ),
-              )
-            }
-          />
-          <Field label={`Cantidad (${c.baseUnit ?? "unidad base"})`}>
-            <Input
-              aria-label={`Cantidad de insumo ${i + 1}`}
-              value={c.quantity}
-              inputMode="decimal"
-              onChange={(e) =>
-                onChange(
-                  value.map((x, j) =>
-                    j === i ? { ...x, quantity: e.target.value } : x,
-                  ),
-                )
-              }
-            />
-          </Field>
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            aria-label={`Quitar insumo ${i + 1}`}
-            onClick={() => onChange(value.filter((_, j) => j !== i))}
-          >
-            <Trash2 size={16} />
-          </Button>
-        </div>
-      ))}
+                  onChange={(id, row) =>
+                    onChange(
+                      value.map((x, j) =>
+                        j === i
+                          ? {
+                              ...x,
+                              itemId: id,
+                              baseUnit: String(row?.baseUnit ?? "g"),
+                              name: String(row?.name ?? ""),
+                              itemClass: String(row?.class ?? ""),
+                            }
+                          : x,
+                      ),
+                    )
+                  }
+                />
+                <Field label={`Cantidad (${c.baseUnit ?? "unidad base"})`}>
+                  <Input
+                    aria-label={`Cantidad de componente ${i + 1}`}
+                    value={c.quantity}
+                    inputMode="decimal"
+                    onChange={(e) =>
+                      onChange(
+                        value.map((x, j) =>
+                          j === i ? { ...x, quantity: e.target.value } : x,
+                        ),
+                      )
+                    }
+                  />
+                </Field>
+                <Field label="Merma %">
+                  <Input
+                    aria-label={`Merma de componente ${i + 1}`}
+                    inputMode="decimal"
+                    value={c.wastePercent ?? "0"}
+                    onChange={(event) =>
+                      onChange(
+                        value.map((x, j) =>
+                          j === i
+                            ? { ...x, wastePercent: event.target.value }
+                            : x,
+                        ),
+                      )
+                    }
+                  />
+                </Field>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  aria-label={`Quitar componente ${i + 1}`}
+                  onClick={() => onChange(value.filter((_, j) => j !== i))}
+                >
+                  <Trash2 size={16} />
+                </Button>
+              </div>
+            ))}
+          </section>
+        );
+      })}
       <Button
         type="button"
         variant="outline"
         onClick={() => onChange([...value, { itemId: "", quantity: "" }])}
       >
         <Plus size={15} />
-        Agregar insumo
+        Agregar ingrediente o descartable
       </Button>
       {!value.length && (
         <p className="text-xs text-muted">
-          Sin ingredientes: útil para “Sin perlas” o una instrucción.
+          Sin componentes: útil para “Sin perlas” o una instrucción.
         </p>
       )}
     </div>
@@ -148,6 +181,7 @@ function GroupEditor({
           components: o.components.map((c) => ({
             ...c,
             quantity: inputDecimal(c.quantity),
+            wastePercent: inputDecimal(c.wastePercent ?? "0.00"),
           })),
         }))
       : [
@@ -179,9 +213,10 @@ function GroupEditor({
             options: options.map((o) => ({
               ...o,
               components: o.components.map(
-                ({ itemId, quantity, baseUnit }) => ({
+                ({ itemId, quantity, wastePercent, baseUnit }) => ({
                   itemId,
                   quantity,
+                  wastePercent,
                   baseUnit,
                 }),
               ),

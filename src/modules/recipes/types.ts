@@ -12,15 +12,22 @@ export type RecipeInput = {
   notes?: string | null;
   lines: {
     optional?: boolean;
-    options: { itemId: string; quantity: string; baseUnit?: string }[];
+    options: {
+      itemId: string;
+      quantity: string;
+      wastePercent?: string;
+      baseUnit?: string;
+    }[];
   }[];
 };
 export type RecipeOption = {
+  itemClass?: string;
   id: string;
   itemId: string;
   name: string;
   baseUnit: string;
   quantity: string;
+  wastePercent?: string;
   archived: boolean;
   unitCost: string | null;
 };

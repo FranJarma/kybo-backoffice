@@ -1,9 +1,9 @@
+import { consumptionQuantity } from "./waste";
 import { AppError } from "@/lib/errors";
 import {
   integer,
   SCALE,
   safeQuantity,
-  exactDivision,
   cents,
 } from "@/modules/inventory/decimal";
 import type {
@@ -50,12 +50,20 @@ export function resolveComposition(
     components.set(c.itemId, {
       ...c,
       quantity: safeQuantity(q + (previous ? integer(previous.quantity) : 0n)),
+      wastePercent: "0.00",
     });
   };
   for (const c of config.fixed)
     add(
       c,
-      exactDivision(integer(c.quantity) * SCALE, integer(config.yieldQuantity)),
+      integer(
+        consumptionQuantity(
+          c.quantity,
+          c.wastePercent,
+          SCALE,
+          integer(config.yieldQuantity),
+        ),
+      ),
     );
   const modifiers: ResolvedComposition["modifiers"] = [];
   let surcharge = 0n;
@@ -83,9 +91,14 @@ export function resolveComposition(
       for (const c of o.components)
         add(
           c,
-          (o.mode === "inherit"
-            ? exactDivision(integer(c.quantity) * integer(g.factor), SCALE)
-            : integer(c.quantity)) * BigInt(n),
+          integer(
+            consumptionQuantity(
+              c.quantity,
+              c.wastePercent,
+              (o.mode === "inherit" ? integer(g.factor) : SCALE) * BigInt(n),
+              SCALE,
+            ),
+          ),
         );
       modifiers.push({
         recipeModifierOptionId: o.id,

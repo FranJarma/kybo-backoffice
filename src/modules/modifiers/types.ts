@@ -1,9 +1,11 @@
 import type { SaleChannel } from "@/modules/sales/types";
 export type Component = {
+  itemClass?: string;
   itemId: string;
   name: string;
   baseUnit: string;
   quantity: string;
+  wastePercent?: string;
   archived: boolean;
 };
 export type Selection = { recipeModifierOptionId: string; count: number };

@@ -1,4 +1,5 @@
 import type { Entity, EntityDefinition } from "./types";
+import { itemClasses } from "./item-classes";
 export type { Entity, CatalogRow, FieldDefinition } from "./types";
 const name = {
   key: "name",
@@ -57,9 +58,10 @@ export const definitions: Record<Entity, EntityDefinition> = {
     columns: ["name", "kind"],
   },
   items: {
-    title: "Artículos",
+    title: "Catálogo de inventario",
     singular: "artículo",
-    description: "Unidades claras y costos pendientes a la vista.",
+    description:
+      "Todos los artículos: alimentos, bebidas, descartables y limpieza. Clasificá cada uno y definí cómo se utiliza.",
     fields: [
       name,
       { key: "code", label: "Código", type: "text", required: true },
@@ -68,13 +70,8 @@ export const definitions: Record<Entity, EntityDefinition> = {
         label: "Clase",
         type: "select",
         required: true,
-        options: [
-          { value: "food", label: "Alimento" },
-          { value: "beverage", label: "Bebida" },
-          { value: "packaging", label: "Envase" },
-          { value: "cleaning", label: "Limpieza" },
-          { value: "other", label: "Otro" },
-        ],
+        options: itemClasses,
+        hint: "Qué es el artículo. Su clase es independiente de sus usos y de las categorías de la carta.",
       },
       {
         key: "purchasable",
@@ -88,7 +85,8 @@ export const definitions: Record<Entity, EntityDefinition> = {
       },
       {
         key: "recipeUsable",
-        label: "Se usa en recetas",
+        label: "Se incluye en recetas",
+        hint: "Como ingrediente o descartable: suma costo y consumo de stock al preparar el producto.",
         type: "select",
         required: true,
         options: [

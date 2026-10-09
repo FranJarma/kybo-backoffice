@@ -151,11 +151,18 @@ export const modifierOptionComponents = pgTable(
     name: text("name").notNull(),
     baseUnit: text("base_unit").notNull(),
     quantity: qty("quantity"),
+    wastePercent: numeric("waste_percent", { precision: 5, scale: 2 })
+      .notNull()
+      .default("0"),
   },
   (t) => [
     uniqueIndex("modifier_option_components_once").on(t.optionId, t.itemId),
     index("modifier_option_components_item").on(t.itemId),
     check("modifier_option_components_positive", sql`${t.quantity} > 0`),
+    check(
+      "modifier_option_components_waste_range",
+      sql`${t.wastePercent} >= 0 and ${t.wastePercent} < 100`,
+    ),
   ],
 );
 export const recipeModifierOptionComponents = pgTable(
@@ -171,6 +178,9 @@ export const recipeModifierOptionComponents = pgTable(
     name: text("name").notNull(),
     baseUnit: text("base_unit").notNull(),
     quantity: qty("quantity"),
+    wastePercent: numeric("waste_percent", { precision: 5, scale: 2 })
+      .notNull()
+      .default("0"),
   },
   (t) => [
     uniqueIndex("recipe_modifier_option_components_once").on(
@@ -179,6 +189,10 @@ export const recipeModifierOptionComponents = pgTable(
     ),
     index("recipe_modifier_option_components_item").on(t.itemId),
     check("recipe_modifier_option_components_positive", sql`${t.quantity} > 0`),
+    check(
+      "recipe_modifier_option_components_waste_range",
+      sql`${t.wastePercent} >= 0 and ${t.wastePercent} < 100`,
+    ),
   ],
 );
 export const recipeModifierOptionPrices = pgTable(

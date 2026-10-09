@@ -162,6 +162,9 @@ export function createCatalogService(db: AppDb) {
       entity: Entity,
       search = "",
       archived = false,
+      recipeUsableOnly = false,
+      itemScope = "",
+      itemClass = "",
     ): Promise<ListResult> {
       await requireCatalogRead(db, actor);
       const table = tables[entity];
@@ -170,6 +173,20 @@ export function createCatalogService(db: AppDb) {
         .slice(0, 160)
         .replace(/[\\%_]/g, "\\$&");
       const condition = and(
+        entity === "items" &&
+          (recipeUsableOnly ||
+            itemScope === "ingredients" ||
+            itemScope === "recipe")
+          ? eq(items.recipeUsable, true)
+          : undefined,
+        entity === "items" && itemScope === "ingredients"
+          ? inArray(items.class, ["food", "beverage"])
+          : entity === "items" && itemScope === "recipe"
+            ? inArray(items.class, ["food", "beverage", "packaging"])
+            : undefined,
+        entity === "items" && itemClass
+          ? eq(items.class, itemClass)
+          : undefined,
         archived ? isNotNull(table.archivedAt) : isNull(table.archivedAt),
         query ? ilike(table.name, `%${query}%`) : undefined,
       );

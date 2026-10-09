@@ -18,6 +18,9 @@ export async function GET(request: Request, context: Context) {
         entity,
         url.searchParams.get("q") ?? "",
         url.searchParams.get("archived") === "1",
+        url.searchParams.get("recipeUsable") === "1",
+        url.searchParams.get("itemScope") ?? "",
+        url.searchParams.get("class") ?? "",
       ),
     );
   } catch (error) {
