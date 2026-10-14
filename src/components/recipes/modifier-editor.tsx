@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SearchSelect, getJson } from "@/components/inventory/shared";
+import { quantity } from "@/lib/number-format";
 import { inputDecimal } from "./shared";
 import {
   ComponentFields,
@@ -513,15 +514,23 @@ export function ModifierRecipeEditor({
                   {o.name}
                 </label>
                 <div className="grid gap-5 sm:grid-cols-2">
-                  <Field label="Cantidad inicial">
+                  <Field label="Selecciones por defecto">
                     <Input
                       type="number"
                       min={0}
+                      aria-describedby={`default-count-${i}-${j}`}
                       value={o.defaultCount}
                       onChange={(e) =>
                         option(i, j, { defaultCount: Number(e.target.value) })
                       }
                     />
+                    <span
+                      id={`default-count-${i}-${j}`}
+                      className="mt-2 block text-xs leading-relaxed text-muted"
+                    >
+                      Al agregar el producto a una venta: 0 = sin seleccionar; 1
+                      = una elección. No indica gramos ni stock.
+                    </span>
                   </Field>
                   <Field label="Máximo por opción">
                     <Input
@@ -543,7 +552,7 @@ export function ModifierRecipeEditor({
                       <Input
                         value={o.prices[c]}
                         inputMode="decimal"
-                        placeholder="Sin precio"
+                        placeholder="0 — Sin recargo"
                         onChange={(e) =>
                           option(i, j, {
                             prices: { ...o.prices, [c]: e.target.value },
@@ -559,7 +568,7 @@ export function ModifierRecipeEditor({
                     {o.inherited
                       .map(
                         (c) =>
-                          `${c.name ?? "Insumo"} ${c.quantity} ${c.baseUnit ?? ""}`,
+                          `${c.name ?? "Insumo"} ${quantity(c.quantity, c.baseUnit)}`,
                       )
                       .join(" · ")}
                   </p>

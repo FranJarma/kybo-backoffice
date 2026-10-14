@@ -55,6 +55,7 @@ export type ResolvedComposition = {
   surcharge: string;
 };
 export type CompositionCost = {
+  referenceItems?: string[];
   totalCost: string | null;
   knownSubtotal: string;
   missing: string[];

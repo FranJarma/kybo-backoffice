@@ -35,7 +35,10 @@ const recipe = z
                   .object({
                     itemId: z.uuid(),
                     quantity: positiveQuantity,
-                    wastePercent: z.unknown().transform(parseWaste),
+                    wastePercent: z
+                      .unknown()
+                      .default("0")
+                      .transform(parseWaste),
                     baseUnit: unit.optional(),
                   })
                   .strict(),

@@ -22,6 +22,7 @@ export const items = pgTable(
     unitCost: numeric("unit_cost", { precision: 18, scale: 6 }),
     purchasable: boolean("purchasable").notNull(),
     recipeUsable: boolean("recipe_usable").notNull(),
+    stockTracked: boolean("stock_tracked").notNull().default(true),
     revision: integer("revision").notNull().default(1),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })

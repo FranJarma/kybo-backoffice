@@ -92,6 +92,13 @@
       "when": 1791581439594,
       "tag": "0012_purchase_shipping",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1791907453532,
+      "tag": "0013_item_stock_tracking",
+      "breakpoints": true
     }
   ]
 }

@@ -32,6 +32,7 @@ export type ProductionPreview = {
     needed: string;
     usable: string;
     shortfall: string;
+    stockTracked?: boolean;
   }[];
 };
 export type BatchSummary = {

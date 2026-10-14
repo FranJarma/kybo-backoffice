@@ -92,13 +92,24 @@ export const definitions: Record<Entity, EntityDefinition> = {
       {
         key: "recipeUsable",
         label: "Se incluye en recetas",
-        hint: "Como ingrediente o descartable: suma costo y consumo de stock al preparar el producto.",
+        hint: "Como ingrediente o descartable: suma costo. Descuenta stock si controla inventario.",
         type: "select",
         required: true,
         options: [
           { value: "true", label: "Sí" },
           { value: "false", label: "No" },
         ],
+      },
+      {
+        key: "stockTracked",
+        label: "Controlar inventario",
+        type: "select",
+        required: true,
+        options: [
+          { value: "true", label: "Sí" },
+          { value: "false", label: "No" },
+        ],
+        hint: "Desactivá para agua de la canilla: se usa en recetas sin exigir existencias ni descontar stock.",
       },
       {
         key: "baseUnit",

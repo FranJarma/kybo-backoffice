@@ -12,7 +12,7 @@ export const componentInput = z
   .object({
     itemId: z.uuid(),
     quantity: z.unknown().transform((v) => decimal(v, 6, true, true)!),
-    wastePercent: z.unknown().transform(parseWaste),
+    wastePercent: z.unknown().default("0").transform(parseWaste),
     baseUnit: z.enum(["g", "ml", "unit"]).optional(),
   })
   .strict();
@@ -39,6 +39,10 @@ export const groupInput = z
   })
   .strict();
 export const parseGroup = (raw: unknown) => parse(groupInput, raw);
+const surchargeInput = z
+  .unknown()
+  .default("0")
+  .transform((v) => decimal(v, 2, false) ?? "0.00");
 export const bindingInput = z
   .object({
     groupVersionId: z.uuid().optional(),
@@ -60,18 +64,9 @@ export const bindingInput = z
             components: z.array(componentInput).max(30).default([]),
             prices: z
               .object({
-                counter: z
-                  .unknown()
-                  .transform((v) => decimal(v, 2, false))
-                  .optional(),
-                pedidosya: z
-                  .unknown()
-                  .transform((v) => decimal(v, 2, false))
-                  .optional(),
-                ubereats: z
-                  .unknown()
-                  .transform((v) => decimal(v, 2, false))
-                  .optional(),
+                counter: surchargeInput,
+                pedidosya: surchargeInput,
+                ubereats: surchargeInput,
               })
               .strict(),
           })

@@ -81,7 +81,11 @@ export async function postMovement(
   if (!originForAction[input.action].includes(document.kind))
     conflict("El movimiento no corresponde al documento de origen.");
   if (!input.legs.length) conflict("La operación no tiene movimientos.");
-  await lockStock(tx, ctx, input.legs, true);
+  const tracked = await lockStock(tx, ctx, input.legs, true);
+  if (input.legs.some((leg) => !tracked.has(leg.itemId)))
+    conflict(
+      "Este artículo no controla inventario; no admite movimientos de stock.",
+    );
   const result: { value: string | null }[] = [];
   // Preserve caller leg order for paired internal transfers; locks were already sorted.
   for (const leg of input.legs) {

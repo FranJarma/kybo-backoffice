@@ -612,7 +612,7 @@ export function InventoryManager({
                           {money(row.stockValue)}
                         </p>
                         <p className="mt-1 text-xs text-muted">
-                          Promedio {money(row.averageCost, 6)}/{row.baseUnit}
+                          Promedio {money(row.averageCost)}/{row.baseUnit}
                         </p>
                       </td>
                       <td className="block md:table-cell md:px-4 md:py-4">

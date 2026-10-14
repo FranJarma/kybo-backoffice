@@ -19,12 +19,6 @@ import { presentationQuantity } from "@/modules/sourcing/quantities";
 import { entryUnits, baseUnit } from "@/modules/catalog/entry-units";
 
 type Mode = "link" | "presentation" | "quote" | null;
-const comparisonMoney = new Intl.NumberFormat("es-AR", {
-  style: "currency",
-  currency: "ARS",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 6,
-});
 export function ItemSuppliersTab({
   itemId,
   revision,
@@ -55,6 +49,8 @@ export function ItemSuppliersTab({
   const [leadTime, setLeadTime] = useState("");
   const [minimum, setMinimum] = useState("1");
   const [notice, setNotice] = useState("");
+  const [showRemoved, setShowRemoved] = useState(false);
+  const [changingPresentation, setChangingPresentation] = useState(false);
   const formId = useId();
   const url = `/api/items/${itemId}/suppliers`;
   const load = useCallback(async () => {
@@ -105,12 +101,45 @@ export function ItemSuppliersTab({
     success,
   );
   useEffect(() => {
-    onBusy(operation.busy || operation.uncertain);
+    onBusy(operation.busy || operation.uncertain || changingPresentation);
     return () => onBusy(false);
-  }, [onBusy, operation.busy, operation.uncertain]);
-  const locked = operation.locked || loading;
+  }, [onBusy, operation.busy, operation.uncertain, changingPresentation]);
+  const locked = operation.locked || loading || changingPresentation;
   const canEdit = !!data && !data.item.archived && data.item.purchasable;
   const pack = quotePack;
+  async function togglePresentation(p: ItemSourcing["presentations"][number]) {
+    if (locked || !canEdit || mode !== null) return;
+    setChangingPresentation(true);
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch(`/api/catalog/presentations/${p.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ revision: p.revision, archived: !p.archived }),
+      });
+      const result = await response.json();
+      if (!response.ok)
+        throw new Error(
+          result.error ?? "No pudimos actualizar la presentación.",
+        );
+      await load();
+      setNotice(
+        p.archived
+          ? "Presentación restaurada. Ya podés volver a usarla."
+          : "Presentación eliminada de las activas. Las compras y el historial se conservaron. Podés restaurarla desde Ver eliminadas.",
+      );
+    } catch (e) {
+      await load();
+      setError(
+        e instanceof Error
+          ? e.message
+          : "No pudimos confirmar el cambio. Revisá el estado de la presentación antes de reintentar.",
+      );
+    } finally {
+      setChangingPresentation(false);
+    }
+  }
   function start(next: Mode, vendor = "", packId = "") {
     setMode(next);
     setSupplierId(vendor);
@@ -246,6 +275,16 @@ export function ItemSuppliersTab({
         <p role="status" className="text-sm text-muted">
           Cargando proveedores…
         </p>
+      )}
+      {!!data?.presentations.some((p) => p.archived) && (
+        <label className="flex items-center gap-2 text-sm text-muted">
+          <input
+            type="checkbox"
+            checked={showRemoved}
+            onChange={(e) => setShowRemoved(e.target.checked)}
+          />
+          Ver eliminadas
+        </label>
       )}
       {notice && (
         <p
@@ -462,41 +501,66 @@ export function ItemSuppliersTab({
             </Button>
           </div>
           <div className="divide-y divide-line">
-            {!data.presentations.some((p) => p.supplierId === vendor.id) && (
+            {!data.presentations.some(
+              (p) => p.supplierId === vendor.id && !p.archived,
+            ) && (
               <p className="p-4 text-sm text-muted">
-                Proveedor vinculado. Todavía no cargaste presentaciones ni
-                precios.
+                Proveedor vinculado. No hay presentaciones activas.
               </p>
             )}
             {data.presentations
-              .filter((p) => p.supplierId === vendor.id)
+              .filter(
+                (p) =>
+                  p.supplierId === vendor.id && (showRemoved || !p.archived),
+              )
               .map((p) => (
                 <div key={p.id} className="space-y-3 p-4 sm:p-5">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <h4 className="font-medium text-brand">
                         {p.name}
-                        {p.archived && " · Archivada"}
+                        {p.archived && " · Eliminada"}
                       </h4>
                       <p className="mt-1 text-xs text-muted">
                         {quantity(p.baseQuantity, data.item.baseUnit)} por
                         presentación
                       </p>
                     </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={
-                        locked ||
-                        !canEdit ||
-                        p.archived ||
-                        vendor.archived ||
-                        mode !== null
-                      }
-                      onClick={() => start("quote", vendor.id, p.id)}
-                    >
-                      Registrar precio
-                    </Button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={
+                          locked ||
+                          !canEdit ||
+                          p.archived ||
+                          vendor.archived ||
+                          mode !== null
+                        }
+                        onClick={() => start("quote", vendor.id, p.id)}
+                      >
+                        Registrar precio
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className={
+                          p.archived
+                            ? "text-blue"
+                            : "text-red-700 hover:text-red-800"
+                        }
+                        disabled={
+                          locked ||
+                          !canEdit ||
+                          mode !== null ||
+                          (p.archived && vendor.archived)
+                        }
+                        aria-label={`${p.archived ? "Restaurar" : "Eliminar"} presentación ${p.name}`}
+                        onClick={() => void togglePresentation(p)}
+                      >
+                        {p.archived ? "Restaurar" : "Eliminar presentación"}
+                      </Button>
+                    </div>
                   </div>
                   {p.quote ? (
                     <div className="flex flex-wrap gap-x-8 gap-y-3 text-sm">
@@ -511,10 +575,8 @@ export function ItemSuppliersTab({
                           </span>
                         </p>
                         <p className="mt-1 text-blue">
-                          {comparisonMoney.format(
-                            Number(p.quote.comparison.amount),
-                          )}{" "}
-                          / {p.quote.comparison.unit}
+                          {money(p.quote.comparison.amount)} /{" "}
+                          {p.quote.comparison.unit}
                         </p>
                       </div>
                       <div className="text-xs leading-6 text-muted">
@@ -559,8 +621,7 @@ export function ItemSuppliersTab({
                 <p className="mt-1 text-muted">
                   {date(q.quotedOn)} · {money(q.price)} por{" "}
                   {quantity(q.baseQuantity, q.baseUnit)} ·{" "}
-                  {comparisonMoney.format(Number(q.comparison.amount))}/
-                  {q.comparison.unit}
+                  {money(q.comparison.amount)}/{q.comparison.unit}
                 </p>
               </li>
             ))}

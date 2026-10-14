@@ -1,4 +1,5 @@
 "use client";
+import { money, quantity } from "@/lib/number-format";
 import dynamic from "next/dynamic";
 import {
   entryUnits,
@@ -132,7 +133,8 @@ function displayValue(row: CatalogRow, key: string) {
       key,
     )
   )
-    return `${decimalInput(value)} ARS`;
+    return money(String(value));
+  if (key === "baseQuantity") return quantity(String(value));
   return String(value);
 }
 const columnNames: Record<string, string> = {
@@ -378,6 +380,7 @@ export function CatalogManager({
       ...(!row && entity === "items"
         ? {
             purchasable: "true",
+            stockTracked: "true",
             recipeUsable: ingredientsOnly ? "true" : "false",
           }
         : {}),
@@ -1369,7 +1372,11 @@ export function CatalogManager({
                       <div className="grid gap-4 sm:grid-cols-2">
                         {basicFields
                           .filter((field) =>
-                            ["purchasable", "recipeUsable"].includes(field.key),
+                            [
+                              "purchasable",
+                              "recipeUsable",
+                              "stockTracked",
+                            ].includes(field.key),
                           )
                           .map((field) => (
                             <label
@@ -1391,12 +1398,16 @@ export function CatalogManager({
                                 <span className="block text-sm font-medium text-brand">
                                   {field.key === "purchasable"
                                     ? "Lo compro a proveedores"
-                                    : "Lo uso en recetas"}
+                                    : field.key === "stockTracked"
+                                      ? "Controlar inventario"
+                                      : "Lo uso en recetas"}
                                 </span>
                                 <span className="mt-1 block text-xs leading-relaxed text-muted">
                                   {field.key === "purchasable"
                                     ? "Para recibirlo mediante compras."
-                                    : "Suma costo y consumo como ingrediente o descartable."}
+                                    : field.key === "stockTracked"
+                                      ? "Desactivá para agua de la canilla: no exige existencias ni descuenta stock. Podés cambiarlo mientras no tenga operaciones registradas."
+                                      : "Suma costo y consumo como ingrediente o descartable."}
                                 </span>
                               </span>
                             </label>

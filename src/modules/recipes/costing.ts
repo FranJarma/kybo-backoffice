@@ -12,15 +12,22 @@ import type { Component, CompositionCost } from "@/modules/modifiers/types";
 export async function costComposition(
   db: AppDb | Tx,
   components: Component[],
+  branchId?: string,
 ): Promise<CompositionCost> {
-  const estimate = await costContext(db);
+  const estimate = await costContext(db, branchId);
   let total = 0n;
   const missing = new Set<string>();
+  const referenceItems = new Set<string>();
   const lines = components.map((c) => {
     const result = c.archived
-      ? { value: null, missing: [`${c.name} (no disponible)`] }
+      ? {
+          value: null,
+          missing: [`${c.name} (no disponible)`],
+          referenceItems: [],
+        }
       : estimate(c.itemId);
     result.missing.forEach((n) => missing.add(n));
+    result.referenceItems.forEach((n) => referenceItems.add(n));
     const value =
       result.value === null
         ? null
@@ -39,6 +46,7 @@ export async function costComposition(
     totalCost: missing.size ? null : six(total),
     knownSubtotal: six(total),
     missing: [...missing],
+    referenceItems: [...referenceItems],
     components: lines,
   };
 }

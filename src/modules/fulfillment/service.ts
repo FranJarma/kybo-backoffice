@@ -5,6 +5,8 @@ import {
   fulfillmentEvents,
 } from "@/db/fulfillment-event-schema";
 import { reservationAllocations } from "@/db/reservation-schema";
+import { saleLineComponents } from "@/db/modifier-schema";
+import { items } from "@/db/item-schema";
 import {
   preparationTasks,
   preparationTaskLines,
@@ -131,8 +133,15 @@ async function applyLines(
         }
         if (needed !== 0n) fail("La reserva no alcanza para esta cantidad.");
       }
-      if (!consume.length)
-        fail("La línea no tiene una reserva física disponible.");
+      if (!consume.length) {
+        const components = await tx
+          .select({ tracked: items.stockTracked })
+          .from(saleLineComponents)
+          .innerJoin(items, eq(items.id, saleLineComponents.itemId))
+          .where(eq(saleLineComponents.saleLineId, row.saleLineId));
+        if (!components.length || components.some((c) => c.tracked))
+          fail("La línea no tiene una reserva física disponible.");
+      }
       if (consume.length) {
         await settleReservation(tx, ctx, {
           reservationId: row.reservationId,
@@ -161,16 +170,14 @@ async function applyLines(
         revision: row.revision + 1,
       })
       .where(eq(saleLineFulfillments.saleLineId, row.saleLineId));
-    await tx
-      .insert(fulfillmentEvents)
-      .values({
-        operationId,
-        branchId: ctx.branchId,
-        saleLineId: row.saleLineId,
-        action,
-        quantity: amount,
-        revision: row.revision + 1,
-      });
+    await tx.insert(fulfillmentEvents).values({
+      operationId,
+      branchId: ctx.branchId,
+      saleLineId: row.saleLineId,
+      action,
+      quantity: amount,
+      revision: row.revision + 1,
+    });
   }
 }
 export async function completePreparation(
@@ -298,16 +305,14 @@ export async function deliverLines(
           deliveredAt: now,
         })
         .where(eq(preparationTasks.id, task.id));
-      await tx
-        .insert(preparationEvents)
-        .values({
-          taskId: task.id,
-          revision: task.revision + 1,
-          action: "deliver",
-          actorId: ctx.actorId,
-          assigneeId: task.assigneeId,
-          createdAt: now,
-        });
+      await tx.insert(preparationEvents).values({
+        taskId: task.id,
+        revision: task.revision + 1,
+        action: "deliver",
+        actorId: ctx.actorId,
+        assigneeId: task.assigneeId,
+        createdAt: now,
+      });
     }
   }
 }

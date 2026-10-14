@@ -18,6 +18,7 @@ export async function lockStock(
       a.itemId.localeCompare(b.itemId) ||
       a.locationId.localeCompare(b.locationId),
   );
+  const tracked = new Set<string>();
   for (const id of [...new Set(ordered.map((p) => p.itemId))]) {
     const [item] = await tx
       .select()
@@ -33,8 +34,9 @@ export async function lockStock(
         "El artículo no está disponible o necesita clasificación.",
         409,
       );
+    if (item.stockTracked) tracked.add(id);
   }
-  for (const id of [...new Set(ordered.map((p) => p.itemId))]) {
+  for (const id of tracked) {
     await tx
       .insert(inventoryValuations)
       .values({
@@ -72,6 +74,7 @@ export async function lockStock(
         "La ubicación no pertenece a esta sucursal o está archivada.",
         409,
       );
+    if (!tracked.has(pair.itemId)) continue;
     await tx
       .insert(locationStockBalances)
       .values({ ...pair, branchId: ctx.branchId })
@@ -87,4 +90,5 @@ export async function lockStock(
       )
       .for("update");
   }
+  return tracked;
 }

@@ -16,6 +16,7 @@ export const itemSchema = z
     baseUnit: z.enum(["g", "ml", "unit"]),
     purchasable: z.boolean(),
     recipeUsable: z.boolean(),
+    stockTracked: z.boolean().default(true),
     unitCost: z
       .string()
       .regex(/^\d{1,12}\.\d{6}$/)

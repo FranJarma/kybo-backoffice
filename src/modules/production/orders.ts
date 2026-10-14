@@ -20,7 +20,13 @@ import type { OperationalContext } from "../operations/types";
 import { reserveStock, settleReservation } from "../inventory/reservations";
 import { postMovement } from "../inventory/ledger";
 import { lockStock } from "../inventory/locking";
-import { integer, six } from "../inventory/decimal";
+import {
+  integer,
+  six,
+  SCALE,
+  roundedDivision,
+  safeScaled,
+} from "../inventory/decimal";
 import { businessDate } from "../operations/business-date";
 import { AppError } from "@/lib/errors";
 import { lotLocationBalances } from "@/db/stock-schema";
@@ -110,10 +116,19 @@ export async function confirmProduction(
       locationId: input.locationId,
     })),
   );
+  const untracked: { itemId: string; unitCost: string | null }[] = [];
+  const [output] = await tx
+    .select()
+    .from(items)
+    .where(eq(items.id, recipe.recipe.outputItemId));
+  if (!output.stockTracked)
+    fail("El preparado obtenido debe controlar inventario.");
   for (const c of components) {
     const [item] = await tx.select().from(items).where(eq(items.id, c.itemId));
     if (!item.recipeUsable || item.class === "unclassified")
       fail("La receta incluye un artículo no habilitado.");
+    if (!item.stockTracked && !untracked.some((u) => u.itemId === item.id))
+      untracked.push({ itemId: item.id, unitCost: item.unitCost });
   }
   const [order] = await tx
     .insert(productionOrders)
@@ -123,7 +138,7 @@ export async function confirmProduction(
       recipeVersionId: input.recipeVersionId,
       outputItemId: recipe.recipe.outputItemId,
       plannedQuantity: input.plannedQuantity,
-      composition: { components, selections: input.selections },
+      composition: { components, selections: input.selections, untracked },
     })
     .returning();
   const [document] = await tx
@@ -224,6 +239,27 @@ export async function finishProduction(
     [...reserved, { itemId: order.outputItemId, locationId: order.locationId }],
     true,
   );
+  const composition = order.composition as {
+    untracked?: { itemId: string; unitCost: string | null }[];
+  };
+  const untracked = composition.untracked ?? [];
+  if (
+    new Set(input.consumption.map((c) => c.itemId)).size !==
+      input.consumption.length ||
+    untracked.some((u) => !input.consumption.some((c) => c.itemId === u.itemId))
+  )
+    fail("Indicá el consumo real de cada artículo confirmado.");
+  let untrackedCost: bigint | null = 0n;
+  for (const u of untracked) {
+    const qty = integer(
+      input.consumption.find((c) => c.itemId === u.itemId)!.quantity,
+    );
+    if (qty > 0n)
+      untrackedCost =
+        untrackedCost === null || u.unitCost === null
+          ? null
+          : untrackedCost + roundedDivision(integer(u.unitCost) * qty, SCALE);
+  }
   const planned = planConsumption(
     reserved.map((a) => ({
       itemId: a.itemId,
@@ -233,7 +269,9 @@ export async function finishProduction(
         integer(a.allocated) - integer(a.consumed) - integer(a.released),
       ),
     })),
-    input.consumption,
+    input.consumption.filter(
+      (c) => !untracked.some((u) => u.itemId === c.itemId),
+    ),
   );
   const { consume, release } = planned,
     extra: StockAllocation[] = [];
@@ -275,7 +313,15 @@ export async function finishProduction(
       })),
     );
   }
-  if (!consume.length && !extra.length)
+  if (
+    !consume.length &&
+    !extra.length &&
+    !input.consumption.some(
+      (c) =>
+        integer(c.quantity) > 0n &&
+        untracked.some((u) => u.itemId === c.itemId),
+    )
+  )
     fail("La producción debe registrar materiales consumidos.");
   await settleReservation(tx, ctx, {
     operationId,
@@ -283,20 +329,30 @@ export async function finishProduction(
     consume,
     release,
   });
-  const costs = await postMovement(tx, ctx, {
-    operationId,
-    documentId: origin.documentId,
-    action: input.outcome === "cancelled" ? "waste" : "production",
-    reason: input.reason,
-    legs: [...consume, ...extra].map((a) => ({
-      ...a,
-      direction: "out",
-      incomingValue: null,
-    })),
-  });
-  const totalCost = costs.some((c) => c.value === null)
-    ? null
-    : six(-costs.reduce((sum, c) => sum + integer(c.value!), 0n));
+  const costs =
+    consume.length || extra.length
+      ? await postMovement(tx, ctx, {
+          operationId,
+          documentId: origin.documentId,
+          action: input.outcome === "cancelled" ? "waste" : "production",
+          reason: input.reason,
+          legs: [...consume, ...extra].map((a) => ({
+            ...a,
+            direction: "out",
+            incomingValue: null,
+          })),
+        })
+      : [];
+  const totalCost =
+    untrackedCost === null || costs.some((c) => c.value === null)
+      ? null
+      : six(
+          safeScaled(
+            untrackedCost -
+              costs.reduce((sum, c) => sum + integer(c.value!), 0n),
+            24,
+          ),
+        );
   // Reservations were settled and outgoing movements posted above, in the
   // same executeCommand transaction. A failed update rolls back both operations.
   if (input.outcome === "cancelled") {

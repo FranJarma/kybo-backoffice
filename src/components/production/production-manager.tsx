@@ -687,8 +687,9 @@ function ProductionForm({
                       <p
                         className={`ml-12 mt-1 text-xs ${availability.shortfall !== "0.000000" ? "text-red-700" : "text-muted"}`}
                       >
-                        Disponible:{" "}
-                        {quantity(availability.usable, availability.baseUnit)}
+                        {availability.stockTracked === false
+                          ? "Sin control de inventario"
+                          : `Disponible: ${quantity(availability.usable, availability.baseUnit)}`}
                         {availability.shortfall !== "0.000000" &&
                           ` · Faltan ${quantity(availability.shortfall, availability.baseUnit)}`}
                       </p>
@@ -763,7 +764,7 @@ function ProductionForm({
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
               label="Esperado"
-              value={expected ? inputDecimal(expected) : ""}
+              value={expected ? quantity(expected) : ""}
               unit={recipe.baseUnit}
             />
             <Field
@@ -853,7 +854,7 @@ function ProductionForm({
             />
             <SummaryLine
               label={`Costo por ${unitLabel(recipe.baseUnit)}`}
-              value={preview ? money(preview.unitCost, 6) : "Por calcular"}
+              value={preview ? money(preview.unitCost) : "Por calcular"}
             />
           </dl>
           {preview?.missingCosts.length ? (

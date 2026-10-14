@@ -83,20 +83,20 @@ export function CostSimulator({ recipe }: { recipe: RecipeDetail }) {
       )}
       <div className="border-t border-blue-100 pt-3">
         <p className="text-sm">
-          Costo de reposición:{" "}
+          Costo estimado:{" "}
           <strong>
             {error
               ? "Revisar selección"
               : busy
                 ? "Calculando…"
                 : cost
-                  ? money(cost.totalCost, 6)
-                  : money(recipe.cost.unitCost, 6)}
+                  ? money(cost.totalCost)
+                  : money(recipe.cost.unitCost)}
           </strong>
         </p>
         {cost?.totalCost === null && (
           <p className="text-xs text-amber-800">
-            Subtotal conocido: {money(cost.knownSubtotal, 6)}. Falta:{" "}
+            Subtotal conocido: {money(cost.knownSubtotal)}. Falta:{" "}
             {cost.missing.join(", ")}.
           </p>
         )}
@@ -111,8 +111,15 @@ export function CostSimulator({ recipe }: { recipe: RecipeDetail }) {
         </div>
       )}
       <p className="text-xs text-muted">
+        Usa el costo promedio del inventario de la sucursal, incluido el envío.
         Simular no registra una venta ni modifica stock.
       </p>
+      {!!(cost ?? recipe.cost).referenceItems?.length && (
+        <p className="text-xs text-muted">
+          Sin stock, se usó el costo de referencia de:{" "}
+          {(cost ?? recipe.cost).referenceItems?.join(", ")}.
+        </p>
+      )}
     </section>
   );
 }

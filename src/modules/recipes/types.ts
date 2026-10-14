@@ -37,6 +37,7 @@ export type RecipeLine = {
   options: RecipeOption[];
 };
 export type CostResult = {
+  referenceItems?: string[];
   totalCost: string | null;
   unitCost: string | null;
   missing: string[];

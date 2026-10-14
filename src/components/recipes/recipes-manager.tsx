@@ -361,10 +361,7 @@ export function RecipesManager({ actorId }: { actorId: string }) {
                               ? unitLabel(row.baseUnit)
                               : "unidad"}
                           </span>
-                          {money(
-                            row.unitCost,
-                            row.kind === "preparation" ? 6 : 2,
-                          )}
+                          {money(row.unitCost)}
                         </span>
                         <span className="text-right font-semibold">
                           <span className="mb-1 block text-xs font-normal text-muted">
@@ -429,10 +426,7 @@ export function RecipesManager({ actorId }: { actorId: string }) {
                           </button>
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
-                          {money(
-                            row.unitCost,
-                            row.kind === "preparation" ? 6 : 2,
-                          )}
+                          {money(row.unitCost)}
                           {row.kind === "preparation" && (
                             <span className="block text-xs text-muted">
                               por {unitLabel(row.baseUnit)}
@@ -632,8 +626,8 @@ function RecipePanel({
       {old && (
         <div className="mb-4">
           <Notice>
-            Estás viendo una versión anterior. Los costos se calculan con
-            precios actuales.
+            Estás viendo una versión anterior. Los costos se calculan con costos
+            actuales de la sucursal.
             <button
               className="mt-2 block font-bold underline"
               onClick={() => onVersion("")}
@@ -665,7 +659,7 @@ function RecipePanel({
                 </span>
                 <span className="max-w-[60%] text-right text-xs text-muted tabular-nums">
                   {option
-                    ? `${quantity(option.quantity, option.baseUnit)} útiles · ${option.wastePercent ?? "0.00"}% merma · ${quantity(consumptionQuantity(option.quantity, option.wastePercent), option.baseUnit)} consumo`
+                    ? `${quantity(option.quantity, option.baseUnit)} útiles · ${quantity(option.wastePercent ?? "0")}% merma · ${quantity(consumptionQuantity(option.quantity, option.wastePercent), option.baseUnit)} consumo`
                     : "Omitido"}
                 </span>
               </div>
@@ -717,7 +711,7 @@ function RecipePanel({
         {recipe.kind === "preparation" && (
           <SummaryLine
             label={`Costo por ${unitLabel(recipe.baseUnit)}`}
-            value={cost ? money(cost.unitCost, 6) : "—"}
+            value={cost ? money(cost.unitCost) : "—"}
           />
         )}
       </dl>
@@ -738,8 +732,8 @@ function RecipePanel({
         <Notice>
           <strong>Costo pendiente</strong>
           <p className="mt-1">
-            Faltan precios o hay artículos archivados: {cost.missing.join(", ")}
-            .
+            Faltan costos, hay valoraciones pendientes o artículos archivados:{" "}
+            {cost.missing.join(", ")}.
           </p>
           <Link
             className="mt-2 inline-block font-semibold underline"
@@ -750,8 +744,16 @@ function RecipePanel({
         </Notice>
       ) : (
         <p className="text-xs leading-relaxed text-muted">
-          Costo teórico con precios actuales. No incluye mano de obra, gastos
+          Estimado con el costo promedio del inventario de la sucursal, incluido
+          el envío. Sin stock, usa referencias de la ficha o estima las
+          preparaciones por sus ingredientes. No incluye mano de obra, gastos
           del local ni comisiones de delivery.
+        </p>
+      )}
+      {!!cost?.referenceItems?.length && (
+        <p className="mt-2 text-xs text-muted">
+          Referencias usadas por falta de stock:{" "}
+          {cost.referenceItems.join(", ")}.
         </p>
       )}
       {recipe.notes && (
@@ -932,6 +934,11 @@ export function RecipeEditor({
           <SearchSelect
             entity={kind === "product" ? "products" : "items"}
             label={kind === "product" ? "Producto" : "Preparado a ingresar"}
+            filter={
+              kind === "preparation"
+                ? (row) => row.stockTracked !== false
+                : undefined
+            }
             value={targetId}
             initial={target}
             required
@@ -942,7 +949,9 @@ export function RecipeEditor({
             }}
           />
           <Field
-            label="Rendimiento base"
+            label={
+              kind === "product" ? "Rendimiento base" : "Rendimiento final"
+            }
             value={kind === "product" ? "1" : yieldQuantity}
             onChange={kind === "product" ? undefined : setYield}
             unit={kind === "product" ? "unit" : String(target?.baseUnit ?? "g")}
@@ -950,7 +959,11 @@ export function RecipeEditor({
             hint={
               kind === "product"
                 ? "Una unidad de venta."
-                : "Cantidad obtenida con una receta base."
+                : target?.baseUnit === "g"
+                  ? "Peso final obtenido, listo para usar. Por ejemplo: 2 kg de tapioca cocida y escurrida = 2000 g."
+                  : target?.baseUnit === "ml"
+                    ? "Volumen final obtenido. Por ejemplo: una jarra de 2 litros = 2000 ml."
+                    : "Cantidad de unidades obtenidas al terminar la preparación."
             }
           />
         </div>

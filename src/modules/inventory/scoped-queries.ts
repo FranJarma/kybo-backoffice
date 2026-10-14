@@ -41,13 +41,13 @@ export async function stockByBranch(
             eq(inventoryValuations.branchId, ctx.branchId),
           ),
         )
-        .where(filter)
+        .where(and(filter, eq(items.stockTracked, true)))
         .orderBy(items.name, items.id)
         .limit(100);
       const [{ total }] = await tx
         .select({ total: count() })
         .from(items)
-        .where(filter);
+        .where(and(filter, eq(items.stockTracked, true)));
       const rows = [];
       for (const { item, valuation } of catalog) {
         const lots = await tx

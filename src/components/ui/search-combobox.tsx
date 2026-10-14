@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronDown, Check, X } from "lucide-react";
 import { Input } from "./input";
 
@@ -13,6 +13,8 @@ export function SearchCombobox({
   selectedLabel,
   options,
   required,
+  disabled,
+  loading,
   onChange,
   onSearch,
 }: {
@@ -22,12 +24,20 @@ export function SearchCombobox({
   selectedLabel: string;
   options: Option[];
   required?: boolean;
+  disabled?: boolean;
+  loading?: boolean;
   onChange: (value: string) => void;
   onSearch: (query: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(-1);
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    inputRef.current?.setCustomValidity(
+      required && !value ? "Seleccioná una opción de la lista." : "",
+    );
+  }, [required, value]);
   const rows = options.filter((option) =>
     option.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()),
   );
@@ -44,6 +54,7 @@ export function SearchCombobox({
     onSearch(text);
   }
   function choose(option: Option) {
+    if (inputRef.current?.matches(":disabled")) return;
     onChange(option.id);
     setOpen(false);
     search("");
@@ -59,16 +70,19 @@ export function SearchCombobox({
       }}
     >
       <Input
+        ref={inputRef}
         id={id}
         role="combobox"
         aria-label={label}
         aria-autocomplete="list"
-        aria-expanded={open}
+        aria-expanded={open && !disabled}
+        aria-busy={loading || undefined}
         aria-controls={open ? listId : undefined}
         aria-activedescendant={
           open && rows[active] ? `${listId}-${rows[active].id}` : undefined
         }
-        required={required}
+        required={required && !value}
+        disabled={disabled}
         autoComplete="off"
         placeholder={
           value && open ? selectedLabel : "Escribí para buscar y seleccionar…"
@@ -108,7 +122,7 @@ export function SearchCombobox({
         className="pointer-events-none flex items-center gap-2"
         style={{ position: "absolute", right: 12, top: 0, height: 44 }}
       >
-        {value && (
+        {value && !disabled && (
           <button
             type="button"
             aria-label={`Quitar ${label.toLowerCase()}`}
@@ -128,7 +142,7 @@ export function SearchCombobox({
           className="pointer-events-none text-muted"
         />
       </div>
-      {open && (
+      {open && !disabled && (
         <div className="absolute z-50 mt-2 w-full rounded-xl border border-line bg-white p-1.5 shadow-lg">
           <ul
             id={listId}
@@ -151,7 +165,12 @@ export function SearchCombobox({
               </li>
             ))}
           </ul>
-          {!rows.length && (
+          {loading && (
+            <p role="status" className="px-3 py-2 text-sm text-muted">
+              Buscando opciones…
+            </p>
+          )}
+          {!rows.length && !loading && (
             <p role="status" className="px-3 py-4 text-sm text-muted">
               No hay coincidencias. Probá con otro nombre.
             </p>

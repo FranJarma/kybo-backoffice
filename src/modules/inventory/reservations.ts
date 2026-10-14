@@ -58,19 +58,20 @@ export async function reserveStock(
       ),
     });
   }
-  if (!demands.size) conflict();
-  const ordered = [...demands.values()].sort(
+  let ordered = [...demands.values()].sort(
     (a, b) =>
       a.itemId.localeCompare(b.itemId) ||
       a.locationId.localeCompare(b.locationId),
   );
-  await lockStock(tx, ctx, ordered);
+  const tracked = await lockStock(tx, ctx, ordered);
+  ordered = ordered.filter((d) => tracked.has(d.itemId));
   const [reservation] = await tx
     .insert(stockReservations)
     .values({
       branchId: ctx.branchId,
       documentId: input.documentId,
       operationId: input.operationId,
+      state: ordered.length ? "active" : "settled",
     })
     .returning();
   const allocations: StockAllocation[] = [];

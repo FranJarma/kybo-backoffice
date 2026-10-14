@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { AppDb } from "@/db/client";
 import type { Actor } from "@/lib/access";
 import { requireCatalogRead } from "@/modules/branches/context";
-import { costContext } from "./service";
+import { costContext, recipeCostBranch } from "./service";
 import { consumptionQuantity, parseWaste } from "./waste";
 import {
   decimal,
@@ -36,7 +36,11 @@ const inputSchema = z
 export async function previewRecipeCost(db: AppDb, actor: Actor, raw: unknown) {
   await requireCatalogRead(db, actor);
   const input = inputSchema.parse(raw);
-  const estimate = await costContext(db);
+  const branchId = await recipeCostBranch(db, actor);
+  const estimate = await db.transaction((tx) => costContext(tx, branchId), {
+    isolationLevel: "repeatable read",
+    accessMode: "read only",
+  });
   let total = 0n;
   let complete = true;
   const rows = input.rows.map((row) => {
@@ -58,6 +62,8 @@ export async function previewRecipeCost(db: AppDb, actor: Actor, raw: unknown) {
         else total += amount;
       }
       return {
+        source: cost.source,
+        referenceItems: cost.referenceItems,
         consumption: gross,
         cost: amount === null ? null : six(amount),
         status: amount === null ? "missing-cost" : "ready",

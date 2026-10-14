@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useId, useState } from "react";
 import type { CatalogRow, Entity, ListResult } from "@/modules/catalog/types";
+import { SearchCombobox } from "@/components/ui/search-combobox";
 
 export const today = (timeZone = "America/Argentina/Buenos_Aires") =>
   new Intl.DateTimeFormat("en-CA", {
@@ -9,19 +10,7 @@ export const today = (timeZone = "America/Argentina/Buenos_Aires") =>
     month: "2-digit",
     day: "2-digit",
   }).format(new Date());
-export function quantity(value: string, unit?: string) {
-  return `${new Intl.NumberFormat("es-AR", { maximumFractionDigits: 6 }).format(Number(value))}${unit ? ` ${unit === "unit" ? "unid." : unit}` : ""}`;
-}
-export function money(value: string | null, decimals: 2 | 6 = 2) {
-  return value === null
-    ? "Pendiente"
-    : new Intl.NumberFormat("es-AR", {
-        style: "currency",
-        currency: "ARS",
-        minimumFractionDigits: decimals,
-        maximumFractionDigits: decimals,
-      }).format(Number(value));
-}
+export { quantity, money } from "@/lib/number-format";
 export function date(value: string) {
   const [year, month, day] = value.slice(0, 10).split("-");
   return `${day}/${month}/${year}`;
@@ -306,7 +295,6 @@ export function SearchSelect({
 }) {
   const selectId = useId();
   const [search, setSearch] = useState("");
-  const [searchAvailable, setSearchAvailable] = useState(false);
   const [items, setItems] = useState<CatalogRow[]>([]);
   const [total, setTotal] = useState(0);
   const [error, setError] = useState("");
@@ -325,7 +313,6 @@ export function SearchSelect({
             if (live) {
               setItems(data.rows);
               setTotal(data.total);
-              setSearchAvailable((shown) => shown || data.total > 8);
               setError("");
             }
           })
@@ -344,8 +331,12 @@ export function SearchSelect({
     };
   }, [entity, search, label, itemScope]);
   const options = [
-    ...(cached ? [cached] : []),
-    ...items.filter((r) => !cached || r.id !== cached.id),
+    ...(initial?.id === value ? [initial] : []),
+    ...(cached && cached.id !== initial?.id ? [cached] : []),
+    ...items.filter(
+      (r) =>
+        r.id !== cached?.id && !(initial?.id === value && r.id === initial.id),
+    ),
   ].filter((row) => !filter || filter(row) || row.id === value);
   return (
     <div className="min-w-0">
@@ -356,39 +347,29 @@ export function SearchSelect({
         {label}
         {required ? " *" : ""}
       </label>
-      <select
+      <SearchCombobox
         id={selectId}
-        className="form-control"
-        aria-label={label}
+        label={label}
         value={value}
-        disabled={disabled || (loading && !options.length)}
+        selectedLabel={
+          value
+            ? String(
+                options.find((row) => row.id === value)?.name ??
+                  "Selección actual",
+              )
+            : ""
+        }
+        options={options.map((row) => ({ id: row.id, name: String(row.name) }))}
+        disabled={disabled}
+        loading={loading}
         required={required}
-        onChange={(event) => {
-          const row = options.find((item) => item.id === event.target.value);
+        onSearch={setSearch}
+        onChange={(id) => {
+          const row = options.find((item) => item.id === id);
           setCached(row);
-          onChange(event.target.value, row);
+          onChange(id, row);
         }}
-      >
-        <option value="">
-          {loading ? "Cargando…" : `Elegí ${label.toLowerCase()}`}
-        </option>
-        {options.map((row) => (
-          <option key={row.id} value={row.id}>
-            {row.name}
-          </option>
-        ))}
-      </select>
-      {(searchAvailable || search) && (
-        <input
-          className="form-control mt-2"
-          type="search"
-          value={search}
-          disabled={disabled}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder={`Buscar entre ${total} opciones…`}
-          aria-label={`Buscar ${label.toLowerCase()}`}
-        />
-      )}
+      />
       {total > 100 && (
         <p className="mt-1 text-xs text-muted">
           Hay {total} coincidencias. Escribí para encontrar más opciones.

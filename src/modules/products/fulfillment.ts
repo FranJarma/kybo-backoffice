@@ -72,7 +72,12 @@ export async function publishFulfillment(
       .from(items)
       .where(eq(items.id, input.itemId))
       .for("share");
-    if (!item || item.archivedAt || item.class === "unclassified")
+    if (
+      !item ||
+      item.archivedAt ||
+      !item.stockTracked ||
+      item.class === "unclassified"
+    )
       fail("Elegí un artículo activo y clasificado.");
     if (integer(convertToBase(input.quantity, "unit", "unit")) <= 0n)
       fail("La cantidad debe ser positiva.");

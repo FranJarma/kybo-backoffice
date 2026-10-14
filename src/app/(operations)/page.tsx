@@ -22,16 +22,7 @@ import { createCatalogService } from "@/modules/catalog/service";
 import { createInventoryService } from "@/modules/inventory/service";
 import { user } from "@/db/auth-schema";
 import { eq } from "drizzle-orm";
-const amount = (value: string | null) =>
-  value === null
-    ? "Pendiente"
-    : new Intl.NumberFormat("es-AR", {
-        style: "currency",
-        currency: "ARS",
-        maximumFractionDigits: 2,
-      }).format(Number(value));
-const qty = (value: string, unit: string) =>
-  `${new Intl.NumberFormat("es-AR", { maximumFractionDigits: 6 }).format(Number(value))} ${unit === "unit" ? "unid." : unit}`;
+import { money as amount, quantity as qty } from "@/lib/number-format";
 export default async function HomePage() {
   const actor = await requireActor();
   // Layouts do not serialize child rendering; enforce access before querying user data.

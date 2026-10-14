@@ -97,6 +97,7 @@ const schemas = {
       unitCost: parseDecimal(value.unitCost, 6),
       purchasable: booleanValue(value.purchasable),
       recipeUsable: booleanValue(value.recipeUsable),
+      stockTracked: booleanValue(value.stockTracked),
     };
   }, itemSchema),
   products: z

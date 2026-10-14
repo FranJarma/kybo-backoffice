@@ -31,6 +31,9 @@ export async function createDataModelTestContext(
       await client.exec(
         await readFile("drizzle/0012_purchase_shipping.sql", "utf8"),
       );
+    await client.exec(
+      await readFile("drizzle/0013_item_stock_tracking.sql", "utf8"),
+    );
     return {
       ...fixture,
       client,

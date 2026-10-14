@@ -158,7 +158,19 @@ it("binds modifier composition to recipe versions and costs chosen items once", 
         },
       ],
     }),
-  ).rejects.toMatchObject({ status: 400 });
+  ).resolves.toMatchObject({
+    configuration: {
+      groups: [
+        expect.objectContaining({
+          options: [
+            expect.objectContaining({
+              prices: { counter: "0.00", pedidosya: "0.00", ubereats: "0.00" },
+            }),
+          ],
+        }),
+      ],
+    },
+  });
 });
 it("snapshots modifiers in sale and retries safely after group changes", async () => {
   const { products, productPrices, saleLineComponents, inventoryMovements } =
@@ -635,7 +647,7 @@ it("publishes reviewed new groups atomically with recipe and rolls back failed p
             optionKey: "a",
             enabled: true,
             defaultCount: 1,
-            maxCount: 1,
+            maxCount: 0,
             mode: "inherit",
             prices: {},
           },
@@ -651,7 +663,7 @@ it("publishes reviewed new groups atomically with recipe and rolls back failed p
       .from(modifierGroups)
       .where(eq(modifierGroups.name, "Atomic new group")),
   ).toHaveLength(0);
-  input.groups[0].options[0].prices = { counter: "0" };
+  input.groups[0].options[0].maxCount = 1;
   const r = await svc.save(actor, input);
   expect(r.configuration?.groups).toHaveLength(1);
   expect(

@@ -2,6 +2,7 @@ import { consumptionQuantity } from "./waste";
 import {
   requireCatalogManagement,
   requireCatalogRead,
+  requireOperationalContext,
 } from "../branches/context";
 import { publishFulfillment } from "../products/fulfillment";
 import {
@@ -14,6 +15,7 @@ import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import type { AppDb } from "@/db/client";
 import { items, products, productPrices } from "@/db/business-schema";
+import { inventoryValuations } from "@/db/stock-schema";
 import {
   recipes,
   recipeVersions,
@@ -173,18 +175,35 @@ async function graph(db: ReadDb) {
       .map((o) => o.option),
   }));
 }
-export async function costContext(db: ReadDb) {
+export async function recipeCostBranch(db: AppDb, actor: Actor) {
+  return actor.branchId
+    ? (await requireOperationalContext(db, actor, actor.branchId)).branchId
+    : undefined;
+}
+type EstimatedItemCost = {
+  value: bigint | null;
+  missing: string[];
+  referenceItems: string[];
+  source: "inventory" | "reference" | "preparation" | "missing" | "untracked";
+};
+export async function costContext(db: ReadDb, branchId?: string) {
   const stock = new Map((await db.select().from(items)).map((i) => [i.id, i]));
+  const valuations = new Map(
+    (branchId
+      ? await db
+          .select()
+          .from(inventoryValuations)
+          .where(eq(inventoryValuations.branchId, branchId))
+      : []
+    ).map((v) => [v.itemId, v]),
+  );
   const prepared = new Map(
     (await graph(db))
       .filter((r) => r.recipe.kind === "preparation")
       .map((r) => [r.recipe.outputItemId!, r]),
   );
-  const cache = new Map<string, { value: bigint | null; missing: string[] }>();
-  const estimate = (
-    id: string,
-    path: string[] = [],
-  ): { value: bigint | null; missing: string[] } => {
+  const cache = new Map<string, EstimatedItemCost>();
+  const estimate = (id: string, path: string[] = []): EstimatedItemCost => {
     if (path.includes(id) || path.length > 100)
       invalid(
         "Hay un ciclo o demasiados niveles en las preparaciones.",
@@ -198,20 +217,59 @@ export async function costContext(db: ReadDb) {
       return {
         value: null,
         missing: [item ? `${item.name} (archivado)` : "Insumo no disponible"],
+        referenceItems: [],
+        source: "missing",
       };
+    if (!item.stockTracked) {
+      const result: EstimatedItemCost = {
+        value: item.unitCost === null ? null : integer(item.unitCost),
+        missing: item.unitCost === null ? [item.name] : [],
+        referenceItems: [],
+        source: "untracked",
+      };
+      cache.set(id, result);
+      return result;
+    }
+    const valuation = valuations.get(id);
+    if (valuation && integer(valuation.quantity) > 0n) {
+      const result: EstimatedItemCost = {
+        value:
+          valuation.value === null
+            ? null
+            : safeScaled(
+                roundedDivision(
+                  integer(valuation.value) * SCALE,
+                  integer(valuation.quantity),
+                ),
+                24,
+              ),
+        missing:
+          valuation.value === null
+            ? [`${item.name} (valor de inventario pendiente)`]
+            : [],
+        referenceItems: [],
+        source: "inventory",
+      };
+      cache.set(id, result);
+      return result;
+    }
     const prep = prepared.get(id);
-    let result: { value: bigint | null; missing: string[] };
+    let result: EstimatedItemCost;
     if (!prep)
       result = {
         value: item.unitCost === null ? null : integer(item.unitCost),
         missing: item.unitCost === null ? [item.name] : [],
+        referenceItems: item.unitCost === null ? [] : [item.name],
+        source: item.unitCost === null ? "missing" : "reference",
       };
     else {
       let total = 0n;
       const missing = new Set<string>();
+      const referenceItems = new Set<string>();
       for (const o of prep.options.filter((o) => o.position === 0)) {
         const cost = estimate(o.itemId, [...path, id]);
         cost.missing.forEach((n) => missing.add(n));
+        cost.referenceItems.forEach((n) => referenceItems.add(n));
         if (cost.value !== null)
           total += roundedDivision(
             cost.value *
@@ -230,6 +288,8 @@ export async function costContext(db: ReadDb) {
               24,
             ),
         missing: [...missing],
+        referenceItems: [...referenceItems],
+        source: "preparation",
       };
     }
     cache.set(id, result);
@@ -241,8 +301,9 @@ async function calculate(
   db: ReadDb,
   recipe: Omit<RecipeDetail, "cost">,
   selections: { lineId: string; optionId: string | null }[] = [],
+  branchId?: string,
 ): Promise<CostResult> {
-  const estimate = await costContext(db);
+  const estimate = await costContext(db, branchId);
   const choices = new Map<string, string | null>();
   for (const choice of selections) {
     if (
@@ -254,6 +315,7 @@ async function calculate(
   }
   let total = 0n;
   const missing = new Set<string>();
+  const referenceItems = new Set<string>();
   const lines = recipe.lines.map((line) => {
     // Include comparable replacement costs in the detail response.
     for (const o of line.options) {
@@ -272,6 +334,7 @@ async function calculate(
     if (!option) return invalid("La alternativa no pertenece a esta receta.");
     const cost = estimate(option.itemId);
     cost.missing.forEach((n) => missing.add(n));
+    cost.referenceItems.forEach((n) => referenceItems.add(n));
     const value =
       cost.value === null
         ? null
@@ -304,6 +367,7 @@ async function calculate(
           ),
         ),
     missing: [...missing],
+    referenceItems: [...referenceItems],
     lines,
   };
 }
@@ -311,6 +375,7 @@ async function detail(
   db: ReadDb,
   id: string,
   versionId?: string,
+  branchId?: string,
 ): Promise<RecipeDetail> {
   const recipe = await recipeDefinition(db, id, versionId);
   if (recipe.compositionModel === "configurable") {
@@ -320,6 +385,7 @@ async function detail(
       db,
       resolveComposition(configuration, defaultSelections(configuration))
         .components,
+      branchId,
     );
     return {
       ...recipe,
@@ -328,11 +394,12 @@ async function detail(
         totalCost: cost.totalCost,
         unitCost: cost.totalCost,
         missing: cost.missing,
+        referenceItems: cost.referenceItems,
         lines: [],
       },
     };
   }
-  return { ...recipe, cost: await calculate(db, recipe) };
+  return { ...recipe, cost: await calculate(db, recipe, [], branchId) };
 }
 async function assertAcyclic(db: ReadDb, output: string, inputs: string[]) {
   const dependencies = new Map(
@@ -363,6 +430,7 @@ export function createRecipeService(db: AppDb) {
   return {
     async save(actor: Actor, raw: unknown): Promise<RecipeDetail> {
       await requireCatalogManagement(db, actor);
+      const branchId = await recipeCostBranch(db, actor);
       const input = parseRecipe(raw);
       if (
         input.compositionModel === "legacy" &&
@@ -396,7 +464,7 @@ export function createRecipeService(db: AppDb) {
             .from(recipeVersions)
             .where(eq(recipeVersions.id, previous));
           if (!version) notFound();
-          return detail(tx, version.recipeId, previous);
+          return detail(tx, version.recipeId, previous, branchId);
         }
         await tx
           .insert(recipeGraphLock)
@@ -472,6 +540,8 @@ export function createRecipeService(db: AppDb) {
           outputUnit = "unit";
         } else {
           const target = locked.get(input.targetId)!;
+          if (!target.stockTracked)
+            conflict("El preparado obtenido debe controlar inventario.");
           name = target.name;
           outputUnit = target.baseUnit;
         }
@@ -586,20 +656,22 @@ export function createRecipeService(db: AppDb) {
           versionId,
           revision,
         });
-        return detail(tx, id);
+        return detail(tx, id, undefined, branchId);
       });
     },
     async get(actor: Actor, id: string, versionId?: string) {
       await requireCatalogRead(db, actor);
+      const branchId = await recipeCostBranch(db, actor);
       recipeId(id);
       if (versionId) recipeId(versionId);
-      return db.transaction((tx) => detail(tx, id, versionId), {
+      return db.transaction((tx) => detail(tx, id, versionId, branchId), {
         isolationLevel: "repeatable read",
         accessMode: "read only",
       });
     },
     async cost(actor: Actor, id: string, raw: unknown) {
       await requireCatalogRead(db, actor);
+      const branchId = await recipeCostBranch(db, actor);
       recipeId(id);
       const input = parseSelections(raw);
       return db.transaction(
@@ -616,9 +688,10 @@ export function createRecipeService(db: AppDb) {
                 config,
                 input.modifiers ?? defaultSelections(config),
               ).components,
+              branchId,
             );
           }
-          return calculate(tx, recipe, input.selections);
+          return calculate(tx, recipe, input.selections, branchId);
         },
         { isolationLevel: "repeatable read", accessMode: "read only" },
       );
@@ -630,6 +703,7 @@ export function createRecipeService(db: AppDb) {
       offset = 0,
     ): Promise<RecipeList> {
       await requireCatalogRead(db, actor);
+      const branchId = await recipeCostBranch(db, actor);
       if (kind && !["product", "preparation"].includes(kind))
         invalid("Tipo de receta inválido.");
       if (!Number.isSafeInteger(offset) || offset < 0 || offset > 1_000_000)
@@ -684,7 +758,7 @@ export function createRecipeService(db: AppDb) {
               ),
             )
             .where(where);
-          const estimate = await costContext(tx);
+          const estimate = await costContext(tx, branchId);
           const currentGraph = await graph(tx);
           const unitCosts = new Map(
             currentGraph.map((r) => {
@@ -732,6 +806,7 @@ export function createRecipeService(db: AppDb) {
                     tx,
                     resolveComposition(config, defaultSelections(config))
                       .components,
+                    branchId,
                   )
                 ).totalCost,
               );

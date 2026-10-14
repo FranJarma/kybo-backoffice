@@ -1,0 +1,1 @@
+ALTER TABLE "items" ADD COLUMN "stock_tracked" boolean DEFAULT true NOT NULL;

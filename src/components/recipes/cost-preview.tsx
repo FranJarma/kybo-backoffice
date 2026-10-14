@@ -15,7 +15,14 @@ export type PreviewRow = {
   include?: boolean;
 };
 type Result = {
-  rows: { consumption: string | null; cost: string | null; status: string }[];
+  rows: {
+    consumption: string | null;
+    cost: string | null;
+    status: string;
+    source?:
+      "inventory" | "reference" | "preparation" | "missing" | "untracked";
+    referenceItems?: string[];
+  }[];
   totalCost: string | null;
   knownSubtotal: string;
   unitCost: string | null;
@@ -75,6 +82,11 @@ export function CostPreview({
     >
       <h3 className="font-semibold text-brand">Costo estimado</h3>
       <p className="text-xs leading-relaxed text-muted">
+        Usa el costo promedio del inventario de la sucursal, incluido el envío.
+        Sin stock, usa la referencia de la ficha o estima la preparación a
+        partir de sus ingredientes.
+      </p>
+      <p className="text-xs leading-relaxed text-muted">
         Ingresá cantidades útiles. El consumo incluye la merma y se redondea
         hacia arriba a seis decimales. El total usa las opciones
         predeterminadas; los costos pendientes no se consideran cero.
@@ -123,16 +135,18 @@ export function CostPreview({
                           )}
                         </td>
                         <td className="whitespace-nowrap px-2 py-3">
-                          {row.quantity || "—"} {row.baseUnit}
+                          {row.quantity
+                            ? quantity(row.quantity, row.baseUnit)
+                            : "—"}
                           {row.multiplier && row.multiplier !== "1"
-                            ? ` × ${row.multiplier}`
+                            ? ` × ${quantity(row.multiplier)}`
                             : ""}
                           {row.count !== undefined && row.count !== 1
                             ? ` × ${row.count}`
                             : ""}
                         </td>
                         <td className="px-2 py-3">
-                          {row.wastePercent || "0"}%
+                          {quantity(row.wastePercent || "0")}%
                         </td>
                         <td className="whitespace-nowrap px-2 py-3">
                           {current?.result?.rows[i]?.consumption
@@ -148,6 +162,29 @@ export function CostPreview({
                             : current?.result?.rows[i]?.status === "incomplete"
                               ? "Completá los datos"
                               : "Costo pendiente"}
+                          <span className="block text-xs text-muted">
+                            {current?.result?.rows[i]?.source === "inventory"
+                              ? "Promedio de inventario"
+                              : current?.result?.rows[i]?.source === "untracked"
+                                ? "Sin control de inventario"
+                                : current?.result?.rows[i]?.source ===
+                                    "reference"
+                                  ? "Referencia de la ficha · sin stock"
+                                  : current?.result?.rows[i]?.source ===
+                                      "preparation"
+                                    ? "Estimado de preparación"
+                                    : ""}
+                          </span>
+                          {!!current?.result?.rows[i]?.referenceItems?.length &&
+                            current.result.rows[i].source === "preparation" && (
+                              <span className="block whitespace-normal text-xs text-muted">
+                                Incluye referencias:{" "}
+                                {current.result.rows[i].referenceItems?.join(
+                                  ", ",
+                                )}
+                                .
+                              </span>
+                            )}
                         </td>
                       </tr>
                     ))}
@@ -177,7 +214,7 @@ export function CostPreview({
             <span>
               Por unidad de rendimiento:{" "}
               {current.result?.unitCost != null
-                ? money(current.result.unitCost, 6)
+                ? money(current.result.unitCost)
                 : "—"}
             </span>
           </>

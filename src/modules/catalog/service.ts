@@ -25,6 +25,7 @@ import {
   count,
   asc,
   inArray,
+  sql,
 } from "drizzle-orm";
 import {
   suppliers,
@@ -38,9 +39,11 @@ import {
   auditEvents,
 } from "@/db/business-schema";
 import { parseInput, parseUpdate } from "./validation";
-import { recipes, recipeOptions } from "@/db/recipe-schema";
+import { recipes, recipeOptions, recipeLines } from "@/db/recipe-schema";
+import { productionOrders } from "@/db/production-order-schema";
 import { inventoryMovements } from "@/db/inventory-schema";
 import { stockMovements } from "@/db/stock-movement-schema";
+import { inventoryValuations } from "@/db/stock-schema";
 import { productFulfillmentVersions } from "@/db/product-fulfillment-schema";
 
 const tables = {
@@ -282,7 +285,8 @@ export function createCatalogService(db: AppDb) {
         if (
           entity === "items" &&
           values &&
-          values.baseUnit !== before.baseUnit
+          (values.baseUnit !== before.baseUnit ||
+            values.stockTracked !== before.stockTracked)
         ) {
           const [used] = await tx
             .select({ id: purchasePresentations.id })
@@ -329,20 +333,43 @@ export function createCatalogService(db: AppDb) {
             .from(saleLineComponents)
             .where(eq(saleLineComponents.itemId, id))
             .limit(1);
+          const [stockUse] = await tx
+            .select({ itemId: inventoryValuations.itemId })
+            .from(inventoryValuations)
+            .where(
+              and(
+                eq(inventoryValuations.itemId, id),
+                sql`(${inventoryValuations.quantity} <> 0 or ${inventoryValuations.value} is null or ${inventoryValuations.value} <> 0)`,
+              ),
+            )
+            .limit(1);
+          const [productionUse] = await tx
+            .select({ id: productionOrders.id })
+            .from(productionOrders)
+            .innerJoin(
+              recipeLines,
+              eq(recipeLines.versionId, productionOrders.recipeVersionId),
+            )
+            .innerJoin(recipeOptions, eq(recipeOptions.lineId, recipeLines.id))
+            .where(eq(recipeOptions.itemId, id))
+            .limit(1);
+          const unitChanged = values.baseUnit !== before.baseUnit;
           if (
-            used ||
+            (unitChanged &&
+              (used || recipeUse || modifierUse || overrideUse)) ||
             hasHistory ||
             physicalHistory ||
             directProduct ||
-            recipeUse ||
             recipeOutput ||
-            modifierUse ||
-            overrideUse ||
-            saleUse
+            saleUse ||
+            stockUse ||
+            productionUse
           )
             throw new AppError(
-              "UNIT_IN_USE",
-              "Este insumo tiene presentaciones, recetas o historial de inventario. Conservá su unidad base.",
+              unitChanged ? "UNIT_IN_USE" : "STOCK_TRACKING_IN_USE",
+              unitChanged
+                ? "Este artículo ya tiene referencias o historial. Conservá su unidad base."
+                : "No se puede cambiar la modalidad de inventario: el artículo tiene stock, operaciones registradas o se utiliza como producto de salida. Las recetas y presentaciones por sí solas no impiden el cambio.",
               409,
             );
         }

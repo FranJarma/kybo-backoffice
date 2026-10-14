@@ -140,6 +140,8 @@ async function prepare(
     const [row] = await tx.select().from(items).where(eq(items.id, id));
     if (!row || row.archivedAt || !row.recipeUsable)
       conflict("Elegí artículos activos habilitados para recetas.");
+    if (id === recipe.targetId && !row.stockTracked)
+      conflict("El preparado obtenido debe controlar inventario.");
     const [balance] = await tx
       .select({
         itemId: inventoryValuations.itemId,
@@ -176,6 +178,20 @@ async function prepare(
   const missingCosts = new Set<string>();
   for (const [id, qty] of [...needed].sort(([a], [b]) => a.localeCompare(b))) {
     const { row, balance } = locked.get(id)!;
+    if (!row.stockTracked) {
+      if (row.unitCost === null) missingCosts.add(row.name);
+      else totalCost += roundedDivision(integer(row.unitCost) * qty, SCALE);
+      availability.push({
+        itemId: id,
+        name: row.name,
+        baseUnit: row.baseUnit,
+        needed: six(qty),
+        usable: "0.000000",
+        shortfall: "0.000000",
+        stockTracked: false,
+      });
+      continue;
+    }
     const query = tx
       .select({
         id: inventoryLots.id,
@@ -294,6 +310,8 @@ async function prepare(
     balances: [...locked].map(([id, { row, balance }]) => ({
       id,
       baseUnit: row.baseUnit,
+      stockTracked: row.stockTracked,
+      unitCost: row.unitCost,
       ...balance,
     })),
     lots: lotState,
@@ -449,17 +467,18 @@ export function createProductionService(
           consume: reservation.allocations,
           release: [],
         });
-        await postMovement(tx, ctx, {
-          operationId: requestId,
-          documentId: document.id,
-          action: "production",
-          reason: input.notes,
-          legs: reservation.allocations.map((a) => ({
-            ...a,
-            direction: "out",
-            incomingValue: null,
-          })),
-        });
+        if (reservation.allocations.length)
+          await postMovement(tx, ctx, {
+            operationId: requestId,
+            documentId: document.id,
+            action: "production",
+            reason: input.notes,
+            legs: reservation.allocations.map((a) => ({
+              ...a,
+              direction: "out",
+              incomingValue: null,
+            })),
+          });
         const [lot] = await tx
           .insert(inventoryLots)
           .values({
