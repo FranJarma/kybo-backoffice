@@ -1,3 +1,4 @@
+import type { PreparationGuide } from "@/modules/recipes/preparation-guide";
 import type { SaleOrigin, SaleChannel } from "@/modules/sales/types";
 export type PrepStatus =
   "pending" | "preparing" | "ready" | "delivered" | "cancelled";
@@ -56,6 +57,7 @@ export type PrepTask = {
     id: string;
     name: string;
     quantity: number;
+    preparation?: PreparationGuide | null;
     notes: string | null;
   }[];
   siblings: { id: string; stationName: string; status: PrepStatus }[];

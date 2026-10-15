@@ -29,9 +29,11 @@ type Result = {
 };
 export function CostPreview({
   rows,
+  active = true,
   yieldQuantity = "1",
 }: {
   rows: PreviewRow[];
+  active?: boolean;
   yieldQuantity?: string;
 }) {
   const payload = JSON.stringify({
@@ -51,6 +53,7 @@ export function CostPreview({
     error?: string;
   }>();
   useEffect(() => {
+    if (!active) return;
     const controller = new AbortController();
     const timer = setTimeout(async () => {
       try {
@@ -73,7 +76,7 @@ export function CostPreview({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [payload]);
+  }, [payload, active]);
   const current = state?.payload === payload ? state : undefined;
   return (
     <section

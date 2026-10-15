@@ -1,4 +1,5 @@
 "use client";
+import { PreparationInstructions } from "./instructions";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
@@ -77,7 +78,7 @@ export function PrepDetailDialog({
         if (!v) onClose();
       }}
     >
-      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>
             Detalle de comanda
@@ -136,6 +137,7 @@ export function PrepDetailDialog({
                         : ""}
                     </p>
                   ))}
+                  <PreparationInstructions guide={l.preparation} />
                   {l.notes && (
                     <p className="mt-1 whitespace-pre-wrap text-xs text-muted">
                       {l.notes}

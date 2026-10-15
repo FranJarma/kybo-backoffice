@@ -4,6 +4,11 @@ import {
   bindProductImage,
 } from "./product-fields";
 import {
+  isOrderedEntity,
+  lockCatalogOrder,
+  nextCatalogOrder,
+} from "./ordering";
+import {
   requireCatalogManagement,
   requireCatalogRead,
 } from "../branches/context";
@@ -221,6 +226,8 @@ export function createCatalogService(db: AppDb) {
       await requireCatalogManagement(db, actor);
       const values = parseInput(entity, input);
       return db.transaction(async (tx) => {
+        if (isOrderedEntity(entity))
+          values.sortOrder = await nextCatalogOrder(tx, entity);
         if (entity === "presentations") await checkReferences(tx, values);
         if (entity === "products") await checkProductCategory(tx, values);
         // Validation above whitelists the fields for this table, including required name.
@@ -262,8 +269,10 @@ export function createCatalogService(db: AppDb) {
         throw new AppError("VALIDATION", "Identificador inválido.", 400);
       const change = parseUpdate(input);
       const values = change.fields ? parseInput(entity, change.fields) : null;
+      if (values && isOrderedEntity(entity)) delete values.sortOrder;
       const table = tables[entity];
       return db.transaction(async (tx) => {
+        if (isOrderedEntity(entity)) await lockCatalogOrder(tx, entity);
         const [current] = await tx
           .select()
           .from(table)

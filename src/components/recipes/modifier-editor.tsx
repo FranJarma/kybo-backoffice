@@ -1,7 +1,10 @@
 "use client";
+import { PreparationFields, emptyPreparation } from "./preparation-fields";
 import { CostPreview } from "./cost-preview";
+import { VariantCostPreview } from "./variant-cost-preview";
 import { Control as Field } from "@/components/sales/shared";
-import { useEffect, useState } from "react";
+import { RecipeEditorTabs, type RecipeEditorView } from "./editor-tabs";
+import { useEffect, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SearchSelect, getJson } from "@/components/inventory/shared";
@@ -55,6 +58,7 @@ export function ModifierRecipeEditor({
   disabled,
   error,
   productId,
+  view,
 }: {
   initial?: RecipeDetail;
   onSave: (input: RecipeInput) => void;
@@ -62,7 +66,14 @@ export function ModifierRecipeEditor({
   disabled: boolean;
   error: string;
   productId?: string;
+  view?: RecipeEditorView;
 }) {
+  const [preparation, setPreparation] = useState(
+    initial?.preparation ?? emptyPreparation,
+  );
+  const tabsId = useId();
+  const [localView, setLocalView] = useState<RecipeEditorView>("recipe");
+  const activeView = view ?? localView;
   const [targetId, setTargetId] = useState(
     initial?.targetId ?? productId ?? "",
   );
@@ -248,7 +259,7 @@ export function ModifierRecipeEditor({
       className="space-y-8"
       onSubmit={(e) => {
         e.preventDefault();
-        if (!legacyReviewed) return;
+        if (!legacyReviewed || activeView === "cost") return;
         onSave({
           requestId: crypto.randomUUID(),
           id: initial?.id,
@@ -258,6 +269,10 @@ export function ModifierRecipeEditor({
           targetUnit: "unit",
           yieldQuantity: "1",
           notes: initial?.notes,
+          preparation: {
+            ...preparation,
+            steps: preparation.steps.filter((step) => step.trim()),
+          },
           compositionModel: "configurable",
           lines: fixed.map((c) => ({
             optional: false,
@@ -314,22 +329,65 @@ export function ModifierRecipeEditor({
         } as RecipeInput);
       }}
     >
-      <CostPreview
-        rows={[
-          ...fixed.map((c) => ({
-            itemId: c.itemId,
-            name: c.name,
-            itemClass: c.itemClass,
-            baseUnit: c.baseUnit,
-            quantity: c.quantity,
-            wastePercent: c.wastePercent,
-          })),
-          ...groups.flatMap((g) =>
-            g.options
-              .filter((o) => o.enabled)
-              .flatMap((o) =>
-                (o.mode === "inherit" ? (o.inherited ?? []) : o.components).map(
-                  (c) => ({
+      {!view && (
+        <RecipeEditorTabs
+          id={tabsId}
+          value={activeView}
+          onChange={setLocalView}
+        />
+      )}
+      <fieldset
+        hidden={activeView !== "preparation"}
+        disabled={disabled || busy || activeView !== "preparation"}
+        role={!view ? "tabpanel" : undefined}
+        id={`${tabsId}-panel-preparation`}
+        aria-labelledby={!view ? `${tabsId}-tab-preparation` : undefined}
+        className="min-w-0 space-y-6"
+      >
+        <PreparationFields value={preparation} onChange={setPreparation} />
+        {(error || localError) && (
+          <p role="alert" className="text-sm text-red-700">
+            {error || localError}
+          </p>
+        )}
+        <div className="flex justify-end border-t border-line pt-4">
+          <Button
+            type="submit"
+            disabled={
+              !legacyReviewed || !targetId || (!fixed.length && !groups.length)
+            }
+          >
+            Guardar receta y preparación
+          </Button>
+        </div>
+      </fieldset>
+      <fieldset
+        disabled={activeView !== "cost"}
+        hidden={activeView !== "cost"}
+        role={!view ? "tabpanel" : undefined}
+        id={`${tabsId}-panel-cost`}
+        aria-labelledby={!view ? `${tabsId}-tab-cost` : undefined}
+        className="min-w-0 space-y-6"
+      >
+        <CostPreview
+          active={activeView === "cost"}
+          rows={[
+            ...fixed.map((c) => ({
+              itemId: c.itemId,
+              name: c.name,
+              itemClass: c.itemClass,
+              baseUnit: c.baseUnit,
+              quantity: c.quantity,
+              wastePercent: c.wastePercent,
+            })),
+            ...groups.flatMap((g) =>
+              g.options
+                .filter((o) => o.enabled)
+                .flatMap((o) =>
+                  (o.mode === "inherit"
+                    ? (o.inherited ?? [])
+                    : o.components
+                  ).map((c) => ({
                     itemId: c.itemId,
                     name: c.name || o.name,
                     itemClass: c.itemClass,
@@ -339,345 +397,387 @@ export function ModifierRecipeEditor({
                     multiplier: o.mode === "inherit" ? g.factor : "1",
                     count: o.defaultCount > 0 ? o.defaultCount : 1,
                     include: o.defaultCount > 0,
-                  }),
+                  })),
                 ),
-              ),
-          ),
-        ]}
-      />
-      <fieldset disabled={disabled || busy} className="space-y-8">
-        {!initial && !productId && (
-          <SearchSelect
-            entity="products"
-            label="Producto"
-            value={targetId}
-            required
-            onChange={setTargetId}
-          />
-        )}
-        {!legacyReviewed && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
-            <p className="text-sm">
-              Esta receta conserva alternativas anteriores. Preparar la
-              conversión crea grupos reutilizables con las mismas cantidades;
-              después revisás sus nombres, reglas y recargos antes de publicar
-              una nueva receta.
-            </p>
-            <Button type="button" variant="outline" onClick={convert}>
-              Preparar conversión
-            </Button>
-          </div>
-        )}
-        <section className="rounded-xl border border-line p-4">
-          <h3 className="mb-3 font-bold text-brand">Composición fija</h3>
-          <p className="mb-4 text-xs text-muted">
-            Ingredientes y descartables que siempre lleva el producto. Ambos
-            suman costo y consumo de stock. Las alternativas se agregan en
-            grupos.
-          </p>
-          <ComponentFields value={fixed} onChange={setFixed} />
-        </section>
-        {groups.map((g, i) => (
-          <section
-            key={g.groupVersionId || g.draft?.requestId}
-            className="rounded-xl border border-line bg-surface/30 p-5 space-y-6 sm:p-6"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="font-bold text-brand">{g.name}</h3>
-              {g.groupId && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={async () => {
-                    setBusy(true);
-                    setLocalError("");
-                    try {
-                      const latest = await getJson<GroupDetail>(
-                        `/api/modifier-groups/${g.groupId}`,
-                      );
-                      if (latest.versionId === g.groupVersionId) {
-                        setLocalError("Este grupo ya usa la última versión.");
-                        return;
-                      }
-                      const previous = await getJson<GroupDetail>(
-                        `/api/modifier-groups/${g.groupId}?version=${g.groupVersionId}`,
-                      );
-                      const changes = diffGroupVersions(previous, latest);
-                      const next = draft(latest);
-                      update(i, {
-                        groupVersionId: next.groupVersionId,
-                        changes,
-                        options: next.options.map((o) => {
-                          const old = g.options.find((x) => x.key === o.key);
-                          return old
-                            ? {
-                                ...old,
-                                optionId: o.optionId,
-                                inherited: o.inherited,
-                                name: o.name,
-                                kind: o.kind,
-                                mode:
-                                  o.kind === "instruction"
-                                    ? "inherit"
-                                    : old.mode,
-                                components:
-                                  o.kind === "instruction"
-                                    ? []
-                                    : old.components,
-                              }
-                            : { ...o, defaultCount: 0 };
-                        }),
-                      });
-                      setLocalError(
-                        "Versión actualizada en el borrador. Revisá opciones agregadas o retiradas, cantidades y recargos antes de publicar.",
-                      );
-                    } catch (e) {
-                      setLocalError((e as Error).message);
-                    } finally {
-                      setBusy(false);
-                    }
-                  }}
-                >
-                  Revisar nueva versión
-                </Button>
-              )}
-
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setGroups(groups.filter((_, j) => j !== i))}
-              >
-                Quitar grupo
+            ),
+          ]}
+        />
+        <VariantCostPreview
+          active={activeView === "cost"}
+          fixed={fixed}
+          groups={groups.map((g, groupIndex) => ({
+            id: `${groupIndex}:${g.groupVersionId}`,
+            name: g.name,
+            min: g.min,
+            max: g.max,
+            options: g.options
+              .filter((o) => o.enabled)
+              .map((o) => ({
+                id: o.key,
+                name: o.name,
+                max: o.maxCount,
+                defaultCount: o.defaultCount,
+                instruction: o.kind === "instruction",
+                rows: (o.mode === "inherit"
+                  ? (o.inherited ?? [])
+                  : o.components
+                ).map((c) => ({
+                  ...c,
+                  multiplier: o.mode === "inherit" ? g.factor : "1",
+                })),
+              })),
+          }))}
+        />
+      </fieldset>
+      <div
+        hidden={activeView !== "recipe"}
+        role={!view ? "tabpanel" : undefined}
+        id={`${tabsId}-panel-recipe`}
+        aria-labelledby={!view ? `${tabsId}-tab-recipe` : undefined}
+      >
+        <fieldset
+          disabled={disabled || busy || activeView !== "recipe"}
+          className="space-y-8"
+        >
+          {!initial && !productId && (
+            <SearchSelect
+              entity="products"
+              label="Producto"
+              value={targetId}
+              required
+              onChange={setTargetId}
+            />
+          )}
+          {!legacyReviewed && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
+              <p className="text-sm">
+                Esta receta conserva alternativas anteriores. Preparar la
+                conversión crea grupos reutilizables con las mismas cantidades;
+                después revisás sus nombres, reglas y recargos antes de publicar
+                una nueva receta.
+              </p>
+              <Button type="button" variant="outline" onClick={convert}>
+                Preparar conversión
               </Button>
             </div>
-            {g.changes && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
-                <strong>Cambios respecto de la versión anterior</strong>
-                <ul className="mt-2 list-disc pl-5">
-                  {g.changes.map((change, k) => (
-                    <li key={k}>{change}</li>
-                  ))}
-                </ul>
-                <p className="mt-2">
-                  Los recargos y las composiciones propias se conservan cuando
-                  coincide la opción. Revisalos antes de publicar.
-                </p>
+          )}
+          <section className="rounded-xl border border-line p-4">
+            <h3 className="mb-3 font-bold text-brand">Composición fija</h3>
+            <p className="mb-4 text-xs text-muted">
+              Ingredientes y descartables que siempre lleva el producto. Ambos
+              suman costo y consumo de stock. Las alternativas se agregan en
+              grupos.
+            </p>
+            <ComponentFields value={fixed} onChange={setFixed} />
+          </section>
+          {groups.map((g, i) => (
+            <section
+              key={g.groupVersionId || g.draft?.requestId}
+              className="rounded-xl border border-line bg-surface/30 p-5 space-y-6 sm:p-6"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="font-bold text-brand">{g.name}</h3>
+                {g.groupId && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={async () => {
+                      setBusy(true);
+                      setLocalError("");
+                      try {
+                        const latest = await getJson<GroupDetail>(
+                          `/api/modifier-groups/${g.groupId}`,
+                        );
+                        if (latest.versionId === g.groupVersionId) {
+                          setLocalError("Este grupo ya usa la última versión.");
+                          return;
+                        }
+                        const previous = await getJson<GroupDetail>(
+                          `/api/modifier-groups/${g.groupId}?version=${g.groupVersionId}`,
+                        );
+                        const changes = diffGroupVersions(previous, latest);
+                        const next = draft(latest);
+                        update(i, {
+                          groupVersionId: next.groupVersionId,
+                          changes,
+                          options: next.options.map((o) => {
+                            const old = g.options.find((x) => x.key === o.key);
+                            return old
+                              ? {
+                                  ...old,
+                                  optionId: o.optionId,
+                                  inherited: o.inherited,
+                                  name: o.name,
+                                  kind: o.kind,
+                                  mode:
+                                    o.kind === "instruction"
+                                      ? "inherit"
+                                      : old.mode,
+                                  components:
+                                    o.kind === "instruction"
+                                      ? []
+                                      : old.components,
+                                }
+                              : { ...o, defaultCount: 0 };
+                          }),
+                        });
+                        setLocalError(
+                          "Versión actualizada en el borrador. Revisá opciones agregadas o retiradas, cantidades y recargos antes de publicar.",
+                        );
+                      } catch (e) {
+                        setLocalError((e as Error).message);
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                  >
+                    Revisar nueva versión
+                  </Button>
+                )}
+
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setGroups(groups.filter((_, j) => j !== i))}
+                >
+                  Quitar grupo
+                </Button>
               </div>
-            )}
-            <Field label="Nombre visible del grupo">
-              <Input
-                value={g.name}
-                onChange={(e) => update(i, { name: e.target.value })}
-              />
-            </Field>
-            <div className="grid gap-5 sm:grid-cols-3">
-              <Field label="Mínimo">
-                <Input
-                  type="number"
-                  min={0}
-                  value={g.min}
-                  onChange={(e) => update(i, { min: Number(e.target.value) })}
-                />
-              </Field>
-              <Field label="Máximo">
-                <Input
-                  type="number"
-                  min={0}
-                  value={g.max}
-                  onChange={(e) => update(i, { max: Number(e.target.value) })}
-                />
-              </Field>
-              <Field label="Factor de porción">
-                <Input
-                  inputMode="decimal"
-                  value={g.factor}
-                  onChange={(e) => update(i, { factor: e.target.value })}
-                />
-              </Field>
-            </div>
-            {g.options.map((o, j) => (
-              <div
-                key={o.key}
-                className="rounded-lg bg-white border border-line p-5 space-y-6"
-              >
-                <label className="flex items-center gap-2 font-semibold text-sm">
-                  <input
-                    type="checkbox"
-                    checked={o.enabled}
-                    onChange={(e) =>
-                      option(i, j, {
-                        enabled: e.target.checked,
-                        defaultCount: e.target.checked ? o.defaultCount : 0,
-                      })
-                    }
-                  />
-                  {o.name}
-                </label>
-                <div className="grid gap-5 sm:grid-cols-2">
-                  <Field label="Selecciones por defecto">
-                    <Input
-                      type="number"
-                      min={0}
-                      aria-describedby={`default-count-${i}-${j}`}
-                      value={o.defaultCount}
-                      onChange={(e) =>
-                        option(i, j, { defaultCount: Number(e.target.value) })
-                      }
-                    />
-                    <span
-                      id={`default-count-${i}-${j}`}
-                      className="mt-2 block text-xs leading-relaxed text-muted"
-                    >
-                      Al agregar el producto a una venta: 0 = sin seleccionar; 1
-                      = una elección. No indica gramos ni stock.
-                    </span>
-                  </Field>
-                  <Field label="Máximo por opción">
-                    <Input
-                      type="number"
-                      min={0}
-                      value={o.maxCount}
-                      onChange={(e) =>
-                        option(i, j, { maxCount: Number(e.target.value) })
-                      }
-                    />
-                  </Field>
+              {g.changes && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
+                  <strong>Cambios respecto de la versión anterior</strong>
+                  <ul className="mt-2 list-disc pl-5">
+                    {g.changes.map((change, k) => (
+                      <li key={k}>{change}</li>
+                    ))}
+                  </ul>
+                  <p className="mt-2">
+                    Los recargos y las composiciones propias se conservan cuando
+                    coincide la opción. Revisalos antes de publicar.
+                  </p>
                 </div>
-                <div className="grid gap-5 sm:grid-cols-3">
-                  {(["counter", "pedidosya", "ubereats"] as const).map((c) => (
-                    <Field
-                      key={c}
-                      label={`Recargo ${c === "counter" ? "local" : c === "pedidosya" ? "PedidosYa" : "Uber Eats"}`}
-                    >
+              )}
+              <Field label="Nombre visible del grupo">
+                <Input
+                  value={g.name}
+                  onChange={(e) => update(i, { name: e.target.value })}
+                />
+              </Field>
+              <div className="grid gap-5 sm:grid-cols-3">
+                <Field label="Mínimo">
+                  <Input
+                    type="number"
+                    min={0}
+                    value={g.min}
+                    onChange={(e) => update(i, { min: Number(e.target.value) })}
+                  />
+                </Field>
+                <Field label="Máximo">
+                  <Input
+                    type="number"
+                    min={0}
+                    value={g.max}
+                    onChange={(e) => update(i, { max: Number(e.target.value) })}
+                  />
+                </Field>
+                <Field label="Factor de porción">
+                  <Input
+                    inputMode="decimal"
+                    value={g.factor}
+                    onChange={(e) => update(i, { factor: e.target.value })}
+                  />
+                </Field>
+              </div>
+              {g.options.map((o, j) => (
+                <div
+                  key={o.key}
+                  className="rounded-lg bg-white border border-line p-5 space-y-6"
+                >
+                  <label className="flex items-center gap-2 font-semibold text-sm">
+                    <input
+                      type="checkbox"
+                      checked={o.enabled}
+                      onChange={(e) =>
+                        option(i, j, {
+                          enabled: e.target.checked,
+                          defaultCount: e.target.checked ? o.defaultCount : 0,
+                        })
+                      }
+                    />
+                    {o.name}
+                  </label>
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <Field label="Selecciones por defecto">
                       <Input
-                        value={o.prices[c]}
-                        inputMode="decimal"
-                        placeholder="0 — Sin recargo"
+                        type="number"
+                        min={0}
+                        aria-describedby={`default-count-${i}-${j}`}
+                        value={o.defaultCount}
                         onChange={(e) =>
-                          option(i, j, {
-                            prices: { ...o.prices, [c]: e.target.value },
-                          })
+                          option(i, j, { defaultCount: Number(e.target.value) })
+                        }
+                      />
+                      <span
+                        id={`default-count-${i}-${j}`}
+                        className="mt-2 block text-xs leading-relaxed text-muted"
+                      >
+                        Al agregar el producto a una venta: 0 = sin seleccionar;
+                        1 = una elección. No indica gramos ni stock.
+                      </span>
+                    </Field>
+                    <Field label="Máximo por opción">
+                      <Input
+                        type="number"
+                        min={0}
+                        value={o.maxCount}
+                        onChange={(e) =>
+                          option(i, j, { maxCount: Number(e.target.value) })
                         }
                       />
                     </Field>
-                  ))}
-                </div>
-                {o.mode === "inherit" && !!o.inherited?.length && (
-                  <p className="text-xs text-muted">
-                    Heredado por elección, antes del factor:{" "}
-                    {o.inherited
-                      .map(
-                        (c) =>
-                          `${c.name ?? "Insumo"} ${quantity(c.quantity, c.baseUnit)}`,
-                      )
-                      .join(" · ")}
-                  </p>
-                )}
-                {(o.mode === "inherit"
-                  ? (o.inherited ?? [])
-                  : o.components
-                ).some((c) => fixed.some((f) => f.itemId === c.itemId)) && (
-                  <p className="text-xs text-amber-800">
-                    Este insumo también está en la parte fija. Confirmá que se
-                    trate de un extra intencional.
-                  </p>
-                )}
-                {o.kind === "composition" && (
-                  <>
-                    <select
-                      className="form-control"
-                      aria-label={`Composición ${o.name}`}
-                      value={o.mode}
-                      onChange={(e) =>
-                        option(i, j, {
-                          mode: e.target.value as OptionDraft["mode"],
-                          components: [],
-                        })
-                      }
-                    >
-                      <option value="inherit">Heredado del grupo</option>
-                      <option value="override">
-                        Composición propia para este producto
-                      </option>
-                    </select>
-                    {o.mode === "override" && (
-                      <ComponentFields
-                        value={o.components}
-                        onChange={(components) => option(i, j, { components })}
-                      />
+                  </div>
+                  <div className="grid gap-5 sm:grid-cols-3">
+                    {(["counter", "pedidosya", "ubereats"] as const).map(
+                      (c) => (
+                        <Field
+                          key={c}
+                          label={`Recargo ${c === "counter" ? "local" : c === "pedidosya" ? "PedidosYa" : "Uber Eats"}`}
+                        >
+                          <Input
+                            value={o.prices[c]}
+                            inputMode="decimal"
+                            placeholder="0 — Sin recargo"
+                            onChange={(e) =>
+                              option(i, j, {
+                                prices: { ...o.prices, [c]: e.target.value },
+                              })
+                            }
+                          />
+                        </Field>
+                      ),
                     )}
-                  </>
-                )}
-              </div>
-            ))}
-          </section>
-        ))}
-        <div className="flex items-end gap-2">
-          <div className="min-w-0 flex-1">
-            <Field label="Grupo reutilizable">
-              <select
-                className="form-control"
-                value={chosen}
-                onChange={(e) => setChosen(e.target.value)}
-              >
-                <option value="">Elegí un grupo</option>
-                {available
-                  .filter((g) => !g.archivedAt)
-                  .map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.name}
-                    </option>
-                  ))}
-              </select>
-            </Field>
+                  </div>
+                  {o.mode === "inherit" && !!o.inherited?.length && (
+                    <p className="text-xs text-muted">
+                      Heredado por elección, antes del factor:{" "}
+                      {o.inherited
+                        .map(
+                          (c) =>
+                            `${c.name ?? "Insumo"} ${quantity(c.quantity, c.baseUnit)}`,
+                        )
+                        .join(" · ")}
+                    </p>
+                  )}
+                  {(o.mode === "inherit"
+                    ? (o.inherited ?? [])
+                    : o.components
+                  ).some((c) => fixed.some((f) => f.itemId === c.itemId)) && (
+                    <p className="text-xs text-amber-800">
+                      Este insumo también está en la parte fija. Confirmá que se
+                      trate de un extra intencional.
+                    </p>
+                  )}
+                  {o.kind === "composition" && (
+                    <>
+                      <select
+                        className="form-control"
+                        aria-label={`Composición ${o.name}`}
+                        value={o.mode}
+                        onChange={(e) =>
+                          option(i, j, {
+                            mode: e.target.value as OptionDraft["mode"],
+                            components: [],
+                          })
+                        }
+                      >
+                        <option value="inherit">Heredado del grupo</option>
+                        <option value="override">
+                          Composición propia para este producto
+                        </option>
+                      </select>
+                      {o.mode === "override" && (
+                        <ComponentFields
+                          value={o.components}
+                          onChange={(components) =>
+                            option(i, j, { components })
+                          }
+                        />
+                      )}
+                    </>
+                  )}
+                </div>
+              ))}
+            </section>
+          ))}
+          <div className="flex items-end gap-2">
+            <div className="min-w-0 flex-1">
+              <Field label="Grupo reutilizable">
+                <select
+                  className="form-control"
+                  value={chosen}
+                  onChange={(e) => setChosen(e.target.value)}
+                >
+                  <option value="">Elegí un grupo</option>
+                  {available
+                    .filter((g) => !g.archivedAt)
+                    .map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name}
+                      </option>
+                    ))}
+                </select>
+              </Field>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!chosen}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  const g = await getJson<GroupDetail>(
+                    `/api/modifier-groups/${chosen}`,
+                  );
+                  if (groups.some((x) => x.groupVersionId === g.versionId))
+                    throw new Error("Ese grupo ya está asignado.");
+                  setGroups([...groups, draft(g)]);
+                  setChosen("");
+                } catch (e) {
+                  setLocalError((e as Error).message);
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              Agregar
+            </Button>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={!chosen}
-            onClick={async () => {
-              setBusy(true);
-              try {
-                const g = await getJson<GroupDetail>(
-                  `/api/modifier-groups/${chosen}`,
-                );
-                if (groups.some((x) => x.groupVersionId === g.versionId))
-                  throw new Error("Ese grupo ya está asignado.");
-                setGroups([...groups, draft(g)]);
-                setChosen("");
-              } catch (e) {
-                setLocalError((e as Error).message);
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            Agregar
-          </Button>
-        </div>
-        <p className="text-xs text-muted">
-          Completá los recargos de cada canal activo, incluso cero. Un recargo
-          no es el costo del ingrediente.
-        </p>
-        {(error || localError) && (
-          <p role="alert" className="text-sm text-red-700">
-            {error || localError}
+          <p className="text-xs text-muted">
+            Los recargos vacíos se toman como cero. Un recargo no es el costo
+            del ingrediente.
           </p>
-        )}
-        <div className="flex justify-end gap-2 border-t border-line pt-4">
-          <Button type="button" variant="outline" onClick={onCancel}>
-            Cancelar
-          </Button>
-          <Button
-            type="submit"
-            disabled={
-              !legacyReviewed || !targetId || (!fixed.length && !groups.length)
-            }
-          >
-            Publicar receta
-          </Button>
-        </div>
-      </fieldset>
+          {(error || localError) && (
+            <p role="alert" className="text-sm text-red-700">
+              {error || localError}
+            </p>
+          )}
+          <div className="flex justify-end gap-2 border-t border-line pt-4">
+            <Button type="button" variant="outline" onClick={onCancel}>
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              disabled={
+                !legacyReviewed ||
+                !targetId ||
+                (!fixed.length && !groups.length)
+              }
+            >
+              Publicar receta
+            </Button>
+          </div>
+        </fieldset>
+      </div>
     </form>
   );
 }

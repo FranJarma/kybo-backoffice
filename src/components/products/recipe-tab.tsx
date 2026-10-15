@@ -11,11 +11,13 @@ export function ProductRecipeTab({
   actorId,
   onBusy,
   onBack,
+  view = "recipe",
 }: {
   productId: string;
   actorId: string;
   onBusy: (busy: boolean) => void;
   onBack: () => void;
+  view?: "recipe" | "cost" | "preparation";
 }) {
   const [recipe, setRecipe] = useState<RecipeDetail | null>();
   const [loadError, setLoadError] = useState("");
@@ -59,6 +61,7 @@ export function ProductRecipeTab({
     );
   if (recipe === undefined) return <p role="status">Cargando receta…</p>;
   const props = {
+    view,
     initial: recipe ?? undefined,
     disabled: operation.locked,
     error: operation.error,

@@ -1,5 +1,5 @@
 import { publishGroup } from "@/modules/modifiers/service";
-import { eq, asc, and } from "drizzle-orm";
+import { eq, asc, and, inArray } from "drizzle-orm";
 import type { AppDb } from "@/db/client";
 import { items, products, productPrices } from "@/db/business-schema";
 import { recipeVersions, recipes } from "@/db/recipe-schema";
@@ -32,13 +32,17 @@ import { defaultSelections, resolveComposition } from "./composition";
 export async function loadConfiguration(
   db: AppDb | Tx,
   recipeVersionId: string,
+  definition?: Awaited<ReturnType<typeof recipeDefinition>>,
 ): Promise<Configuration> {
   const [v] = await db
     .select()
     .from(recipeVersions)
     .where(eq(recipeVersions.id, recipeVersionId));
   if (!v) notFound();
-  const def = await recipeDefinition(db, v.recipeId, v.id);
+  const def =
+    definition?.versionId === v.id
+      ? definition
+      : await recipeDefinition(db, v.recipeId, v.id);
   const config: Configuration = {
     recipeVersionId: v.id,
     revision: v.version,
@@ -47,40 +51,76 @@ export async function loadConfiguration(
     fixed: def.lines.map((l) => l.options[0]),
     groups: [],
   };
-  const stock = new Map((await db.select().from(items)).map((i) => [i.id, i]));
   const rows = await db
     .select()
     .from(recipeModifierGroups)
     .where(eq(recipeModifierGroups.recipeVersionId, v.id))
     .orderBy(asc(recipeModifierGroups.position));
-  for (const row of rows) {
-    const opts = await db
-      .select({ binding: recipeModifierOptions, option: modifierOptions })
-      .from(recipeModifierOptions)
-      .innerJoin(
-        modifierOptions,
-        eq(modifierOptions.id, recipeModifierOptions.optionId),
-      )
-      .where(eq(recipeModifierOptions.recipeModifierGroupId, row.id))
-      .orderBy(asc(modifierOptions.position));
-    const options: ConfiguredOption[] = [];
-    for (const { binding: b, option: o } of opts) {
-      const components =
-        b.mode === "override"
-          ? await db
-              .select()
-              .from(recipeModifierOptionComponents)
-              .where(
-                eq(recipeModifierOptionComponents.recipeModifierOptionId, b.id),
-              )
-          : await db
-              .select()
-              .from(modifierOptionComponents)
-              .where(eq(modifierOptionComponents.optionId, o.id));
-      const prices = await db
+  const opts = rows.length
+    ? await db
+        .select({ binding: recipeModifierOptions, option: modifierOptions })
+        .from(recipeModifierOptions)
+        .innerJoin(
+          modifierOptions,
+          eq(modifierOptions.id, recipeModifierOptions.optionId),
+        )
+        .where(eq(recipeModifierOptions.recipeVersionId, v.id))
+        .orderBy(asc(modifierOptions.position))
+    : [];
+  const inheritedIds = opts
+    .filter(({ binding }) => binding.mode !== "override")
+    .map(({ option }) => option.id);
+  const overrideIds = opts
+    .filter(({ binding }) => binding.mode === "override")
+    .map(({ binding }) => binding.id);
+  const bindingIds = opts.map(({ binding }) => binding.id);
+  const inherited = inheritedIds.length
+    ? await db
+        .select()
+        .from(modifierOptionComponents)
+        .where(inArray(modifierOptionComponents.optionId, inheritedIds))
+    : [];
+  const overrides = overrideIds.length
+    ? await db
+        .select()
+        .from(recipeModifierOptionComponents)
+        .where(
+          inArray(
+            recipeModifierOptionComponents.recipeModifierOptionId,
+            overrideIds,
+          ),
+        )
+    : [];
+  const allPrices = bindingIds.length
+    ? await db
         .select()
         .from(recipeModifierOptionPrices)
-        .where(eq(recipeModifierOptionPrices.recipeModifierOptionId, b.id));
+        .where(
+          inArray(
+            recipeModifierOptionPrices.recipeModifierOptionId,
+            bindingIds,
+          ),
+        )
+    : [];
+  const itemIds = [
+    ...new Set([...inherited, ...overrides].map((c) => c.itemId)),
+  ];
+  const stock = new Map(
+    (itemIds.length
+      ? await db.select().from(items).where(inArray(items.id, itemIds))
+      : []
+    ).map((i) => [i.id, i]),
+  );
+  for (const row of rows) {
+    const options: ConfiguredOption[] = [];
+    for (const { binding: b, option: o } of opts.filter(
+      ({ binding }) => binding.recipeModifierGroupId === row.id,
+    )) {
+      const components =
+        b.mode === "override"
+          ? overrides.filter((c) => c.recipeModifierOptionId === b.id)
+          : inherited.filter((c) => c.optionId === o.id);
+      const prices = allPrices.filter((p) => p.recipeModifierOptionId === b.id);
       options.push({
         id: b.id,
         optionId: o.id,

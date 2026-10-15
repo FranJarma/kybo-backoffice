@@ -9,6 +9,9 @@ const code = z
 export const locationSchema = z
   .object({ code, name: z.string().trim().min(1).max(160) })
   .strict();
+export const locationCreateSchema = locationSchema.extend({
+  code: code.default(() => `LOC-${crypto.randomUUID().toUpperCase()}`),
+});
 export const branchSchema = locationSchema
   .extend({
     timeZone: z.string().refine((v) => {
@@ -20,7 +23,7 @@ export const branchSchema = locationSchema
       }
     }, "Zona horaria inválida."),
     locations: z
-      .array(locationSchema)
+      .array(locationCreateSchema)
       .min(1)
       .max(100)
       .refine(

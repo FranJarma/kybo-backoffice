@@ -110,7 +110,7 @@ export function ProductPreparationTab({
               })
             }
           >
-            Guardar preparación
+            Guardar estación
           </Button>
         </>
       )}

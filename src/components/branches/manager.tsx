@@ -25,8 +25,7 @@ export function BranchManager({
   const [name, setName] = useState(""),
     [code, setCode] = useState(""),
     [timeZone, setTimeZone] = useState("America/Argentina/Buenos_Aires");
-  const [locationName, setLocationName] = useState(""),
-    [locationCode, setLocationCode] = useState("");
+  const [locationName, setLocationName] = useState("");
   const [locations, setLocations] = useState<
     { id: string; name: string; code: string; revision: number }[]
   >([]);
@@ -78,9 +77,9 @@ export function BranchManager({
                   code,
                   name,
                   timeZone,
-                  locations: [{ code: locationCode, name: locationName }],
+                  locations: [{ name: locationName }],
                 }
-              : { code: locationCode, name: locationName },
+              : { name: locationName },
           ),
         },
       );
@@ -92,7 +91,6 @@ export function BranchManager({
           : "Ubicación creada.",
       );
       setLocationName("");
-      setLocationCode("");
       if (create) {
         setName("");
         setCode("");
@@ -151,16 +149,7 @@ export function BranchManager({
           onChange={(e) => setLocationName(e.target.value)}
           required
           maxLength={160}
-        />
-      </label>
-      <label className="space-y-2 text-sm font-semibold">
-        Código de ubicación
-        <Input
-          value={locationCode}
-          onChange={(e) => setLocationCode(e.target.value)}
-          required
-          maxLength={64}
-          placeholder="DEPOSITO"
+          placeholder="Por ejemplo, Barra, Cocina o Depósito"
         />
       </label>
     </>
@@ -224,7 +213,6 @@ export function BranchManager({
                 {locations.map((location) => (
                   <li key={location.id}>
                     {location.name}{" "}
-                    <span className="text-xs text-muted">{location.code}</span>
                     {admin && (
                       <Button
                         type="button"

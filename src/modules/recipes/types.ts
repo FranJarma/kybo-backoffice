@@ -1,3 +1,4 @@
+import type { PreparationGuide } from "./preparation-guide";
 export type RecipeKind = "product" | "preparation";
 export type RecipeInput = {
   compositionModel?: "legacy" | "configurable";
@@ -10,6 +11,7 @@ export type RecipeInput = {
   targetUnit?: string;
   yieldQuantity: string;
   notes?: string | null;
+  preparation?: PreparationGuide | null;
   lines: {
     optional?: boolean;
     options: {
@@ -58,6 +60,7 @@ export type RecipeDetail = RecipeSummary & {
   configuration?: import("@/modules/modifiers/types").Configuration;
   versionId: string;
   notes: string | null;
+  preparation?: PreparationGuide | null;
   lines: RecipeLine[];
   cost: CostResult;
   versions: { id: string; version: number; createdAt: string }[];

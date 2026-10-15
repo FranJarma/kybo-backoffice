@@ -118,6 +118,7 @@ export async function recipeDefinition(
     versionId: version.id,
     compositionModel: version.compositionModel as "legacy" | "configurable",
     notes: version.notes,
+    preparation: version.preparation,
     archived: !!target?.archivedAt,
     lines: lines.map((line) => ({
       id: line.id,
@@ -379,7 +380,7 @@ async function detail(
 ): Promise<RecipeDetail> {
   const recipe = await recipeDefinition(db, id, versionId);
   if (recipe.compositionModel === "configurable") {
-    const configuration = await loadConfiguration(db, recipe.versionId);
+    const configuration = await loadConfiguration(db, recipe.versionId, recipe);
     const { costComposition } = await import("./costing");
     const cost = await costComposition(
       db,
@@ -477,6 +478,7 @@ export function createRecipeService(db: AppDb) {
           .for("update");
         const id = input.id ?? randomUUID();
         let revision = 1;
+        let preparation = input.preparation;
         if (input.id) {
           const [current] = await tx
             .select()
@@ -491,6 +493,18 @@ export function createRecipeService(db: AppDb) {
             (current.productId ?? current.outputItemId) !== input.targetId
           )
             conflict("El destino de una receta no se puede cambiar.");
+          if (preparation === undefined) {
+            const [previousVersion] = await tx
+              .select({ preparation: recipeVersions.preparation })
+              .from(recipeVersions)
+              .where(
+                and(
+                  eq(recipeVersions.recipeId, current.id),
+                  eq(recipeVersions.version, current.revision),
+                ),
+              );
+            preparation = previousVersion?.preparation ?? null;
+          }
           revision = current.revision + 1;
         } else {
           const [existing] = await tx
@@ -586,6 +600,7 @@ export function createRecipeService(db: AppDb) {
           outputUnit,
           yieldQuantity: input.yieldQuantity,
           notes: input.notes,
+          preparation: preparation ?? null,
           actorId: actor.id,
         });
         for (const [position, line] of input.lines.entries()) {

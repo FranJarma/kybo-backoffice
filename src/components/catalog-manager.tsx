@@ -1,5 +1,9 @@
 "use client";
 import { money, quantity } from "@/lib/number-format";
+import {
+  ReorderHandle,
+  type DropPosition,
+} from "@/components/catalog/reorder-handle";
 import dynamic from "next/dynamic";
 import {
   entryUnits,
@@ -12,7 +16,7 @@ import { itemClasses, itemClassLabel } from "@/modules/catalog/item-classes";
 import { suggestItemCode } from "@/modules/items/code";
 import { SearchCombobox } from "@/components/ui/search-combobox";
 import { PhotoEditor, ProductPhoto } from "@/components/products/photo";
-import { useEffect, useId, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import {
   Archive,
   ArrowRight,
@@ -210,6 +214,21 @@ export function CatalogManager({
     [itemClass, setItemClass] = useState(""),
     [archived, setArchived] = useState(false),
     [refresh, setRefresh] = useState(0);
+  const [dropTarget, setDropTarget] = useState<DropPosition | null>(null);
+  const [orderNotice, setOrderNotice] = useState("");
+  const reorderFocus = useRef<string | null>(null);
+  useEffect(() => {
+    if (loading || !reorderFocus.current) return;
+    const handle = Array.from(
+      document.querySelectorAll<HTMLButtonElement>("[data-reorder-id]"),
+    ).find(
+      (button) =>
+        button.dataset.reorderId === reorderFocus.current &&
+        button.getClientRects().length,
+    );
+    handle?.focus({ preventScroll: true });
+    reorderFocus.current = null;
+  }, [loading, rows]);
   const [editing, setEditing] = useState<CatalogRow | null | undefined>(
       undefined,
     ),
@@ -227,7 +246,7 @@ export function CatalogManager({
     [referenceWarning, setReferenceWarning] = useState("");
   const formId = useId();
   const [productTab, setProductTab] = useState<
-    "product" | "recipe" | "preparation"
+    "product" | "recipe" | "cost" | "preparation"
   >("product");
   const [recipeOpened, setRecipeOpened] = useState(false);
   const [preparationOpened, setPreparationOpened] = useState(false);
@@ -501,6 +520,51 @@ export function CatalogManager({
       setActionId(null);
     }
   }
+  async function moveRow(
+    row: CatalogRow,
+    destination: "up" | "down" | DropPosition,
+  ) {
+    if (actionId || loading || search.trim() || archived) return;
+    setActionId(row.id);
+    setLoadError("");
+    setOrderNotice("Guardando orden…");
+    const target =
+      typeof destination === "string"
+        ? undefined
+        : rows.find((r) => r.id === destination.id);
+    try {
+      const response = await fetch(`/api/catalog/${entity}/${row.id}/move`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          typeof destination === "string"
+            ? { revision: row.revision, direction: destination }
+            : {
+                revision: row.revision,
+                targetId: destination.id,
+                targetRevision: target?.revision,
+                placement: destination.placement,
+              },
+        ),
+      });
+      if (!response.ok) {
+        setOrderNotice("");
+        setLoadError(await readError(response));
+        return;
+      }
+      setLoading(true);
+      reorderFocus.current = row.id;
+      setOrderNotice(`Orden de ${row.name} guardado.`);
+      setRefresh((n) => n + 1);
+    } catch {
+      setOrderNotice("");
+      setLoadError(
+        "No pudimos confirmar el orden. Recargá el listado antes de reintentar.",
+      );
+    } finally {
+      setActionId(null);
+    }
+  }
   function fieldControl(field: FieldDefinition) {
     const id = `${formId}-${field.key}`;
     const value = draft[field.key] ?? "";
@@ -680,10 +744,34 @@ export function CatalogManager({
       </div>
     );
   }
+  function reorderHandle(row: CatalogRow) {
+    if ((entity !== "products" && entity !== "categories") || archived)
+      return null;
+    return (
+      <ReorderHandle
+        id={row.id}
+        name={row.name}
+        disabled={!!actionId || loading || !!search.trim()}
+        onTarget={setDropTarget}
+        onDrop={(target) => void moveRow(row, target)}
+        onStep={(direction) => void moveRow(row, direction)}
+      />
+    );
+  }
+  function dropStyle(id: string) {
+    return dropTarget?.id === id
+      ? {
+          boxShadow:
+            dropTarget.placement === "before"
+              ? "inset 0 3px 0 #0066ff"
+              : "inset 0 -3px 0 #0066ff",
+        }
+      : undefined;
+  }
   function rowActions(row: CatalogRow) {
     const ArchiveIcon = row.archivedAt ? ArchiveRestore : Archive;
     return (
-      <div className="flex items-center gap-1 md:justify-end">
+      <div className="flex flex-wrap items-center gap-1 md:justify-end">
         <Button
           size="sm"
           variant="ghost"
@@ -915,6 +1003,8 @@ export function CatalogManager({
                   {rows.map((row) => (
                     <tr
                       key={row.id}
+                      data-catalog-row={row.id}
+                      style={dropStyle(row.id)}
                       className="border-b border-line transition-colors last:border-0 hover:bg-blue-50/40"
                     >
                       {definition.columns.map((column) => (
@@ -928,6 +1018,7 @@ export function CatalogManager({
                         >
                           {column === "name" ? (
                             <div className="flex items-center gap-3">
+                              {reorderHandle(row)}
                               <span
                                 className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${entity === "products" ? "bg-orange-50 text-orange-500" : "bg-slate-50 text-[#577195]"}`}
                               >
@@ -960,8 +1051,14 @@ export function CatalogManager({
             </div>
             <div className="divide-y divide-line md:hidden">
               {rows.map((row) => (
-                <article key={row.id} className="p-4">
+                <article
+                  key={row.id}
+                  data-catalog-row={row.id}
+                  style={dropStyle(row.id)}
+                  className="p-4"
+                >
                   <div className="flex items-start gap-3">
+                    {reorderHandle(row)}
                     <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue">
                       <EntityIcon size={21} aria-hidden="true" />
                     </span>
@@ -1016,6 +1113,9 @@ export function CatalogManager({
         )}
       </Card>
 
+      <p role="status" className="sr-only">
+        {orderNotice}
+      </p>
       <Dialog
         open={editing !== undefined}
         onOpenChange={(open) => {
@@ -1024,7 +1124,7 @@ export function CatalogManager({
       >
         {editing !== undefined && (
           <DialogContent
-            className={`gap-0 bg-white p-5 sm:p-8 ${entity === "items" ? "catalog-dialog flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] flex-col overflow-hidden sm:max-w-6xl lg:px-10" : "max-h-[94dvh] overflow-y-auto sm:max-w-5xl lg:p-10"}`}
+            className={`gap-0 bg-white p-5 sm:p-8 ${entity === "items" ? "catalog-dialog flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] flex-col overflow-hidden sm:max-w-6xl lg:px-10" : entity === "products" ? "max-h-[96dvh] w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-7xl lg:p-10" : "max-h-[94dvh] overflow-y-auto sm:max-w-5xl lg:p-10"}`}
             onEscapeKeyDown={(event) => {
               if (
                 event.target instanceof HTMLElement &&
@@ -1194,7 +1294,8 @@ export function CatalogManager({
                   {(
                     [
                       { id: "product", label: "Producto" },
-                      { id: "recipe", label: "Receta y costo" },
+                      { id: "recipe", label: "Receta" },
+                      { id: "cost", label: "Costeo" },
                       { id: "preparation", label: "Preparación" },
                     ] as const
                   ).map((tab) => (
@@ -1203,7 +1304,7 @@ export function CatalogManager({
                       type="button"
                       role="tab"
                       id={`${formId}-tab-${tab.id}`}
-                      aria-controls={`${formId}-panel-${tab.id}`}
+                      aria-controls={`${formId}-panel-${tab.id === "cost" || tab.id === "preparation" ? "recipe" : tab.id}`}
                       aria-selected={productTab === tab.id}
                       tabIndex={productTab === tab.id ? 0 : -1}
                       className={formTabClassName}
@@ -1216,7 +1317,12 @@ export function CatalogManager({
                       }
                       onClick={() => {
                         setProductTab(tab.id);
-                        if (tab.id === "recipe") setRecipeOpened(true);
+                        if (
+                          tab.id === "recipe" ||
+                          tab.id === "cost" ||
+                          tab.id === "preparation"
+                        )
+                          setRecipeOpened(true);
                         if (tab.id === "preparation")
                           setPreparationOpened(true);
                       }}
@@ -1233,33 +1339,38 @@ export function CatalogManager({
                 )}
                 {editing && recipeOpened && (
                   <div
-                    hidden={productTab !== "recipe"}
+                    hidden={productTab === "product"}
                     role="tabpanel"
                     id={`${formId}-panel-recipe`}
-                    aria-labelledby={`${formId}-tab-recipe`}
+                    aria-labelledby={`${formId}-tab-${productTab === "cost" ? "cost" : productTab === "preparation" ? "preparation" : "recipe"}`}
                   >
                     <ProductRecipeTab
+                      view={
+                        productTab === "cost"
+                          ? "cost"
+                          : productTab === "preparation"
+                            ? "preparation"
+                            : "recipe"
+                      }
                       key={editing.id}
                       productId={editing.id}
                       actorId={actorId}
                       onBusy={setRecipeBusy}
                       onBack={() => setProductTab("product")}
                     />
-                  </div>
-                )}
-                {editing && preparationOpened && (
-                  <div
-                    hidden={productTab !== "preparation"}
-                    role="tabpanel"
-                    id={`${formId}-panel-preparation`}
-                    aria-labelledby={`${formId}-tab-preparation`}
-                  >
-                    <ProductPreparationTab
-                      key={editing.id}
-                      productId={editing.id}
-                      actorId={actorId}
-                      onBusy={setPreparationBusy}
-                    />
+                    {editing && preparationOpened && (
+                      <div
+                        hidden={productTab !== "preparation"}
+                        className="mt-8 border-t border-line pt-8"
+                      >
+                        <ProductPreparationTab
+                          key={editing.id}
+                          productId={editing.id}
+                          actorId={actorId}
+                          onBusy={setPreparationBusy}
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
               </>

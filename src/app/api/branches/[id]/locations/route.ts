@@ -5,7 +5,7 @@ import { getDb } from "@/db/client";
 import { locations } from "@/db/branch-schema";
 import { requireActor } from "@/lib/auth";
 import { requireOperationalContext } from "@/modules/branches/context";
-import { locationSchema } from "@/modules/branches/validation";
+import { locationCreateSchema } from "@/modules/branches/validation";
 import {
   privateJson,
   errorResponse,
@@ -34,7 +34,7 @@ export async function POST(request: Request, { params }: Params) {
     const { id } = await params,
       actor = await requireActor(),
       db = await getDb(),
-      input = locationSchema.parse(await requestInput(request));
+      input = locationCreateSchema.parse(await requestInput(request));
     const result = await db.transaction(async (tx) => {
       const ctx = await requireOperationalContext(tx, actor, id);
       if (ctx.role === "staff")

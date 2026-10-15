@@ -33,7 +33,7 @@ export function BranchSelector({
     }
   }
   return (
-    <div className="relative min-w-0 w-full sm:w-52">
+    <div className="relative min-w-0 w-full">
       <label className="sr-only" htmlFor="active-branch">
         Sucursal
       </label>
@@ -44,7 +44,7 @@ export function BranchSelector({
       />
       <select
         id="active-branch"
-        className="h-10 w-full truncate rounded-lg border border-line bg-surface py-2 pl-9 pr-6 text-xs font-semibold text-brand"
+        className="h-10 w-full rounded-lg border border-line bg-surface py-2 pl-9 pr-6 text-xs font-semibold text-brand"
         value={rows.some((row) => row.id === selected) ? selected : ""}
         disabled={busy || !rows.length}
         onChange={(event) => void select(event.target.value)}

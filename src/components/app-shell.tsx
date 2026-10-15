@@ -281,16 +281,6 @@ export function AppShell({
           </div>
           <div className="flex w-full min-w-0 items-center gap-3 sm:w-auto sm:shrink-0">
             <BranchSelector rows={branches} selected={selectedBranchId} />
-            <span className="hidden text-xs font-medium text-muted xl:block">
-              {dateLabel}
-            </span>
-            <span
-              title={name}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#f0f5fa] text-muted"
-            >
-              <UserRound size={18} aria-hidden="true" />
-              <span className="sr-only">{name}</span>
-            </span>
           </div>
         </header>
         <main id="main-content" className="page-container">

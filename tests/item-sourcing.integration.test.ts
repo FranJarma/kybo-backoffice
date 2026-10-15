@@ -10,6 +10,7 @@ import {
   purchasePresentations,
 } from "../src/db/business-schema";
 import { createSourcingService } from "../src/modules/sourcing/service";
+import { createCatalogService } from "../src/modules/catalog/service";
 import {
   presentationQuantity,
   comparablePrice,
@@ -141,10 +142,28 @@ describe("proveedores de un ingrediente", () => {
       })
       .returning();
     await service.write(actor, itemId, quote(old.id, "1500"));
-    await ctx.db
-      .update(purchasePresentations)
-      .set({ baseQuantity: "2000.000000", revision: 2 })
-      .where(eq(purchasePresentations.id, old.id));
+    const catalog = createCatalogService(ctx.db);
+    const change = {
+      revision: old.revision,
+      name: "Envase de 2 litros",
+      itemId,
+      supplierId: supplierB,
+      baseQuantity: presentationQuantity("1", "2", "l").replace(".", ","),
+    };
+    const edited = await catalog.updateRecord(
+      actor,
+      "presentations",
+      old.id,
+      change,
+    );
+    expect(edited).toMatchObject({
+      name: "Envase de 2 litros",
+      baseQuantity: "2000.000000",
+      revision: 2,
+    });
+    await expect(
+      catalog.updateRecord(actor, "presentations", old.id, change),
+    ).rejects.toMatchObject({ status: 409 });
     expect(
       (await service.list(actor, itemId)).presentations.find(
         (p) => p.id === old.id,
@@ -200,14 +219,12 @@ describe("proveedores de un ingrediente", () => {
       .insert(suppliers)
       .values({ name: "Proveedor previo" })
       .returning();
-    await ctx.db
-      .insert(purchasePresentations)
-      .values({
-        name: "Envase previo",
-        supplierId: vendor.id,
-        itemId,
-        baseQuantity: "1000.000000",
-      });
+    await ctx.db.insert(purchasePresentations).values({
+      name: "Envase previo",
+      supplierId: vendor.id,
+      itemId,
+      baseQuantity: "1000.000000",
+    });
     const data = await createSourcingService(ctx.db).list(actor, itemId);
     expect(data.suppliers.some((s) => s.id === vendor.id)).toBe(true);
   });

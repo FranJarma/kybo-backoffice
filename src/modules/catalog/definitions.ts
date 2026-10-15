@@ -135,16 +135,8 @@ export const definitions: Record<Entity, EntityDefinition> = {
     title: "Categorías",
     singular: "categoría",
     description: "Organizá la carta sin duplicar productos.",
-    fields: [
-      name,
-      {
-        key: "sortOrder",
-        label: "Orden de visualización",
-        type: "text",
-        hint: "Número entero desde 0. Los menores aparecen primero.",
-      },
-    ],
-    columns: ["name", "sortOrder"],
+    fields: [name],
+    columns: ["name"],
   },
   products: {
     title: "Catálogo y precios",
@@ -159,12 +151,6 @@ export const definitions: Record<Entity, EntityDefinition> = {
         reference: "categories",
       },
       { key: "description", label: "Descripción", type: "textarea" },
-      {
-        key: "sortOrder",
-        label: "Orden de visualización",
-        type: "text",
-        hint: "Número entero desde 0. Los menores aparecen primero.",
-      },
       ...(
         [
           ["enabledCounter", "Disponible en mostrador"],
@@ -198,7 +184,6 @@ export const definitions: Record<Entity, EntityDefinition> = {
     columns: [
       "name",
       "categoryName",
-      "sortOrder",
       "priceCounter",
       "pricePedidosYa",
       "priceUberEats",

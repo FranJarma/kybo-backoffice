@@ -1,3 +1,4 @@
+import { recipeVersions } from "@/db/recipe-schema";
 import { saleLineModifiers } from "@/db/modifier-schema";
 import { asc, eq, inArray } from "drizzle-orm";
 import {
@@ -54,10 +55,12 @@ export async function taskViews(tx: Tx, ids: string[]): Promise<PrepTask[]> {
         name: saleLines.name,
         quantity: saleLines.quantity,
         notes: saleLines.notes,
+        preparation: recipeVersions.preparation,
       },
     })
     .from(preparationTaskLines)
     .innerJoin(saleLines, eq(saleLines.id, preparationTaskLines.lineId))
+    .leftJoin(recipeVersions, eq(recipeVersions.id, saleLines.recipeVersionId))
     .where(inArray(preparationTaskLines.taskId, ids))
     .orderBy(asc(saleLines.position));
   const modifiers = lines.length

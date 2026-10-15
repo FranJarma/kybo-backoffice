@@ -1,3 +1,4 @@
+import { preparationGuideSchema } from "./preparation-guide";
 import { parseWaste } from "@/modules/recipes/waste";
 import { bindingInput } from "@/modules/modifiers/validation";
 import { z } from "zod";
@@ -18,6 +19,7 @@ const recipe = z
     targetId: z.uuid(),
     targetUnit: unit.optional(),
     yieldQuantity: positiveQuantity,
+    preparation: preparationGuideSchema.nullable().optional(),
     notes: z
       .string()
       .trim()

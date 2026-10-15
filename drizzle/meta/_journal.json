@@ -99,6 +99,13 @@
       "when": 1791907453532,
       "tag": "0013_item_stock_tracking",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1791993165327,
+      "tag": "0014_recipe_preparation_guide",
+      "breakpoints": true
     }
   ]
 }

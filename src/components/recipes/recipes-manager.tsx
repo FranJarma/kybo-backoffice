@@ -1,6 +1,8 @@
 "use client";
+import { PreparationFields, emptyPreparation } from "./preparation-fields";
 import { recipeSection } from "@/modules/catalog/item-classes";
 import { consumptionQuantity } from "@/modules/recipes/waste";
+import { RecipeEditorTabs, type RecipeEditorView } from "./editor-tabs";
 import { CostPreview } from "./cost-preview";
 
 import { paths } from "@/lib/navigation";
@@ -8,6 +10,7 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useId,
   useState,
   type FormEvent,
 } from "react";
@@ -501,7 +504,7 @@ export function RecipesManager({ actorId }: { actorId: string }) {
         }}
       >
         <DialogContent
-          className="max-h-[94dvh] gap-8 overflow-y-auto p-5 sm:max-w-5xl sm:p-8 lg:p-10"
+          className="max-h-[96dvh] w-[calc(100vw-2rem)] gap-8 overflow-y-auto p-5 sm:max-w-7xl sm:p-8 lg:p-10"
           showCloseButton={!operation.locked}
         >
           <DialogHeader className="gap-3 border-b border-line pb-6 pr-6 text-left">
@@ -818,6 +821,7 @@ const blankOption = (): OptionDraft => ({
   wastePercent: "0",
 });
 export function RecipeEditor({
+  view,
   kind,
   initial,
   disabled,
@@ -826,6 +830,7 @@ export function RecipeEditor({
   onCancel,
   onSave,
 }: {
+  view?: RecipeEditorView;
   kind: RecipeKind;
   initial?: RecipeDetail;
   disabled: boolean;
@@ -834,6 +839,12 @@ export function RecipeEditor({
   onCancel: () => void;
   onSave: (data: RecipeInput) => void;
 }) {
+  const [preparation, setPreparation] = useState(
+    initial?.preparation ?? emptyPreparation,
+  );
+  const tabsId = useId();
+  const [localView, setLocalView] = useState<RecipeEditorView>("recipe");
+  const activeView = view ?? localView;
   const [targetId, setTargetId] = useState(initial?.targetId ?? ""),
     [target, setTarget] = useState<CatalogRow | undefined>(
       initial
@@ -894,6 +905,7 @@ export function RecipeEditor({
   }
   function submit(e: FormEvent) {
     e.preventDefault();
+    if (activeView === "cost") return;
     onSave({
       requestId: crypto.randomUUID(),
       ...(initial ? { id: initial.id, revision: initial.revision } : {}),
@@ -902,6 +914,10 @@ export function RecipeEditor({
       targetUnit: kind === "product" ? "unit" : String(target?.baseUnit ?? "g"),
       yieldQuantity: kind === "product" ? "1" : yieldQuantity,
       notes,
+      preparation: {
+        ...preparation,
+        steps: preparation.steps.filter((step) => step.trim()),
+      },
       lines: lines.map((l) => ({
         optional: l.optional,
         options: l.options.map((o) => ({
@@ -915,244 +931,296 @@ export function RecipeEditor({
   }
   return (
     <form onSubmit={submit} className="space-y-8">
-      <CostPreview
-        yieldQuantity={kind === "product" ? "1" : yieldQuantity}
-        rows={lines.flatMap((line) =>
-          line.options.map((o, index) => ({
-            itemId: o.itemId,
-            name: String(o.item?.name ?? ""),
-            itemClass: String(o.item?.class ?? ""),
-            baseUnit: String(o.item?.baseUnit ?? "g"),
-            quantity: o.quantity,
-            wastePercent: o.wastePercent,
-            include: index === 0,
-          })),
+      {!view && (
+        <RecipeEditorTabs
+          id={tabsId}
+          value={activeView}
+          onChange={setLocalView}
+        />
+      )}
+      <fieldset
+        hidden={activeView !== "preparation"}
+        disabled={disabled || activeView !== "preparation"}
+        role={!view ? "tabpanel" : undefined}
+        id={`${tabsId}-panel-preparation`}
+        aria-labelledby={!view ? `${tabsId}-tab-preparation` : undefined}
+        className="min-w-0 space-y-6"
+      >
+        <PreparationFields value={preparation} onChange={setPreparation} />
+        {error && (
+          <p role="alert" className="text-sm text-red-700">
+            {error}
+          </p>
         )}
-      />
-      <fieldset disabled={disabled} className="space-y-8">
-        <div className="grid gap-7 sm:grid-cols-2">
-          <SearchSelect
-            entity={kind === "product" ? "products" : "items"}
-            label={kind === "product" ? "Producto" : "Preparado a ingresar"}
-            filter={
-              kind === "preparation"
-                ? (row) => row.stockTracked !== false
-                : undefined
-            }
-            value={targetId}
-            initial={target}
-            required
-            disabled={!!initial || disabled}
-            onChange={(id, row) => {
-              setTargetId(id);
-              setTarget(row);
-            }}
-          />
-          <Field
-            label={
-              kind === "product" ? "Rendimiento base" : "Rendimiento final"
-            }
-            value={kind === "product" ? "1" : yieldQuantity}
-            onChange={kind === "product" ? undefined : setYield}
-            unit={kind === "product" ? "unit" : String(target?.baseUnit ?? "g")}
-            required
-            hint={
-              kind === "product"
-                ? "Una unidad de venta."
-                : target?.baseUnit === "g"
-                  ? "Peso final obtenido, listo para usar. Por ejemplo: 2 kg de tapioca cocida y escurrida = 2000 g."
-                  : target?.baseUnit === "ml"
-                    ? "Volumen final obtenido. Por ejemplo: una jarra de 2 litros = 2000 ml."
-                    : "Cantidad de unidades obtenidas al terminar la preparación."
-            }
-          />
+        <div className="flex justify-end border-t border-line pt-4">
+          <Button type="submit">Guardar receta y preparación</Button>
         </div>
-        <p className="text-xs text-muted">
-          ¿Falta una ficha?{" "}
-          <Link
-            href={kind === "product" ? paths.products : paths.items}
-            className="font-semibold text-blue-700 underline"
-          >
-            Creala en{" "}
-            {kind === "product"
-              ? "Catálogo y precios"
-              : "Catálogo de inventario"}
-          </Link>{" "}
-          antes de armar la receta.
-        </p>
-        <div className="space-y-6">
-          {lines.map((line, i) => (
-            <section
-              key={line.key}
-              className="rounded-xl border border-line bg-surface/50 p-5 sm:p-6"
+      </fieldset>
+      <fieldset
+        disabled={activeView !== "cost"}
+        hidden={activeView !== "cost"}
+        role={!view ? "tabpanel" : undefined}
+        id={`${tabsId}-panel-cost`}
+        aria-labelledby={!view ? `${tabsId}-tab-cost` : undefined}
+        className="min-w-0"
+      >
+        <CostPreview
+          active={activeView === "cost"}
+          yieldQuantity={kind === "product" ? "1" : yieldQuantity}
+          rows={lines.flatMap((line) =>
+            line.options.map((o, index) => ({
+              itemId: o.itemId,
+              name: String(o.item?.name ?? ""),
+              itemClass: String(o.item?.class ?? ""),
+              baseUnit: String(o.item?.baseUnit ?? "g"),
+              quantity: o.quantity,
+              wastePercent: o.wastePercent,
+              include: index === 0,
+            })),
+          )}
+        />
+      </fieldset>
+      <div
+        hidden={activeView !== "recipe"}
+        role={!view ? "tabpanel" : undefined}
+        id={`${tabsId}-panel-recipe`}
+        aria-labelledby={!view ? `${tabsId}-tab-recipe` : undefined}
+        className="space-y-8"
+      >
+        <fieldset
+          disabled={disabled || activeView !== "recipe"}
+          className="space-y-8"
+        >
+          <div className="grid gap-7 sm:grid-cols-2">
+            <SearchSelect
+              entity={kind === "product" ? "products" : "items"}
+              label={kind === "product" ? "Producto" : "Preparado a ingresar"}
+              filter={
+                kind === "preparation"
+                  ? (row) => row.stockTracked !== false
+                  : undefined
+              }
+              value={targetId}
+              initial={target}
+              required
+              disabled={!!initial || disabled}
+              onChange={(id, row) => {
+                setTargetId(id);
+                setTarget(row);
+              }}
+            />
+            <Field
+              label={
+                kind === "product" ? "Rendimiento base" : "Rendimiento final"
+              }
+              value={kind === "product" ? "1" : yieldQuantity}
+              onChange={kind === "product" ? undefined : setYield}
+              unit={
+                kind === "product" ? "unit" : String(target?.baseUnit ?? "g")
+              }
+              required
+              hint={
+                kind === "product"
+                  ? "Una unidad de venta."
+                  : target?.baseUnit === "g"
+                    ? "Peso final obtenido, listo para usar. Por ejemplo: 2 kg de tapioca cocida y escurrida = 2000 g."
+                    : target?.baseUnit === "ml"
+                      ? "Volumen final obtenido. Por ejemplo: una jarra de 2 litros = 2000 ml."
+                      : "Cantidad de unidades obtenidas al terminar la preparación."
+              }
+            />
+          </div>
+          <p className="text-xs text-muted">
+            ¿Falta una ficha?{" "}
+            <Link
+              href={kind === "product" ? paths.products : paths.items}
+              className="font-semibold text-blue-700 underline"
             >
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-sm font-bold">
-                  {recipeSection(String(line.options[0]?.item?.class ?? ""))} ·{" "}
-                  {i + 1}
-                </h3>
-                <div className="flex items-center gap-3">
-                  <label className="flex min-h-10 items-center gap-2 text-xs">
-                    <input
-                      type="checkbox"
-                      className="size-4 accent-blue-600"
-                      checked={line.optional}
-                      onChange={(e) =>
-                        setLines((rows) =>
-                          rows.map((l, n) =>
-                            n === i ? { ...l, optional: e.target.checked } : l,
-                          ),
-                        )
-                      }
-                    />
-                    Opcional
-                  </label>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    aria-label={`Eliminar ingrediente ${i + 1}`}
-                    disabled={lines.length === 1}
-                    onClick={() =>
-                      setLines((rows) => rows.filter((_, n) => n !== i))
-                    }
-                  >
-                    <Trash2 />
-                  </Button>
-                </div>
-              </div>
-              {line.options.map((option, j) => (
-                <div
-                  key={option.key}
-                  className="mb-6 grid items-end gap-5 sm:grid-cols-[minmax(0,1fr)_150px_120px_40px]"
-                >
-                  <SearchSelect
-                    entity="items"
-                    itemScope="recipe"
-                    label={`Ingrediente o descartable ${i + 1}.${j + 1}`}
-                    value={option.itemId}
-                    initial={option.item}
-                    required
-                    disabled={disabled}
-                    onChange={(id, row) =>
-                      update(i, j, { itemId: id, item: row })
-                    }
-                  />
-                  <Field
-                    label={`Cantidad ${i + 1}.${j + 1}`}
-                    value={option.quantity}
-                    onChange={(v) => update(i, j, { quantity: v })}
-                    unit={String(option.item?.baseUnit ?? "g")}
-                    required
-                  />
-                  <Field
-                    label={`Merma % ${i + 1}.${j + 1}`}
-                    value={option.wastePercent}
-                    onChange={(v) => update(i, j, { wastePercent: v })}
-                    unit="%"
-                    required
-                  />
-                  {j > 0 ? (
+              Creala en{" "}
+              {kind === "product"
+                ? "Catálogo y precios"
+                : "Catálogo de inventario"}
+            </Link>{" "}
+            antes de armar la receta.
+          </p>
+          <div className="space-y-6">
+            {lines.map((line, i) => (
+              <section
+                key={line.key}
+                className="rounded-xl border border-line bg-surface/50 p-5 sm:p-6"
+              >
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-sm font-bold">
+                    {recipeSection(String(line.options[0]?.item?.class ?? ""))}{" "}
+                    · {i + 1}
+                  </h3>
+                  <div className="flex items-center gap-3">
+                    <label className="flex min-h-10 items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        className="size-4 accent-blue-600"
+                        checked={line.optional}
+                        onChange={(e) =>
+                          setLines((rows) =>
+                            rows.map((l, n) =>
+                              n === i
+                                ? { ...l, optional: e.target.checked }
+                                : l,
+                            ),
+                          )
+                        }
+                      />
+                      Opcional
+                    </label>
                     <Button
                       type="button"
-                      size="icon"
                       variant="ghost"
-                      aria-label={`Eliminar alternativa ${i + 1}.${j + 1}`}
+                      size="icon"
+                      aria-label={`Eliminar ingrediente ${i + 1}`}
+                      disabled={lines.length === 1}
                       onClick={() =>
-                        setLines((rows) =>
-                          rows.map((l, n) =>
-                            n === i
-                              ? {
-                                  ...l,
-                                  options: l.options.filter((_, k) => k !== j),
-                                }
-                              : l,
-                          ),
-                        )
+                        setLines((rows) => rows.filter((_, n) => n !== i))
                       }
                     >
                       <Trash2 />
                     </Button>
-                  ) : (
-                    <span className="hidden sm:block" />
-                  )}
+                  </div>
                 </div>
-              ))}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={line.options.length >= 5}
-                onClick={() =>
-                  setLines((rows) =>
-                    rows.map((l, n) =>
-                      n === i
-                        ? { ...l, options: [...l.options, blankOption()] }
-                        : l,
-                    ),
-                  )
-                }
-              >
-                <Plus />
-                Agregar alternativa
-              </Button>
-              <p className="mt-2 text-xs text-muted">
-                La primera opción es la predeterminada.
-              </p>
-            </section>
-          ))}
+                {line.options.map((option, j) => (
+                  <div
+                    key={option.key}
+                    className="mb-6 grid items-end gap-5 sm:grid-cols-[minmax(0,1fr)_150px_120px_40px]"
+                  >
+                    <SearchSelect
+                      entity="items"
+                      itemScope="recipe"
+                      label={`Ingrediente o descartable ${i + 1}.${j + 1}`}
+                      value={option.itemId}
+                      initial={option.item}
+                      required
+                      disabled={disabled}
+                      onChange={(id, row) =>
+                        update(i, j, { itemId: id, item: row })
+                      }
+                    />
+                    <Field
+                      label={`Cantidad ${i + 1}.${j + 1}`}
+                      value={option.quantity}
+                      onChange={(v) => update(i, j, { quantity: v })}
+                      unit={String(option.item?.baseUnit ?? "g")}
+                      required
+                    />
+                    <Field
+                      label={`Merma % ${i + 1}.${j + 1}`}
+                      value={option.wastePercent}
+                      onChange={(v) => update(i, j, { wastePercent: v })}
+                      unit="%"
+                      required
+                    />
+                    {j > 0 ? (
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        aria-label={`Eliminar alternativa ${i + 1}.${j + 1}`}
+                        onClick={() =>
+                          setLines((rows) =>
+                            rows.map((l, n) =>
+                              n === i
+                                ? {
+                                    ...l,
+                                    options: l.options.filter(
+                                      (_, k) => k !== j,
+                                    ),
+                                  }
+                                : l,
+                            ),
+                          )
+                        }
+                      >
+                        <Trash2 />
+                      </Button>
+                    ) : (
+                      <span className="hidden sm:block" />
+                    )}
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={line.options.length >= 5}
+                  onClick={() =>
+                    setLines((rows) =>
+                      rows.map((l, n) =>
+                        n === i
+                          ? { ...l, options: [...l.options, blankOption()] }
+                          : l,
+                      ),
+                    )
+                  }
+                >
+                  <Plus />
+                  Agregar alternativa
+                </Button>
+                <p className="mt-2 text-xs text-muted">
+                  La primera opción es la predeterminada.
+                </p>
+              </section>
+            ))}
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={lines.length >= 30}
+            onClick={() =>
+              setLines((rows) => [
+                ...rows,
+                {
+                  key: crypto.randomUUID(),
+                  optional: false,
+                  options: [blankOption()],
+                },
+              ])
+            }
+          >
+            <Plus />
+            Agregar ingrediente o descartable
+          </Button>
+          <label className="block text-xs font-semibold">
+            Indicaciones de preparación
+            <textarea
+              className="form-control mt-2 min-h-20"
+              value={notes}
+              maxLength={2000}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Pasos, temperatura o notas para el equipo…"
+            />
+          </label>
+        </fieldset>
+        {error && (
+          <p role="alert" className="text-sm text-red-700">
+            {error}
+          </p>
+        )}
+        {retry && (
+          <Button type="button" variant="outline" onClick={retry}>
+            Reintentar mismo envío
+          </Button>
+        )}
+        <div className="flex justify-end gap-2 border-t border-line pt-4">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={disabled}
+            onClick={onCancel}
+          >
+            Cancelar
+          </Button>
+          <Button type="submit" disabled={disabled}>
+            Guardar receta
+          </Button>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={lines.length >= 30}
-          onClick={() =>
-            setLines((rows) => [
-              ...rows,
-              {
-                key: crypto.randomUUID(),
-                optional: false,
-                options: [blankOption()],
-              },
-            ])
-          }
-        >
-          <Plus />
-          Agregar ingrediente o descartable
-        </Button>
-        <label className="block text-xs font-semibold">
-          Indicaciones de preparación
-          <textarea
-            className="form-control mt-2 min-h-20"
-            value={notes}
-            maxLength={2000}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Pasos, temperatura o notas para el equipo…"
-          />
-        </label>
-      </fieldset>
-      {error && (
-        <p role="alert" className="text-sm text-red-700">
-          {error}
-        </p>
-      )}
-      {retry && (
-        <Button type="button" variant="outline" onClick={retry}>
-          Reintentar mismo envío
-        </Button>
-      )}
-      <div className="flex justify-end gap-2 border-t border-line pt-4">
-        <Button
-          type="button"
-          variant="outline"
-          disabled={disabled}
-          onClick={onCancel}
-        >
-          Cancelar
-        </Button>
-        <Button type="submit" disabled={disabled}>
-          Guardar receta
-        </Button>
       </div>
     </form>
   );

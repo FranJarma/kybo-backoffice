@@ -1,6 +1,8 @@
+import type { PreparationGuide } from "@/modules/recipes/preparation-guide";
 import { sql } from "drizzle-orm";
 import {
   pgTable,
+  jsonb,
   uuid,
   text,
   integer,
@@ -60,6 +62,7 @@ export const recipeVersions = pgTable(
       scale: 6,
     }).notNull(),
     notes: text("notes"),
+    preparation: jsonb("preparation").$type<PreparationGuide>(),
     actorId: text("actor_id")
       .notNull()
       .references(() => user.id, { onDelete: "restrict" }),

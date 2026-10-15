@@ -36,6 +36,9 @@ export function ItemSuppliersTab({
   const [mode, setMode] = useState<Mode>(null);
   const [supplierId, setSupplierId] = useState("");
   const [presentationId, setPresentationId] = useState("");
+  const [editingPack, setEditingPack] = useState<
+    ItemSourcing["presentations"][number] | null
+  >(null);
   const [quotePack, setQuotePack] = useState<
     ItemSourcing["presentations"][number] | null
   >(null);
@@ -141,6 +144,7 @@ export function ItemSuppliersTab({
     }
   }
   function start(next: Mode, vendor = "", packId = "") {
+    setEditingPack(null);
     setMode(next);
     setSupplierId(vendor);
     setPresentationId(packId);
@@ -164,6 +168,57 @@ export function ItemSuppliersTab({
     setLeadTime("");
     setMinimum("1");
   }
+  function editPresentation(p: ItemSourcing["presentations"][number]) {
+    start("presentation", p.supplierId, p.id);
+    setEditingPack(p);
+    setName(p.name);
+    setContent(p.baseQuantity.replace(".", ","));
+    setUnit(data!.item.baseUnit as typeof unit);
+    requestAnimationFrame(() => {
+      const form = document.getElementById(formId);
+      form?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      form
+        ?.querySelector<HTMLInputElement>("input")
+        ?.focus({ preventScroll: true });
+    });
+  }
+  async function savePresentation(p: ItemSourcing["presentations"][number]) {
+    setChangingPresentation(true);
+    try {
+      const response = await fetch(`/api/catalog/presentations/${p.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          revision: p.revision,
+          name,
+          supplierId: p.supplierId,
+          itemId,
+          baseQuantity: presentationQuantity("1", content, unit).replace(
+            ".",
+            ",",
+          ),
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok)
+        throw new Error(result.error ?? "No pudimos guardar la presentación.");
+      setMode(null);
+      setEditingPack(null);
+      await load();
+      setNotice(
+        "Presentación actualizada. Las compras y el stock no cambiaron. Si modificaste el contenido, registrá un nuevo precio.",
+      );
+    } catch (e) {
+      await load();
+      setError(
+        e instanceof Error
+          ? e.message
+          : "No pudimos confirmar el cambio. Cancelá y revisá la presentación antes de reintentar.",
+      );
+    } finally {
+      setChangingPresentation(false);
+    }
+  }
   function submit(event: FormEvent) {
     event.preventDefault();
     if (locked || !canEdit || !mode) return;
@@ -176,6 +231,10 @@ export function ItemSuppliersTab({
         presentationQuantity(units, content, unit);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Revisá el contenido.");
+        return;
+      }
+      if (editingPack) {
+        void savePresentation(editingPack);
         return;
       }
       operation.submit(url, {
@@ -338,7 +397,9 @@ export function ItemSuppliersTab({
             {mode === "link"
               ? "Vincular proveedor"
               : mode === "presentation"
-                ? "Nueva presentación de compra"
+                ? editingPack
+                  ? "Editar presentación de compra"
+                  : "Nueva presentación de compra"
                 : `Registrar precio · ${pack?.name ?? ""}`}
           </h3>
           <fieldset
@@ -380,15 +441,29 @@ export function ItemSuppliersTab({
                     "Por ejemplo: Caja de 12 leches de 1 litro.",
                   )}
                 </div>
+                {!editingPack &&
+                  field(
+                    "Envases por presentación",
+                    units,
+                    setUnits,
+                    "text",
+                    true,
+                    "Caja de 12: ingresá 12. Envase individual: ingresá 1.",
+                  )}
                 {field(
-                  "Envases por presentación",
-                  units,
-                  setUnits,
-                  "text",
-                  true,
-                  "Caja de 12: ingresá 12. Envase individual: ingresá 1.",
+                  editingPack
+                    ? "Contenido total de la presentación"
+                    : "Contenido de cada envase",
+                  content,
+                  setContent,
                 )}
-                {field("Contenido de cada envase", content, setContent)}
+                {editingPack && (
+                  <p className="text-sm text-muted sm:col-span-2">
+                    Indicá el contenido completo de la caja, botella o paquete.
+                    Las compras anteriores se conservan; si cambia el contenido,
+                    deberás registrar un nuevo precio.
+                  </p>
+                )}
                 <label className="space-y-2 text-sm font-medium text-brand">
                   <span>Unidad del contenido *</span>
                   <select
@@ -458,7 +533,7 @@ export function ItemSuppliersTab({
               Cancelar
             </Button>
             <Button type="submit" disabled={locked}>
-              {operation.busy
+              {operation.busy || changingPresentation
                 ? "Guardando…"
                 : mode === "link"
                   ? "Vincular"
@@ -527,6 +602,21 @@ export function ItemSuppliersTab({
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={
+                          locked ||
+                          !canEdit ||
+                          p.archived ||
+                          vendor.archived ||
+                          mode !== null
+                        }
+                        aria-label={`Editar presentación ${p.name}`}
+                        onClick={() => editPresentation(p)}
+                      >
+                        Editar
+                      </Button>
                       <Button
                         type="button"
                         variant="outline"
