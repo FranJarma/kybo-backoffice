@@ -60,6 +60,7 @@ export function ProductionManager({
   timeZone: string;
   initialRecipe?: string;
 }) {
+  const [mode, setMode] = useState<"plan" | "record">("plan");
   const [list, setList] = useState<RecipeList>({ rows: [], total: 0 }),
     [search, setSearch] = useState(""),
     [offset, setOffset] = useState(0);
@@ -224,7 +225,31 @@ export function ProductionManager({
           ) : null}
         </div>
       )}
-      <ProductionOrdersPanel actorId={actorId} recipe={recipe} />
+      <div
+        className="mb-5 flex gap-6 border-b border-line"
+        aria-label="Modo de producción"
+      >
+        {(
+          [
+            ["plan", "Planificar y asignar"],
+            ["record", "Registrar lote ya producido"],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={mode === value}
+            disabled={operation.locked}
+            className={`border-b-2 px-1 py-3 text-sm ${mode === value ? "border-blue-600 text-blue-600" : "border-transparent text-muted"}`}
+            onClick={() => {
+              setMode(value);
+              setSaved(null);
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       {saved ? (
         <section className="surface-panel mb-6 p-6">
           <div className="mb-4 flex items-center gap-3">
@@ -279,7 +304,11 @@ export function ProductionManager({
             aria-label="Elegir preparación"
           >
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-lg font-bold">¿Qué preparaste?</h2>
+              <h2 className="text-lg font-bold">
+                {mode === "plan"
+                  ? "¿Qué hay que preparar?"
+                  : "¿Qué preparaste?"}
+              </h2>
               {(list.total > 6 || search) && (
                 <div className="relative w-full sm:w-64">
                   <Search
@@ -382,11 +411,19 @@ export function ProductionManager({
               </div>
             )}
           </section>
+          {mode === "plan" && (
+            <ProductionOrdersPanel
+              actorId={actorId}
+              recipe={recipe}
+              timeZone={timeZone}
+              canManage
+            />
+          )}
           {recipeLoading ? (
             <p className="surface-panel p-8 text-sm text-muted" role="status">
               Cargando receta…
             </p>
-          ) : recipe ? (
+          ) : mode === "record" && recipe ? (
             <ProductionForm
               timeZone={timeZone}
               key={`${recipe.versionId}:${refresh}`}
@@ -396,7 +433,7 @@ export function ProductionManager({
               onConfirm={(data) => operation.submit("/api/production", data)}
               onReload={() => setRefresh((n) => n + 1)}
             />
-          ) : !loading && list.rows.length > 0 ? (
+          ) : mode === "record" && !loading && list.rows.length > 0 ? (
             <Notice>
               Elegí una preparación para ingresar sus consumos y el rendimiento
               del lote.

@@ -48,7 +48,7 @@ export const navigation = [
     label: "Registro de producción",
     href: "/kitchen/production",
     icon: "ChefHat",
-    access: "manager",
+    access: "all",
     parent: "kitchen",
   },
   {

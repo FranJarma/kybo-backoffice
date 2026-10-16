@@ -4,6 +4,7 @@ import { ModifierRecipeEditor } from "@/components/recipes/modifier-editor";
 import { RecipeEditor } from "@/components/recipes/recipes-manager";
 import { getJson, useOperation } from "@/components/inventory/shared";
 import { Button } from "@/components/ui/button";
+import { OperationAlert } from "@/components/ui/operation-alert";
 import type { RecipeDetail, RecipeInput } from "@/modules/recipes/types";
 
 export function ProductRecipeTab({
@@ -11,12 +12,14 @@ export function ProductRecipeTab({
   actorId,
   onBusy,
   onBack,
+  onSaved,
   view = "recipe",
 }: {
   productId: string;
   actorId: string;
   onBusy: (busy: boolean) => void;
   onBack: () => void;
+  onSaved?: () => void;
   view?: "recipe" | "cost" | "preparation";
 }) {
   const [recipe, setRecipe] = useState<RecipeDetail | null>();
@@ -27,6 +30,7 @@ export function ProductRecipeTab({
     const saved = result as RecipeDetail;
     if (saved.targetId === productId) setRecipe(saved);
     else setRefresh((n) => n + 1);
+    onSaved?.();
     setNotice("Receta guardada. El producto conserva sus datos y precios.");
   });
   useEffect(() => {
@@ -73,14 +77,15 @@ export function ProductRecipeTab({
   };
   return (
     <div className="space-y-5">
-      {notice && (
-        <p
-          role="status"
-          className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800"
-        >
-          {notice}
-        </p>
-      )}
+      <OperationAlert
+        message={operation.error || notice}
+        title={
+          operation.error
+            ? "No se pudo confirmar la publicación"
+            : "Receta publicada"
+        }
+        tone={operation.error ? "error" : "success"}
+      />
       {!recipe && (
         <p className="text-sm text-muted">
           Sin receta. Podés crearla ahora o dejarla para después. Los productos

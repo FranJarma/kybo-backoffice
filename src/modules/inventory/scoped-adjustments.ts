@@ -37,6 +37,10 @@ export async function adjustAt(
   now: Date,
 ) {
   const input = parseAdjustment(raw);
+  const reason =
+    input.kind === "opening" && input.observations
+      ? `${input.reason}\nObservaciones: ${input.observations}`
+      : input.reason;
   const outcome = await executeCommand(
     db,
     actor,
@@ -215,7 +219,7 @@ export async function adjustAt(
           branchId: ctx.branchId,
           actorId: ctx.actorId,
           kind: input.kind,
-          reason: input.reason,
+          reason,
         })
         .returning();
       const [document] = await tx
@@ -230,7 +234,7 @@ export async function adjustAt(
         operationId,
         documentId: document.id,
         action: input.kind,
-        reason: input.reason,
+        reason,
         legs: [
           {
             itemId,

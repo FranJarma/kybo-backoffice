@@ -8,6 +8,16 @@ import {
   six,
 } from "./decimal";
 
+// The catalog stores cost per base unit; the form accepts cost per entered unit.
+export function openingReferenceCost(cost: string | null, factor: string) {
+  if (cost === null) return "";
+  return (
+    six(roundedDivision(integer(cost) * integer(factor), SCALE))
+      .replace(/\.?0+$/, "")
+      .replace(".", ",") || "0"
+  );
+}
+
 // Arguments are canonical decimals, after input validation. Cost is per entered
 // unit/presentation; value is calculated before conversion to avoid losing cents.
 export function openingQuantity(

@@ -210,7 +210,7 @@ export async function movementsByBranch(
 ): Promise<{ rows: MovementRow[]; total: number }> {
   const history = sql`
     select m.id,m.lot_id as "lotId",m.item_id as "itemId",m.action as kind,m.quantity::text as delta,
-      (abs(m.value)/abs(m.quantity))::numeric(24,6)::text as "unitCost",m.value::text as "valueDelta",
+      (abs(m.value)/nullif(abs(m.quantity),0))::numeric(24,6)::text as "unitCost",m.value::text as "valueDelta",
       m.reason,m.document_id as "referenceId",u.name as "actorName",m.created_at as "createdAt"
     from stock_movements m join stock_operations o on o.id=m.operation_id join "user" u on u.id=o.actor_id
     where m.branch_id=${ctx.branchId} and m.item_id=${itemId}

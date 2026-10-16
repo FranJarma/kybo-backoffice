@@ -22,6 +22,7 @@ describe("navegación por áreas", () => {
       "sales",
       "tables",
       "kitchen",
+      "production",
       "branches",
     ]);
     expect(
@@ -33,7 +34,7 @@ describe("navegación por áreas", () => {
       (n) => n.id,
     );
     expect(ids).toContain("recipes");
-    expect(ids).not.toContain("production");
+    expect(ids).toContain("production");
     expect(ids).not.toContain("inventory");
     expect(
       breadcrumbs("/inventory/items", {

@@ -11,6 +11,8 @@ import {
 } from "../src/db/business-schema";
 import { adjustAt } from "../src/modules/inventory/scoped-adjustments";
 import type { Actor } from "../src/lib/access";
+import { stockAdjustments } from "../src/db/inventory-document-schema";
+import { parseAdjustment } from "../src/modules/inventory/validation";
 
 let ctx: Awaited<ReturnType<typeof createDataModelTestContext>>;
 let itemId: string, packId: string;
@@ -197,4 +199,49 @@ it("rechaza cantidades fuera de rango sin crear stock", async () => {
       now,
     ),
   ).rejects.toThrow("rango");
+});
+
+it("asigna motivo inicial sin exigir texto y conserva observaciones en el historial", async () => {
+  for (const observations of [undefined, "  Conteo de apertura  "]) {
+    const payload = input({
+      reason: undefined,
+      observations,
+      quantity: "1",
+      unitCost: "0",
+      entryUnit: "ml",
+    });
+    const result = await adjustAt(ctx.db, actor, payload, now);
+    expect((await adjustAt(ctx.db, actor, payload, now)).lot.id).toBe(
+      result.lot.id,
+    );
+    const expected = observations
+      ? "Stock inicial\nObservaciones: Conteo de apertura"
+      : "Stock inicial";
+    const rows = await ctx.db
+      .select()
+      .from(stockAdjustments)
+      .where(eq(stockAdjustments.reason, expected));
+    expect(rows.length).toBeGreaterThan(0);
+  }
+});
+it("sigue exigiendo motivo para merma, conteo y bloqueo", () => {
+  for (const kind of ["waste", "count", "block"]) {
+    for (const reason of [undefined, "", "   "]) {
+      expect(() =>
+        parseAdjustment({
+          requestId: randomUUID(),
+          locationId: ctx.mapping.initialLocation.id,
+          lotId: randomUUID(),
+          revision: 1,
+          kind,
+          reason,
+          ...(kind === "waste"
+            ? { quantity: "1" }
+            : kind === "count"
+              ? { countedQuantity: "1" }
+              : { blocked: true }),
+        }),
+      ).toThrow();
+    }
+  }
 });

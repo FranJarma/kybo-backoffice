@@ -145,7 +145,10 @@ export async function recipeDefinition(
   };
 }
 
-async function graph(db: ReadDb) {
+async function graph(db: ReadDb, preparationsOnly = false) {
+  const kindFilter = preparationsOnly
+    ? eq(recipes.kind, "preparation")
+    : undefined;
   const current = await db
     .select({ recipe: recipes, version: recipeVersions })
     .from(recipes)
@@ -155,7 +158,8 @@ async function graph(db: ReadDb) {
         eq(recipeVersions.recipeId, recipes.id),
         eq(recipeVersions.version, recipes.revision),
       ),
-    );
+    )
+    .where(kindFilter);
   const options = await db
     .select({ option: recipeOptions, versionId: recipeLines.versionId })
     .from(recipeOptions)
@@ -168,12 +172,17 @@ async function graph(db: ReadDb) {
         eq(recipes.revision, recipeVersions.version),
       ),
     )
+    .where(kindFilter)
     .orderBy(asc(recipeLines.position), asc(recipeOptions.position));
+  const byVersion = new Map<string, (typeof options)[number]["option"][]>();
+  for (const { option, versionId } of options) {
+    const list = byVersion.get(versionId) ?? [];
+    list.push(option);
+    byVersion.set(versionId, list);
+  }
   return current.map((r) => ({
     ...r,
-    options: options
-      .filter((o) => o.versionId === r.version.id)
-      .map((o) => o.option),
+    options: byVersion.get(r.version.id) ?? [],
   }));
 }
 export async function recipeCostBranch(db: AppDb, actor: Actor) {
@@ -199,9 +208,7 @@ export async function costContext(db: ReadDb, branchId?: string) {
     ).map((v) => [v.itemId, v]),
   );
   const prepared = new Map(
-    (await graph(db))
-      .filter((r) => r.recipe.kind === "preparation")
-      .map((r) => [r.recipe.outputItemId!, r]),
+    (await graph(db, true)).map((r) => [r.recipe.outputItemId!, r]),
   );
   const cache = new Map<string, EstimatedItemCost>();
   const estimate = (id: string, path: string[] = []): EstimatedItemCost => {
@@ -528,18 +535,22 @@ export function createRecipeService(db: AppDb) {
           ),
         ].sort();
         const locked = new Map<string, typeof items.$inferSelect>();
-        for (const itemId of ids) {
-          const [item] = await tx
-            .select()
-            .from(items)
-            .where(eq(items.id, itemId))
-            .for("update");
-          if (!item || item.archivedAt || !item.recipeUsable)
-            conflict(
-              "La receta requiere insumos activos. Revisá sus ingredientes.",
-            );
-          locked.set(itemId, item);
-        }
+        const lockedItems = ids.length
+          ? await tx
+              .select()
+              .from(items)
+              .where(inArray(items.id, ids))
+              .orderBy(asc(items.id))
+              .for("update")
+          : [];
+        if (
+          lockedItems.length !== ids.length ||
+          lockedItems.some((item) => item.archivedAt || !item.recipeUsable)
+        )
+          conflict(
+            "La receta requiere insumos activos. Revisá sus ingredientes.",
+          );
+        for (const item of lockedItems) locked.set(item.id, item);
         let name: string;
         let outputUnit: string;
         if (input.kind === "product") {
@@ -603,21 +614,26 @@ export function createRecipeService(db: AppDb) {
           preparation: preparation ?? null,
           actorId: actor.id,
         });
-        for (const [position, line] of input.lines.entries()) {
-          const [savedLine] = await tx
-            .insert(recipeLines)
-            .values({ versionId, position, optional: line.optional })
-            .returning();
+        const lineRows = input.lines.map((line, position) => ({
+          id: randomUUID(),
+          versionId,
+          position,
+          optional: line.optional,
+        }));
+        if (lineRows.length) {
+          await tx.insert(recipeLines).values(lineRows);
           await tx.insert(recipeOptions).values(
-            line.options.map((option, position) => ({
-              lineId: savedLine.id,
-              position,
-              itemId: option.itemId,
-              itemName: locked.get(option.itemId)!.name,
-              baseUnit: locked.get(option.itemId)!.baseUnit,
-              quantity: option.quantity,
-              wastePercent: option.wastePercent,
-            })),
+            input.lines.flatMap((line, index) =>
+              line.options.map((option, position) => ({
+                lineId: lineRows[index].id,
+                position,
+                itemId: option.itemId,
+                itemName: locked.get(option.itemId)!.name,
+                baseUnit: locked.get(option.itemId)!.baseUnit,
+                quantity: option.quantity,
+                wastePercent: option.wastePercent,
+              })),
+            ),
           );
         }
         if (input.compositionModel === "configurable") {

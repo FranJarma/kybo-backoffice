@@ -57,7 +57,7 @@ export async function archiveLocation(
       .where(
         and(
           eq(productionOrders.locationId, id),
-          eq(productionOrders.state, "confirmed"),
+          inArray(productionOrders.state, ["planned", "confirmed"]),
         ),
       )
       .limit(1);

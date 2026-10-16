@@ -8,7 +8,7 @@ import { publishGroup } from "@/modules/modifiers/service";
 import { createRecipeService } from "@/modules/recipes/service";
 import { loadConfiguration } from "@/modules/recipes/configuration";
 
-it("loads forty modifier options with a bounded number of queries", async () => {
+it("publishes and loads forty modifier options with a bounded number of queries", async () => {
   const ctx = await createDataModelTestContext();
   try {
     const actor = {
@@ -62,7 +62,17 @@ it("loads forty modifier options with a bounded number of queries", async () => 
         })),
       }),
     );
-    const saved = await createRecipeService(ctx.db).save(actor, {
+    const queries: string[] = [];
+    const db = drizzle({
+      client: ctx.client,
+      schema,
+      logger: {
+        logQuery(query) {
+          queries.push(query);
+        },
+      },
+    }) as unknown as AppDb;
+    const saved = await createRecipeService(db).save(actor, {
       requestId: randomUUID(),
       kind: "product",
       targetId: product.id,
@@ -99,16 +109,17 @@ it("loads forty modifier options with a bounded number of queries", async () => 
         },
       ],
     });
-    const queries: string[] = [];
-    const db = drizzle({
-      client: ctx.client,
-      schema,
-      logger: {
-        logQuery(query) {
-          queries.push(query);
-        },
-      },
-    }) as unknown as AppDb;
+    const optionInserts = queries.filter((q) =>
+      q.startsWith('insert into "recipe_modifier_options"'),
+    );
+    const priceInserts = queries.filter((q) =>
+      q.startsWith('insert into "recipe_modifier_option_prices"'),
+    );
+    // Baseline: 230 round trips for this same publication.
+    expect(queries.length).toBeLessThanOrEqual(75);
+    expect(optionInserts).toHaveLength(1);
+    expect(priceInserts).toHaveLength(1);
+    queries.length = 0;
     const config = await loadConfiguration(db, saved.versionId);
     expect(config.groups[0].options).toHaveLength(40);
     expect(config.groups[0].options[0]).toMatchObject({

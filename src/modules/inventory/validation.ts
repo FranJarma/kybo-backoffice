@@ -90,7 +90,8 @@ const opening = z
     receivedOn: date,
     expiresOn: date.nullish().transform((v) => v || null),
     lotCode: optionalText(120),
-    reason,
+    reason: reason.default("Stock inicial"),
+    observations: z.string().trim().max(500).optional(),
   })
   .strict();
 const baseLot = {

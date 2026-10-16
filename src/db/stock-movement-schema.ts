@@ -55,7 +55,10 @@ export const stockMovements = pgTable(
         lotLocationBalances.branchId,
       ],
     }),
-    check("stock_movement_nonzero", sql`${t.quantity}<>0`),
+    check(
+      "stock_movement_nonzero",
+      sql`${t.quantity}<>0 or ${t.action}='production_review'`,
+    ),
     check(
       "stock_movement_value_sign",
       sql`${t.value} is null or ${t.quantity}*${t.value}>=0`,

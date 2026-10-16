@@ -94,7 +94,7 @@ export async function archiveBranch(
       .where(
         and(
           eq(productionOrders.branchId, branchId),
-          eq(productionOrders.state, "confirmed"),
+          inArray(productionOrders.state, ["planned", "confirmed"]),
         ),
       )
       .limit(1);

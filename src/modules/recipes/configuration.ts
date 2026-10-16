@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { publishGroup } from "@/modules/modifiers/service";
 import { eq, asc, and, inArray } from "drizzle-orm";
 import type { AppDb } from "@/db/client";
@@ -222,6 +223,24 @@ export async function saveBindings(
         position,
       })
       .returning();
+    const optionRows: (typeof recipeModifierOptions.$inferInsert)[] = [];
+    const componentRows: (typeof recipeModifierOptionComponents.$inferInsert)[] =
+      [];
+    const priceRows: (typeof recipeModifierOptionPrices.$inferInsert)[] = [];
+    const overrideIds = [
+      ...new Set(g.options.flatMap((b) => b.components.map((c) => c.itemId))),
+    ].sort();
+    const overrideItems = new Map(
+      (overrideIds.length
+        ? await tx
+            .select()
+            .from(items)
+            .where(inArray(items.id, overrideIds))
+            .orderBy(asc(items.id))
+            .for("update")
+        : []
+      ).map((item) => [item.id, item]),
+    );
     for (const b of g.options) {
       const option =
         source.find((o) =>
@@ -236,33 +255,29 @@ export async function saveBindings(
         invalid("Una instrucción no admite ingredientes.");
       if (b.mode === "inherit" && b.components.length)
         invalid("La composición heredada no admite reemplazos.");
-      const [saved] = await tx
-        .insert(recipeModifierOptions)
-        .values({
-          recipeVersionId,
-          recipeModifierGroupId: row.id,
-          groupVersionId: v.id,
-          optionId: option.id,
-          enabled: b.enabled,
-          defaultCount: b.defaultCount,
-          maxCount: b.maxCount,
-          mode: b.mode,
-        })
-        .returning();
+      const saved = { id: randomUUID() };
+      optionRows.push({
+        id: saved.id,
+        recipeVersionId,
+        recipeModifierGroupId: row.id,
+        groupVersionId: v.id,
+        optionId: option.id,
+        enabled: b.enabled,
+        defaultCount: b.defaultCount,
+        maxCount: b.maxCount,
+        mode: b.mode,
+      });
       if (
         new Set(b.components.map((c) => c.itemId)).size !== b.components.length
       )
         invalid("Insumo repetido.");
       for (const c of b.components) {
-        const [i] = await tx
-          .select()
-          .from(items)
-          .where(eq(items.id, c.itemId))
-          .for("update");
-        if (!i || i.archivedAt) invalid("Insumo no disponible.");
+        const i =
+          overrideItems.get(c.itemId) ?? invalid("Insumo no disponible.");
+        if (i.archivedAt) invalid("Insumo no disponible.");
         if (c.baseUnit && c.baseUnit !== i.baseUnit)
           conflict("Cambió la unidad.");
-        await tx.insert(recipeModifierOptionComponents).values({
+        componentRows.push({
           recipeModifierOptionId: saved.id,
           itemId: i.id,
           name: i.name,
@@ -276,10 +291,18 @@ export async function saveBindings(
           invalid("Completá el recargo en cada canal, incluso si es cero.");
       for (const [channel, surcharge] of Object.entries(b.prices))
         if (surcharge != null)
-          await tx
-            .insert(recipeModifierOptionPrices)
-            .values({ recipeModifierOptionId: saved.id, channel, surcharge });
+          priceRows.push({
+            recipeModifierOptionId: saved.id,
+            channel,
+            surcharge,
+          });
     }
+    if (optionRows.length)
+      await tx.insert(recipeModifierOptions).values(optionRows);
+    if (componentRows.length)
+      await tx.insert(recipeModifierOptionComponents).values(componentRows);
+    if (priceRows.length)
+      await tx.insert(recipeModifierOptionPrices).values(priceRows);
   }
   // Hold every effective input until the publication transaction commits.
   const unlocked = await loadConfiguration(tx, recipeVersionId);

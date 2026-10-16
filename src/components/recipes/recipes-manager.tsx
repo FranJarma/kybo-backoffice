@@ -29,6 +29,7 @@ import {
   History,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { OperationAlert } from "@/components/ui/operation-alert";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -94,6 +95,10 @@ export function RecipesManager({ actorId }: { actorId: string }) {
     );
   }, []);
   const operation = useOperation<RecipeInput>(actorId, "recipe", onSaved);
+  const publish = (input: RecipeInput) => {
+    setSuccess("");
+    operation.submit("/api/recipes", input);
+  };
   useEffect(() => {
     let live = true;
     const timer = setTimeout(
@@ -237,14 +242,7 @@ export function RecipesManager({ actorId }: { actorId: string }) {
           </button>
         ))}
       </div>
-      {success && (
-        <p
-          role="status"
-          className="mb-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800"
-        >
-          {success}
-        </p>
-      )}
+      <OperationAlert message={success} title="Receta publicada" />
       {(error || operation.error) && (
         <div
           role="alert"
@@ -518,12 +516,17 @@ export function RecipesManager({ actorId }: { actorId: string }) {
               Los cambios quedan guardados por versión.
             </DialogDescription>
           </DialogHeader>
+          <OperationAlert
+            message={operation.error}
+            title="No se pudo confirmar la publicación"
+            tone="error"
+          />
           {editor &&
             (editor.configurable ||
             editor.recipe?.compositionModel === "configurable" ? (
               <ModifierRecipeEditor
                 initial={editor.recipe}
-                onSave={(input) => operation.submit("/api/recipes", input)}
+                onSave={publish}
                 onCancel={() => setEditor(null)}
                 disabled={operation.locked}
                 error={operation.error}
@@ -537,7 +540,7 @@ export function RecipesManager({ actorId }: { actorId: string }) {
                 error={operation.error}
                 retry={operation.uncertain ? operation.retry : undefined}
                 onCancel={() => setEditor(null)}
-                onSave={(input) => operation.submit("/api/recipes", input)}
+                onSave={publish}
               />
             ))}
         </DialogContent>

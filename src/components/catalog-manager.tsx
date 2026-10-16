@@ -1,6 +1,10 @@
 "use client";
 import { money, quantity } from "@/lib/number-format";
 import {
+  ProductCostSummary,
+  useProductCosts,
+} from "@/components/catalog/product-costs";
+import {
   ReorderHandle,
   type DropPosition,
 } from "@/components/catalog/reorder-handle";
@@ -256,6 +260,20 @@ export function CatalogManager({
   const [suppliersOpened, setSuppliersOpened] = useState(false);
   const [suppliersBusy, setSuppliersBusy] = useState(false);
   const [manualCode, setManualCode] = useState(false);
+  const [costRevision, setCostRevision] = useState(0);
+  const costs = useProductCosts(
+    entity === "products" ? rows.map((r) => r.id) : [],
+    entity === "products" && !loading,
+    costRevision,
+  );
+  function costSummary(row: CatalogRow) {
+    return (
+      <ProductCostSummary
+        model={costs?.products[row.id]}
+        error={costs?.error}
+      />
+    );
+  }
   useEffect(() => {
     const controller = new AbortController();
     const timer = setTimeout(
@@ -486,6 +504,7 @@ export function CatalogManager({
         setRecipeOpened(true);
         setProductTab("recipe");
       } else setEditing(undefined);
+      setCostRevision((n) => n + 1);
       setRefresh((n) => n + 1);
     } catch {
       setFormError(
@@ -911,7 +930,10 @@ export function CatalogManager({
             aria-label="Actualizar lista"
             title="Actualizar lista"
             disabled={loading}
-            onClick={() => setRefresh((n) => n + 1)}
+            onClick={() => {
+              setCostRevision((n) => n + 1);
+              setRefresh((n) => n + 1);
+            }}
             className="h-12 w-12 text-muted"
           >
             <RefreshCw
@@ -991,6 +1013,11 @@ export function CatalogManager({
                           : (columnNames[column] ?? column)}
                       </TableHead>
                     ))}
+                    {entity === "products" && (
+                      <TableHead className="h-14 font-medium normal-case">
+                        Costo estimado
+                      </TableHead>
+                    )}
                     <TableHead className="h-14 font-medium normal-case">
                       Estado
                     </TableHead>
@@ -1040,6 +1067,9 @@ export function CatalogManager({
                           )}
                         </TableCell>
                       ))}
+                      {entity === "products" && (
+                        <TableCell>{costSummary(row)}</TableCell>
+                      )}
                       <TableCell>
                         <RecordStatus row={row} />
                       </TableCell>
@@ -1096,6 +1126,12 @@ export function CatalogManager({
                         </div>
                       ))}
                   </dl>
+                  {entity === "products" && (
+                    <div className="mt-4 border-t border-line pt-3">
+                      <p className="text-xs text-muted">Costo estimado</p>
+                      {costSummary(row)}
+                    </div>
+                  )}
                   <div className="mt-4 border-t border-line pt-3">
                     {rowActions(row)}
                   </div>
@@ -1356,6 +1392,7 @@ export function CatalogManager({
                       productId={editing.id}
                       actorId={actorId}
                       onBusy={setRecipeBusy}
+                      onSaved={() => setCostRevision((n) => n + 1)}
                       onBack={() => setProductTab("product")}
                     />
                     {editing && preparationOpened && (

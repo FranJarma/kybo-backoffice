@@ -46,7 +46,8 @@ export type AdjustmentInput =
       receivedOn: string;
       expiresOn?: string | null;
       lotCode?: string | null;
-      reason: string;
+      reason?: string;
+      observations?: string;
     }
   | {
       requestId: string;
@@ -179,6 +180,7 @@ export type MovementRow = {
     | "count"
     | "production_in"
     | "production_out"
+    | "production_review"
     | "production"
     | "sale_consume"
     | "direct_dispatch"

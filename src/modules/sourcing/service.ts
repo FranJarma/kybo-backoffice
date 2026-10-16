@@ -80,6 +80,7 @@ export function createSourcingService(db: AppDb) {
           id,
           name: item.name,
           baseUnit: item.baseUnit,
+          unitCost: item.unitCost,
           archived: !!item.archivedAt,
           purchasable: item.purchasable,
         },

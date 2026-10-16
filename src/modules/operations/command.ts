@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
+import { productionOrders } from "@/db/production-order-schema";
 import type { AppDb } from "@/db/client";
 import type { Tx } from "@/db/types";
 import { stockOperations } from "@/db/stock-schema";
@@ -42,7 +43,10 @@ export async function executeCommand<T>(
     const ctx = await requireOperationalContext(tx, actor, branchId);
     // Command-level authorization runs before claiming or replaying an operation.
     // Unknown/future commands default to manager access until explicitly classified.
-    const staffCommand = action === "complete" || action === "deliver";
+    const productionCommand =
+      action === "production-start" || action === "production-finish";
+    const staffCommand =
+      action === "complete" || action === "deliver" || productionCommand;
     if (
       (!staffCommand && ctx.role === "staff") ||
       (action === "global-lot-recall" && ctx.role !== "admin")
@@ -52,6 +56,28 @@ export async function executeCommand<T>(
         "Ya no tenés permiso para realizar o consultar esta operación.",
         403,
       );
+    if (ctx.role === "staff" && productionCommand) {
+      const orderId = (payload as { id?: unknown })?.id;
+      const [order] =
+        typeof orderId === "string"
+          ? await tx
+              .select({ assignedTo: productionOrders.assignedTo })
+              .from(productionOrders)
+              .where(
+                and(
+                  eq(productionOrders.id, orderId),
+                  eq(productionOrders.branchId, branchId),
+                ),
+              )
+              .for("update")
+          : [];
+      if (!order || order.assignedTo !== ctx.actorId)
+        throw new AppError(
+          "FORBIDDEN",
+          "Solo podés ejecutar las tareas que tenés asignadas.",
+          403,
+        );
+    }
     const id = randomUUID();
     const [claimed] = await tx
       .insert(stockOperations)

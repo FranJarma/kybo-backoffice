@@ -30,7 +30,10 @@ import {
   costUnitLabels,
 } from "@/modules/catalog/entry-units";
 import { decimal } from "@/modules/inventory/decimal";
-import { openingQuantity } from "@/modules/inventory/opening-quantity";
+import {
+  openingQuantity,
+  openingReferenceCost,
+} from "@/modules/inventory/opening-quantity";
 import type {
   AdjustmentInput,
   LotRow,
@@ -54,7 +57,7 @@ type Detail = {
 };
 type Action = "opening" | "waste" | "count" | "block";
 type OpeningOptions = {
-  item: { id: string; baseUnit: string };
+  item: { id: string; baseUnit: string; unitCost: string | null };
   suppliers: { id: string; name: string; archived: boolean }[];
   presentations: {
     id: string;
@@ -72,6 +75,7 @@ const actionLabels = {
   block: "Bloquear o desbloquear",
 };
 const kindLabels = {
+  production_review: "Revisión del costo de producción",
   production: "Producción",
   sale_consume: "Preparación terminada",
   direct_dispatch: "Producto entregado",
@@ -172,7 +176,7 @@ export function InventoryManager({
   const [expiresOn, setExpiresOn] = useState(""),
     [lotCode, setLotCode] = useState(""),
     [quantityInput, setQuantityInput] = useState(""),
-    [unitCost, setUnitCost] = useState(""),
+    [costOverride, setCostOverride] = useState<string | undefined>(undefined),
     [reason, setReason] = useState("");
   const [blocked, setBlocked] = useState(false),
     [notice, setNotice] = useState("");
@@ -213,6 +217,13 @@ export function InventoryManager({
   const chosenPack = openingOptions?.presentations.find(
     (p) => `pack:${p.id}` === entryChoice,
   );
+  const openingFactor =
+    chosenPack?.baseQuantity ??
+    (entryChoice === "l" || entryChoice === "kg" ? "1000.000000" : "1.000000");
+  const suggestedCost = openingReady
+    ? openingReferenceCost(openingOptions!.item.unitCost, openingFactor)
+    : "";
+  const unitCost = costOverride ?? suggestedCost;
   let openingPreview = "";
   if (openingReady && quantityInput.trim()) {
     try {
@@ -309,7 +320,7 @@ export function InventoryManager({
     setExpiresOn("");
     setLotCode("");
     setQuantityInput("");
-    setUnitCost("");
+    setCostOverride(undefined);
     setReason("");
     setBlocked(row ? !row.blocked : false);
     operation.clearError();
@@ -337,7 +348,7 @@ export function InventoryManager({
         receivedOn,
         expiresOn: expiresOn || null,
         lotCode: lotCode.trim() || null,
-        reason,
+        observations: reason.trim(),
       };
     else if (lot && action === "waste")
       input = {
@@ -999,7 +1010,7 @@ export function InventoryManager({
                         setOpeningOptions(null);
                         setEntryChoice("");
                         setQuantityInput("");
-                        setUnitCost("");
+                        setCostOverride(undefined);
                         setOptionsError("");
                       }}
                       required
@@ -1035,7 +1046,7 @@ export function InventoryManager({
                         onChange={(event) => {
                           setEntryChoice(event.target.value);
                           setQuantityInput("");
-                          setUnitCost("");
+                          setCostOverride(undefined);
                         }}
                       >
                         <option value="">
@@ -1085,7 +1096,7 @@ export function InventoryManager({
                             setOpeningOptions(null);
                             setEntryChoice("");
                             setQuantityInput("");
-                            setUnitCost("");
+                            setCostOverride(undefined);
                             setOptionsVersion((v) => v + 1);
                           }}
                         >
@@ -1101,11 +1112,13 @@ export function InventoryManager({
                             : `Costo por ${costUnitLabels[entryChoice] ?? "unidad elegida"}`
                         }
                         value={unitCost}
-                        set={setUnitCost}
+                        set={setCostOverride}
                         disabled={!openingReady}
                       />
                       <p className="mt-2 text-xs text-muted">
-                        En pesos. Opcional: dejalo vacío si todavía no lo sabés.
+                        {costOverride === undefined && suggestedCost !== ""
+                          ? "Tomado del catálogo. Podés modificarlo si esta mercadería tuvo otro costo."
+                          : "Costo de este ingreso; no modifica el catálogo. Dejalo vacío si no lo sabés."}
                       </p>
                     </div>
                     {chosenPack && (
@@ -1152,10 +1165,12 @@ export function InventoryManager({
                   </label>
                 )}
                 <TextField
-                  label="Motivo"
+                  label={
+                    action === "opening" ? "Observaciones (opcional)" : "Motivo"
+                  }
                   value={reason}
                   set={setReason}
-                  required
+                  required={action !== "opening"}
                 />
               </fieldset>
               {action === "opening" && optionsError && (

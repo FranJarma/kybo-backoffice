@@ -37,6 +37,12 @@ export async function createDataModelTestContext(
     await client.exec(
       await readFile("drizzle/0014_recipe_preparation_guide.sql", "utf8"),
     );
+    await client.exec(
+      await readFile("drizzle/0015_production_assignments.sql", "utf8"),
+    );
+    await client.exec(
+      await readFile("drizzle/0016_production_result_review.sql", "utf8"),
+    );
     return {
       ...fixture,
       client,

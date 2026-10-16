@@ -34,6 +34,7 @@ import { allocateFefo } from "../inventory/availability";
 import type { StockAllocation } from "../operations/types";
 import { auditEvents } from "@/db/business-schema";
 import { planConsumption } from "./consumption";
+import { productionManager, productionExecutor } from "./access";
 const decimal = z
   .string()
   .regex(/^\d{1,12}\.\d{6}$/)
@@ -59,7 +60,9 @@ export async function confirmProduction(
   ctx: OperationalContext,
   operationId: string,
   raw: unknown,
+  schedule?: { assignedTo: string; scheduledFor: Date; notes: string },
 ) {
+  productionManager(ctx);
   const input = confirmSchema.parse(raw);
   const [recipe] = await tx
     .select({ recipe: recipes, version: recipeVersions })
@@ -139,6 +142,13 @@ export async function confirmProduction(
       outputItemId: recipe.recipe.outputItemId,
       plannedQuantity: input.plannedQuantity,
       composition: { components, selections: input.selections, untracked },
+      state: schedule ? "planned" : "confirmed",
+      assignedTo: schedule?.assignedTo ?? null,
+      scheduledFor: schedule?.scheduledFor ?? null,
+      notes: schedule?.notes ?? null,
+      createdBy: ctx.actorId,
+      startedBy: schedule ? null : ctx.actorId,
+      startedAt: schedule ? null : new Date(),
     })
     .returning();
   const [document] = await tx
@@ -149,10 +159,26 @@ export async function confirmProduction(
       productionOrderId: order.id,
     })
     .returning();
-  await reserveStock(tx, ctx, {
-    operationId,
-    documentId: document.id,
-    demands: components.map((c) => ({ ...c, locationId: input.locationId })),
+  if (!schedule)
+    await reserveStock(tx, ctx, {
+      operationId,
+      documentId: document.id,
+      demands: components.map((c) => ({ ...c, locationId: input.locationId })),
+    });
+  await tx.insert(auditEvents).values({
+    actorId: ctx.actorId,
+    entity: "production-orders",
+    recordId: order.id,
+    action: schedule ? "plan" : "start",
+    after: {
+      operationId,
+      assignedTo: order.assignedTo,
+      scheduledFor: order.scheduledFor,
+      plannedQuantity: order.plannedQuantity,
+      notes: order.notes,
+      recipeVersionId: order.recipeVersionId,
+      locationId: order.locationId,
+    },
   });
   return { id: order.id, revision: order.revision };
 }
@@ -163,13 +189,7 @@ export async function finishProduction(
   orderId: string,
   raw: unknown,
 ) {
-  if (ctx.role === "staff")
-    throw new AppError(
-      "FORBIDDEN",
-      "Se requiere permiso de encargado para gestionar producción.",
-      403,
-    );
-  const input = z
+  const completionSchema = z
     .object({
       expectedRevision: z.number().int().positive(),
       actualQuantity: decimal.nullable(),
@@ -189,8 +209,15 @@ export async function finishProduction(
         .min(1)
         .max(100),
     })
-    .strict()
-    .parse(raw);
+    .strict();
+  const revisionSchema = z.object({
+    expectedRevision: z.number().int().positive(),
+  });
+  // Staff confirms the task only. Quantities always come from the frozen order,
+  // never from a hidden/editable browser payload.
+  const revision = (
+    ctx.role === "staff" ? revisionSchema.strict() : revisionSchema
+  ).parse(raw);
   const [order] = await tx
     .select()
     .from(productionOrders)
@@ -204,9 +231,38 @@ export async function finishProduction(
   if (
     !order ||
     order.state !== "confirmed" ||
-    order.revision !== input.expectedRevision
+    order.revision !== revision.expectedRevision
   )
     fail("La producción cambió o ya terminó.");
+  productionExecutor(ctx, order.assignedTo);
+  const expected = new Map<string, bigint>();
+  if (ctx.role === "staff") {
+    for (const component of (
+      order.composition as {
+        components: { itemId: string; quantity: string }[];
+      }
+    ).components)
+      expected.set(
+        component.itemId,
+        (expected.get(component.itemId) ?? 0n) + integer(component.quantity),
+      );
+  }
+  const input = completionSchema.parse(
+    ctx.role === "staff"
+      ? {
+          expectedRevision: revision.expectedRevision,
+          actualQuantity: order.plannedQuantity,
+          expiresOn: null,
+          lotCode: null,
+          reason:
+            "Tarea terminada por el empleado. Consumo y rendimiento calculados según la orden; diferencias a cargo del encargado.",
+          consumption: [...expected].map(([itemId, quantity]) => ({
+            itemId,
+            quantity: six(quantity),
+          })),
+        }
+      : raw,
+  );
   const [origin] = await tx
     .select({
       documentId: stockDocuments.id,
@@ -367,6 +423,8 @@ export async function finishProduction(
       .set({
         state: "cancelled",
         actualQuantity: null,
+        completedAt: new Date(),
+        completedBy: ctx.actorId,
         revision: order.revision + 1,
       })
       .where(eq(productionOrders.id, order.id));
@@ -440,9 +498,27 @@ export async function finishProduction(
     .set({
       state: "completed",
       actualQuantity: input.actualQuantity,
+      completedAt: new Date(),
+      completedBy: ctx.actorId,
       revision: order.revision + 1,
     })
     .where(eq(productionOrders.id, order.id));
+  await tx.insert(auditEvents).values({
+    actorId: ctx.actorId,
+    entity: "production-orders",
+    recordId: order.id,
+    action: "finish",
+    after: {
+      operationId,
+      plannedQuantity: order.plannedQuantity,
+      actualQuantity: input.actualQuantity,
+      consumption: input.consumption,
+      quantitySource: ctx.role === "staff" ? "planned" : "reported",
+      reason: input.reason,
+      lotId: lot.id,
+      totalCost,
+    },
+  });
   return {
     id: order.id,
     lotId: lot.id,
@@ -524,7 +600,12 @@ export async function cancelUnusedProduction(
   });
   await tx
     .update(productionOrders)
-    .set({ state: "cancelled", revision: order.revision + 1 })
+    .set({
+      state: "cancelled",
+      revision: order.revision + 1,
+      completedAt: new Date(),
+      completedBy: ctx.actorId,
+    })
     .where(eq(productionOrders.id, order.id));
   await tx.insert(auditEvents).values({
     actorId: ctx.actorId,
