@@ -5,8 +5,29 @@ import {
   breadcrumbs,
   legacyRedirects,
   resolveNavigation,
+  navigationIsActive,
 } from "../src/lib/navigation";
 describe("navegación por áreas", () => {
+  it("agrupa los dos tipos de opciones sin duplicar entradas del sidebar", () => {
+    const entries = visibleNavigation({ role: "admin" });
+    expect(entries.find((n) => n.id === "modifiers")?.label).toBe(
+      "Grupos de opciones",
+    );
+    expect(entries.some((n) => n.href === "/products/combo-groups")).toBe(
+      false,
+    );
+    expect(
+      breadcrumbs("/products/combo-groups", { role: "admin" }).map(
+        (b) => b.label,
+      ),
+    ).toEqual(["Inicio", "Productos", "Productos para combos"]);
+    expect(
+      navigationIsActive("/products/modifiers", "/products/combo-groups"),
+    ).toBe(true);
+    expect(navigationIsActive("/products", "/products/combo-groups")).toBe(
+      false,
+    );
+  });
   it("tiene rutas únicas y resuelve sólo la pantalla exacta", () => {
     expect(new Set(navigation.map((n) => n.href)).size).toBe(navigation.length);
     expect(resolveNavigation("/products/recipes")?.id).toBe("recipes");

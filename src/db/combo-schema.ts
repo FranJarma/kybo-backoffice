@@ -6,7 +6,14 @@ import {
   timestamp,
   numeric,
   uniqueIndex,
+  foreignKey,
+  check,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import {
+  productOptionGroups,
+  productOptionGroupVersions,
+} from "./product-option-group-schema";
 import { products } from "./business-schema";
 import { user } from "./auth-schema";
 export const comboVersions = pgTable(
@@ -26,15 +33,37 @@ export const comboVersions = pgTable(
   },
   (t) => [uniqueIndex("combo_product_revision").on(t.productId, t.revision)],
 );
-export const comboGroups = pgTable("combo_groups", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  versionId: uuid("version_id")
-    .notNull()
-    .references(() => comboVersions.id),
-  name: text("name").notNull(),
-  position: integer("position").notNull(),
-  quantity: integer("quantity").notNull(),
-});
+export const comboGroups = pgTable(
+  "combo_groups",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    versionId: uuid("version_id")
+      .notNull()
+      .references(() => comboVersions.id),
+    name: text("name").notNull(),
+    position: integer("position").notNull(),
+    quantity: integer("quantity").notNull(),
+    sourceGroupId: uuid("source_group_id").references(
+      () => productOptionGroups.id,
+    ),
+    sourceGroupVersionId: uuid("source_group_version_id"),
+  },
+  (t) => [
+    check(
+      "combo_group_source_pair",
+      sql`(${t.sourceGroupId} is null) = (${t.sourceGroupVersionId} is null)`,
+    ),
+    foreignKey({
+      columns: [t.sourceGroupVersionId, t.sourceGroupId],
+      foreignColumns: [
+        productOptionGroupVersions.id,
+        productOptionGroupVersions.groupId,
+      ],
+      name: "combo_group_source_owner",
+    }),
+    uniqueIndex("combo_shared_group_once").on(t.versionId, t.sourceGroupId),
+  ],
+);
 export const comboOptions = pgTable(
   "combo_options",
   {

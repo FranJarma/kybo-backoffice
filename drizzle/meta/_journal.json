@@ -134,6 +134,13 @@
       "when": 1792170000000,
       "tag": "0018_product_combos",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792300000000,
+      "tag": "0019_product_option_groups",
+      "breakpoints": true
     }
   ]
 }

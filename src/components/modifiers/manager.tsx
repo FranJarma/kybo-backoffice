@@ -1,5 +1,6 @@
 "use client";
 import { recipeSection } from "@/modules/catalog/item-classes";
+import { OptionGroupTabs } from "@/components/products/option-group-tabs";
 
 import { paths } from "@/lib/navigation";
 import { Control as Field } from "@/components/sales/shared";
@@ -72,8 +73,8 @@ export function ComponentFields({
                     c.itemId && c.name
                       ? {
                           id: c.itemId,
-                        name: c.name,
-                        class: c.itemClass ?? "unclassified",
+                          name: c.name,
+                          class: c.itemClass ?? "unclassified",
                           baseUnit: c.baseUnit ?? null,
                           revision: 1,
                           archivedAt: null,
@@ -388,7 +389,7 @@ export function ModifiersManager() {
     <div>
       <div className="page-heading">
         <div>
-          <h1 className="page-title">Modificadores</h1>
+          <h1 className="page-title">Grupos de opciones</h1>
           <p className="page-description">
             Opciones reutilizables para tus productos.
           </p>
@@ -403,6 +404,7 @@ export function ModifiersManager() {
           </Button>
         </div>
       </div>
+      <OptionGroupTabs active="modifiers" />
       {error && (
         <p role="alert" className="mb-4 text-red-700">
           {error}

@@ -29,7 +29,11 @@ import {
   BranchSelector,
   type BranchChoice,
 } from "@/components/branches/selector";
-import { visibleNavigation, breadcrumbs } from "@/lib/navigation";
+import {
+  visibleNavigation,
+  breadcrumbs,
+  navigationIsActive,
+} from "@/lib/navigation";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 const icons = {
   House,
@@ -177,7 +181,7 @@ export function AppShell({
             key={g.label}
             className={cn(
               "rounded-lg border-l-2 pl-1",
-              g.links.some((l) => l.href === path)
+              g.links.some((l) => navigationIsActive(l.href, path))
                 ? "border-blue"
                 : "border-transparent",
             )}
@@ -191,10 +195,12 @@ export function AppShell({
                   key={href}
                   href={href}
                   onClick={() => setOpen(false)}
-                  aria-current={path === href ? "page" : undefined}
+                  aria-current={
+                    navigationIsActive(href, path) ? "page" : undefined
+                  }
                   className={cn(
                     "flex min-h-10 items-center gap-3 rounded-[9px] px-3 py-2 text-[13px] leading-5 font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue",
-                    path === href
+                    navigationIsActive(href, path)
                       ? "bg-[#e7f3ff] text-brand"
                       : "text-muted hover:bg-surface hover:text-brand",
                   )}
@@ -202,7 +208,9 @@ export function AppShell({
                   <Icon
                     size={19}
                     strokeWidth={1.8}
-                    className={path === href ? "text-blue" : ""}
+                    className={
+                      navigationIsActive(href, path) ? "text-blue" : ""
+                    }
                   />
                   {label}
                 </Link>

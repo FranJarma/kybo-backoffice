@@ -13,7 +13,8 @@ import {
   saleLines,
   paymentMethods,
 } from "../src/db/schema";
-import { publishCombo } from "../src/modules/combos/service";
+import { publishCombo, loadCombo } from "../src/modules/combos/service";
+import { createProductGroupService } from "../src/modules/combos/product-groups";
 import { createSalesService } from "../src/modules/sales/service";
 import { executeCommand } from "../src/modules/operations/command";
 import { deliverLines } from "../src/modules/fulfillment/service";
@@ -22,6 +23,7 @@ import type { Actor } from "../src/lib/access";
 let c: Awaited<ReturnType<typeof createDataModelTestContext>>;
 const actor: Actor = { id: "combo-seller", role: "admin" };
 let input: Record<string, unknown>;
+let sharedGroupId: string;
 beforeAll(async () => {
   c = await createDataModelTestContext();
   actor.branchId = c.mapping.initialBranch.id;
@@ -60,12 +62,20 @@ beforeAll(async () => {
   await c.db
     .insert(productFulfillments)
     .values({ productId: child.id, versionId: v.id });
+  const shared = await createProductGroupService(c.db).save(actor, {
+    requestId: crypto.randomUUID(),
+    name: "Primera",
+    productIds: [child.id],
+  });
+  sharedGroupId = shared.id;
   const definition = await publishCombo(c.db, actor, combo.id, {
     requestId: crypto.randomUUID(),
     revision: 0,
     groups: [
       {
         name: "Primera",
+        sourceGroupId: shared.id,
+        sourceGroupVersionId: shared.versionId,
         quantity: 1,
         options: [{ productId: child.id, counter: "500" }],
       },
@@ -254,4 +264,56 @@ it("keeps individual product pricing and fulfillment unchanged", async () => {
   expect(sale.totalAmount).toBe("8000.00");
   expect(sale.orders[0].lines).toHaveLength(1);
   expect(sale.orders[0].lines[0].lineKind).toBe("individual");
+});
+
+it("keeps a confirmed shared-group sale unchanged after updating the group and republishing its combo", async () => {
+  const service = createSalesService(c.db);
+  const original = await service.create(actor, input);
+  const before = await service.get(actor, original.id);
+  const [other] = await c.db
+    .insert(products)
+    .values({ name: "New choice" })
+    .returning();
+  const current = await createProductGroupService(c.db).get(
+    actor,
+    sharedGroupId,
+  );
+  const next = await createProductGroupService(c.db).save(actor, {
+    requestId: crypto.randomUUID(),
+    id: current.id,
+    revision: current.revision,
+    name: "New shared choices",
+    productIds: [...current.options.map((o) => o.productId), other.id],
+  });
+  const comboId = (input.lines as { productId: string }[])[0].productId;
+  const definition = (await loadCombo(c.db, comboId))!;
+  await publishCombo(c.db, actor, comboId, {
+    requestId: crypto.randomUUID(),
+    revision: definition.revision,
+    groups: definition.groups.map((g, index) =>
+      index === 0
+        ? {
+            name: next.name,
+            quantity: g.quantity,
+            sourceGroupId: next.id,
+            sourceGroupVersionId: next.versionId,
+            options: next.options.map((o) => ({ productId: o.productId })),
+          }
+        : {
+            name: g.name,
+            quantity: g.quantity,
+            options: g.options.map((o) => ({
+              productId: o.productId,
+              counter: o.counter,
+              pedidosya: o.pedidosya,
+              ubereats: o.ubereats,
+            })),
+          },
+    ),
+  });
+  expect((await loadCombo(c.db, comboId))!.id).not.toBe(definition.id);
+  expect(await service.get(actor, original.id)).toEqual(before);
+  expect(
+    (await loadCombo(c.db, comboId, definition.id))!.groups[0].options,
+  ).toHaveLength(1);
 });

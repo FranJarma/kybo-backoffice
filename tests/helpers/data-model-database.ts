@@ -13,6 +13,7 @@ export async function createDataModelTestContext(
     legacyCatalog?: boolean;
     legacyWaste?: boolean;
     directory?: string;
+    legacyComboGroups?: boolean;
   } = {},
 ) {
   requireMigrationTestPermission();
@@ -53,6 +54,10 @@ export async function createDataModelTestContext(
     await client.exec(
       await readFile("drizzle/0018_product_combos.sql", "utf8"),
     );
+    if (!options.legacyComboGroups)
+      await client.exec(
+        await readFile("drizzle/0019_product_option_groups.sql", "utf8"),
+      );
     return {
       ...fixture,
       client,

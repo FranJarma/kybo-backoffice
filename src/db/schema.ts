@@ -22,3 +22,4 @@ export * from "./media-schema";
 export * from "./sourcing-schema";
 
 export * from "./combo-schema";
+export * from "./product-option-group-schema";
