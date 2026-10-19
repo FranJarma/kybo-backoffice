@@ -106,6 +106,16 @@ a {
   margin: 0 auto;
   padding: 30px clamp(20px, 2.2vw, 36px) 40px;
 }
+
+/* The register is operated by touch; retain regular density in administration. */
+[data-pos] input:not([type="checkbox"]):not([type="radio"]),
+[data-pos] select {
+  min-height: 48px;
+  font-size: 16px;
+}
+[data-pos] button {
+  touch-action: manipulation;
+}
 .page-heading {
   display: flex;
   align-items: flex-start;
@@ -275,6 +285,15 @@ a {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Payment touch targets override the shared compact control sizing. */
+[data-pos-payment] [data-slot="button"],
+[data-pos-payment] [data-slot="input"] {
+  min-height: 48px;
+}
+[data-pos-payment] [data-payment-footer] [data-slot="button"] {
+  min-height: 56px;
 }
 
 /* Keep the whole form reachable on short viewports and with an on-screen keyboard. */

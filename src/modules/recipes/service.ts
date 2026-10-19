@@ -755,7 +755,9 @@ export function createRecipeService(db: AppDb) {
               version: recipeVersions,
               productArchived: products.archivedAt,
               itemArchived: items.archivedAt,
-              priceCounter: productPrices.amount,
+              priceCounter: sql<
+                string | null
+              >`round(${productPrices.amount} * (1 + ${products.vatRate} / 100), 2)::numeric(14,2)`,
             })
             .from(recipes)
             .innerJoin(

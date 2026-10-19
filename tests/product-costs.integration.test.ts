@@ -13,6 +13,11 @@ import {
   productFulfillmentVersions,
 } from "../src/db/product-fulfillment-schema";
 import type { Actor } from "../src/lib/access";
+import { eq } from "drizzle-orm";
+import { paymentMethods, productPrices } from "../src/db/business-schema";
+import { branchMemberships, branchProducts } from "../src/db/branch-schema";
+import { publishCombo } from "../src/modules/combos/service";
+import { estimateProfitability } from "../src/modules/pricing/product-profitability";
 let ctx: Awaited<ReturnType<typeof createDataModelTestContext>>;
 const actor: Actor = { id: "product-cost-test", role: "admin" };
 let otherBranch: string,
@@ -199,6 +204,110 @@ it("exige una sucursal válida y acceso autorizado", async () => {
   ).rejects.toMatchObject({ status: 403 });
 });
 
+it("compares profitability using branch costs, published defaults and explicit method fees", async () => {
+  await ctx.db
+    .update(products)
+    .set({ vatRate: "21.00" })
+    .where(eq(products.id, productId));
+  await ctx.db
+    .insert(productPrices)
+    .values({ productId, channel: "counter", amount: "100.00" });
+  const [card] = await ctx.db
+    .insert(paymentMethods)
+    .values({
+      name: "Tarjeta rentabilidad",
+      kind: "card",
+      commissionPercent: "3.00",
+    })
+    .returning();
+  const a = await catalogProductCosts(ctx.db, actor, {
+    ids: [productId],
+    profitability: true,
+  });
+  const b = await catalogProductCosts(
+    ctx.db,
+    { ...actor, branchId: otherBranch },
+    { ids: [productId], profitability: true },
+  );
+  expect(a.profitability?.[0].basis.labels).toContain("1 × Sin extra");
+  const result = estimateProfitability(a.profitability![0], "counter", {});
+  expect(result).toMatchObject({
+    netPrice: "100.00",
+    finalPrice: "121.00",
+    cost: "20.000000",
+  });
+  expect(result.methods.find((m) => m.id === card.id)).toMatchObject({
+    commission: "3.63",
+    margin: "76.37",
+  });
+  expect(estimateProfitability(b.profitability![0], "counter", {}).cost).toBe(
+    "50.000000",
+  );
+  const basic = await catalogProductCosts(ctx.db, actor, { ids: [productId] });
+  expect(basic.profitability).toBeUndefined();
+});
+it("uses included product costs and combo extras instead of individual retail prices", async () => {
+  const [combo] = await ctx.db
+    .insert(products)
+    .values({ name: "Combo rentabilidad", kind: "combo", vatRate: "21.00" })
+    .returning();
+  await ctx.db.insert(productPrices).values([
+    { productId: combo.id, channel: "counter", amount: "5000.00" },
+    { productId: direct, channel: "counter", amount: "99999.00" },
+  ]);
+  await ctx.db
+    .insert(branchProducts)
+    .values({ branchId: actor.branchId!, productId: direct, enabled: true });
+  await publishCombo(ctx.db, actor, combo.id, {
+    requestId: randomUUID(),
+    revision: 0,
+    groups: [
+      {
+        name: "Bebidas",
+        quantity: 2,
+        options: [{ productId: direct, counter: "100.00" }],
+      },
+    ],
+  });
+  const result = await catalogProductCosts(ctx.db, actor, {
+    ids: [combo.id],
+    profitability: true,
+  });
+  const estimate = estimateProfitability(
+    result.profitability![0],
+    "counter",
+    {},
+  );
+  expect(estimate).toMatchObject({
+    netPrice: "5200.00",
+    finalPrice: "6292.00",
+    cost: "12.000000",
+  });
+});
+it("does not expose fees to staff even when they have shared catalog access", async () => {
+  const staff = {
+    id: "profit-staff",
+    role: "staff" as const,
+    branchId: actor.branchId,
+  };
+  await ctx.db.insert(user).values({
+    id: staff.id,
+    name: "Staff",
+    email: "profit-staff@test.invalid",
+  });
+  await ctx.db
+    .insert(operationalUsers)
+    .values({ userId: staff.id, role: "staff", catalogManager: true });
+  await ctx.db
+    .insert(branchMemberships)
+    .values({ userId: staff.id, branchId: actor.branchId!, role: "staff" });
+  await expect(
+    catalogProductCosts(ctx.db, staff, {
+      ids: [productId],
+      profitability: true,
+    }),
+  ).rejects.toMatchObject({ status: 403 });
+});
 it("usa referencias sin stock y muestra pendiente si falta la valuación", async () => {
   const empty = (
     await ctx.db

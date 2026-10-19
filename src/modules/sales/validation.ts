@@ -41,6 +41,7 @@ const lineSchema = z
       .max(10)
       .optional(),
     expectedRecipeVersionId: uuid.nullable().optional(),
+    expectedPricingRevision: z.number().int().positive().optional(),
     modifiers: z
       .array(
         z

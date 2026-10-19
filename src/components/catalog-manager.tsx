@@ -26,6 +26,12 @@ import {
   type ProductSetupDraft,
 } from "@/components/products/setup-fields";
 import { ProductDirectCost } from "@/components/products/direct-cost";
+import { ProductPricePreview } from "@/components/products/price-preview";
+import { ProductPrice } from "@/components/catalog/product-price";
+import {
+  ProductProfitability,
+  useProductProfitability,
+} from "@/components/products/profitability";
 import { PhotoEditor, ProductPhoto } from "@/components/products/photo";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import {
@@ -90,7 +96,7 @@ function initialDraft(
     fields.map((field) => [
       field.key,
       row
-        ? field.type === "decimal"
+        ? field.type === "decimal" || field.key === "vatRate"
           ? decimalInput(row[field.key])
           : String(row[field.key] ?? "")
         : field.key === "sortOrder"
@@ -123,6 +129,8 @@ async function readError(response: Response) {
 }
 function displayValue(row: CatalogRow, key: string) {
   const value = row[key];
+  if (key === "commissionPercent")
+    return value == null ? "Pendiente" : `${quantity(String(value))}%`;
   if (key === "categoryName" && !value) return "Sin categoría";
   if (key === "unitCost" && value === null) return "Pendiente";
   if (value === null || value === undefined || value === "") return "—";
@@ -162,6 +170,7 @@ const columnNames: Record<string, string> = {
   priceCounter: "Mostrador",
   pricePedidosYa: "PedidosYa",
   priceUberEats: "Uber Eats",
+  commissionPercent: "Comisión",
   supplierName: "Proveedor",
   itemName: "Insumo",
   baseQuantity: "Cantidad",
@@ -192,6 +201,18 @@ function RecordStatus({ row }: { row: CatalogRow }) {
 }
 
 function RecordValue({ row, column }: { row: CatalogRow; column: string }) {
+  if (
+    ["priceCounter", "pricePedidosYa", "priceUberEats"].includes(column) &&
+    "vatRate" in row
+  )
+    return (
+      <ProductPrice
+        net={
+          row[column] == null || row[column] === "" ? null : String(row[column])
+        }
+        vatRate={row.vatRate == null ? null : String(row.vatRate)}
+      />
+    );
   if (column === "unitCost" && row[column] === null)
     return (
       <span className="rounded-lg bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
@@ -270,6 +291,11 @@ export function CatalogManager({
     entity === "products" ? rows.map((r) => r.id) : [],
     entity === "products" && !loading,
     costRevision,
+  );
+  const profitability = useProductProfitability(
+    editing?.id ?? "",
+    entity === "products" && productTab === "cost" && editing !== undefined,
+    `${costRevision}:${editing?.revision ?? 0}`,
   );
   function costSummary(row: CatalogRow) {
     return (
@@ -850,7 +876,11 @@ export function CatalogManager({
   const basicFields = definition.fields.filter(
     (field) =>
       entity !== "products" ||
-      !(field.key.startsWith("price") || field.key.startsWith("enabled")),
+      !(
+        field.key.startsWith("price") ||
+        field.key.startsWith("enabled") ||
+        field.key === "vatRate"
+      ),
   );
   const priceFields = definition.fields.filter(
     (field) =>
@@ -1408,8 +1438,10 @@ export function CatalogManager({
                   >
                     {productSetup?.mode === "direct" ? (
                       <ProductDirectCost
-                        productId={editing.id}
-                        revision={costRevision}
+                        model={profitability.result?.products.find(
+                          (p) => p.productId === editing.id,
+                        )}
+                        error={profitability.error}
                       />
                     ) : draft.kind === "combo" ? (
                       <ComboTab
@@ -1417,6 +1449,9 @@ export function CatalogManager({
                         view={productTab === "cost" ? "cost" : "recipe"}
                         onBusy={setRecipeBusy}
                         onSaved={() => setCostRevision((n) => n + 1)}
+                        cost={profitability.result?.products.find(
+                          (p) => p.productId === editing.id,
+                        )}
                       />
                     ) : (
                       <ProductRecipeTab
@@ -1437,6 +1472,14 @@ export function CatalogManager({
                           setSetupGeneration((n) => n + 1);
                         }}
                         onBack={() => setProductTab("product")}
+                      />
+                    )}
+                    {productTab === "cost" && (
+                      <ProductProfitability
+                        key={editing.id}
+                        result={profitability.result}
+                        error={profitability.error}
+                        onRefresh={profitability.reload}
                       />
                     )}
                   </div>
@@ -1643,8 +1686,21 @@ export function CatalogManager({
                 {priceFields.length > 0 && (
                   <fieldset className="rounded-xl border border-line bg-slate-50/60 p-5 sm:p-6">
                     <legend className="px-2 text-sm font-semibold text-brand">
-                      Venta por canal
+                      Precios e IVA
                     </legend>
+                    <div className="mb-6 mt-3 max-w-md">
+                      {definition.fields
+                        .filter((field) => field.key === "vatRate")
+                        .map(renderField)}
+                    </div>
+                    <p className="mb-4 text-xs leading-5 text-muted">
+                      Cargá los precios netos. El listado permite comparar el
+                      precio sin IVA y con IVA; la carta y el cobro muestran el
+                      precio final con IVA incluido.
+                      {draft.kind === "combo"
+                        ? " El IVA del combo se aplica una vez al total del combo y sus adicionales."
+                        : ""}
+                    </p>
                     <div className="grid gap-7 pt-3 lg:grid-cols-3">
                       {(["Counter", "PedidosYa", "UberEats"] as const).map(
                         (channel) => (
@@ -1656,6 +1712,17 @@ export function CatalogManager({
                                   field.key === `price${channel}`,
                               )
                               .map(renderField)}
+                            <ProductPricePreview
+                              net={draft[`price${channel}`] ?? ""}
+                              rate={draft.vatRate ?? ""}
+                              label={
+                                channel === "Counter"
+                                  ? "Mostrador"
+                                  : channel === "PedidosYa"
+                                    ? "PedidosYa"
+                                    : "Uber Eats"
+                              }
+                            />
                           </div>
                         ),
                       )}

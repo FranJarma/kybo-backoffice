@@ -164,6 +164,9 @@ export const saleLines = pgTable(
     listPrice: numeric("list_price", { precision: 14, scale: 2 }),
     unitPrice: amount("unit_price"),
     lineTotal: amount("line_total"),
+    vatRate: numeric("vat_rate", { precision: 5, scale: 2 }),
+    netTotal: numeric("net_total", { precision: 14, scale: 2 }),
+    vatTotal: numeric("vat_total", { precision: 14, scale: 2 }),
     priceReason: text("price_reason"),
     notes: text("notes"),
     lineKind: text("line_kind").notNull().default("individual"),
@@ -187,6 +190,10 @@ export const saleLines = pgTable(
   (t) => [
     uniqueIndex("sale_line_recipe_owner").on(t.id, t.recipeVersionId),
     index("sale_line_combo_parent").on(t.parentLineId),
+    check(
+      "sale_line_vat_snapshot",
+      sql`(${t.vatRate} is null and ${t.netTotal} is null and ${t.vatTotal} is null) or (${t.vatRate} is not null and ${t.vatRate} in (0,2.5,5,10.5,21,27) and ${t.netTotal} is not null and ${t.vatTotal} is not null and ${t.netTotal} >= 0 and ${t.vatTotal} >= 0 and ${t.netTotal} + ${t.vatTotal} = ${t.lineTotal})`,
+    ),
     check(
       "sale_line_combo_shape",
       sql`
@@ -229,6 +236,12 @@ export const salePayments = pgTable(
     methodName: text("method_name"),
     methodKind: text("method_kind"),
     amount: amount("amount"),
+    commissionPercent: numeric("commission_percent", {
+      precision: 5,
+      scale: 2,
+    }),
+    commissionAmount: numeric("commission_amount", { precision: 14, scale: 2 }),
+    settlementNet: numeric("settlement_net", { precision: 14, scale: 2 }),
     reference: text("reference"),
     originalPaymentId: uuid("original_payment_id").references(
       (): AnyPgColumn => salePayments.id,
@@ -241,6 +254,10 @@ export const salePayments = pgTable(
   },
   (t) => [
     index("sale_payment_sale").on(t.saleId),
+    check(
+      "sale_payment_fee_snapshot",
+      sql`(${t.commissionPercent} is null and ${t.commissionAmount} is null and ${t.settlementNet} is null) or (${t.commissionPercent} is not null and ${t.commissionPercent} between 0 and 100 and ${t.commissionAmount} is not null and ${t.settlementNet} is not null and ${t.commissionAmount} >= 0 and ${t.settlementNet} >= 0 and ${t.commissionAmount} + ${t.settlementNet} = ${t.amount} and ${t.kind} = 'collection')`,
+    ),
     uniqueIndex("sale_payment_refund_once").on(t.originalPaymentId),
     check("sale_payment_amount", sql`${t.amount} > 0`),
     check(

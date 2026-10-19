@@ -53,13 +53,17 @@ export async function lookupProducts(
   const rows = await tx
     .select({
       kind: products.kind,
+      vatPending: sql<boolean>`${products.vatRate} is null`,
+      pricingRevision: products.revision,
       configured: sql<boolean>`case when ${products.kind} = 'combo' then exists(select 1 from ${comboVersions} where ${comboVersions.productId} = ${products.id}) else ${productFulfillments.versionId} is not null end`,
       id: products.id,
       name: products.name,
       description: products.description,
       imageAssetId: products.imageAssetId,
       categoryId: effectiveCategory,
-      price: productPrices.amount,
+      price: sql<
+        string | null
+      >`round(${productPrices.amount} * (1 + ${products.vatRate} / 100), 2)::numeric(14,2)`,
       temporarilySoldOut: branchProducts.temporarilySoldOut,
       fulfillmentVersionId: productFulfillments.versionId,
     })

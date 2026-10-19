@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Entity } from "./types";
 import { AppError } from "@/lib/errors";
 import { itemSchema } from "../items/validation";
+import { vatRates } from "@/modules/pricing/amounts";
 
 export function parseDecimal(input: unknown, scale: number): string | null {
   if (input === null || input === undefined || input === "") return null;
@@ -127,7 +128,16 @@ const schemas = {
     .strict(),
   customers: z.object({ name, email, phone }).strict(),
   "payment-methods": z
-    .object({ name, kind: z.enum(["cash", "card", "transfer", "other"]) })
+    .object({
+      name,
+      kind: z.enum(["cash", "card", "transfer", "other"]),
+      commissionPercent: decimal(2)
+        .refine(
+          (v) => v === null || BigInt(v.replace(".", "")) <= 10000n,
+          "La comisión debe estar entre 0% y 100%.",
+        )
+        .optional(),
+    })
     .strict(),
   items: z.preprocess((raw) => {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return raw;
@@ -147,6 +157,12 @@ const schemas = {
       setup: productSetupSchema.optional(),
       kind: z.enum(["individual", "combo"]).optional(),
       name,
+      vatRate: decimal(2)
+        .refine(
+          (v) => v === null || (vatRates as readonly string[]).includes(v),
+          "Elegí una alícuota de IVA válida.",
+        )
+        .optional(),
       categoryId: optionalId.optional(),
       imageAssetId: optionalId.optional(),
       description: optionalText(2000).optional(),

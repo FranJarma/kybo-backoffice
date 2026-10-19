@@ -641,7 +641,7 @@ export function ModifierRecipeEditor({
                       (c) => (
                         <Field
                           key={c}
-                          label={`Recargo ${c === "counter" ? "local" : c === "pedidosya" ? "PedidosYa" : "Uber Eats"}`}
+                          label={`Recargo neto ${c === "counter" ? "local" : c === "pedidosya" ? "PedidosYa" : "Uber Eats"}`}
                         >
                           <Input
                             value={o.prices[c]}
@@ -753,8 +753,9 @@ export function ModifierRecipeEditor({
             </Button>
           </div>
           <p className="text-xs text-muted">
-            Los recargos vacíos se toman como cero. Un recargo no es el costo
-            del ingrediente.
+            Los recargos se cargan sin IVA; la caja aplica el IVA del producto
+            al total. Los recargos vacíos se toman como cero. Un recargo no es
+            el costo del ingrediente.
           </p>
           {(error || localError) && (
             <p role="alert" className="text-sm text-red-700">

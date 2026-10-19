@@ -1,10 +1,17 @@
 import { loadCombo } from "../combos/service";
 import { comboCostRange } from "../combos/costs";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
 import type { AppDb } from "@/db/client";
 import type { Actor } from "@/lib/access";
-import { products } from "@/db/business-schema";
+import { products, productPrices, paymentMethods } from "@/db/business-schema";
+import { AppError } from "@/lib/errors";
+import {
+  profitabilityChannels,
+  referenceBasis,
+  type ProfitabilityBasis,
+  type ProfitabilityData,
+} from "@/modules/pricing/product-profitability";
 import {
   productFulfillments,
   productFulfillmentVersions,
@@ -24,6 +31,7 @@ import {
   roundedDivision,
   six,
   safeScaled,
+  cents,
 } from "@/modules/inventory/decimal";
 import type { Component, Configuration } from "@/modules/modifiers/types";
 import {
@@ -43,11 +51,18 @@ export async function catalogProductCosts(
     .object({
       ids: z.array(z.uuid()).min(1).max(10),
       detail: z.boolean().optional(),
+      profitability: z.boolean().optional(),
     })
     .strict()
     .parse(raw);
   await requireCatalogRead(db, actor);
   const ctx = await requireOperationalContext(db, actor, actor.branchId ?? "");
+  if (input.profitability && ctx.role === "staff")
+    throw new AppError(
+      "FORBIDDEN",
+      "Se requiere permiso de encargado para consultar la rentabilidad.",
+      403,
+    );
   return db.transaction(
     async (tx) => {
       const [branch] = await tx
@@ -106,7 +121,9 @@ export async function catalogProductCosts(
         ? await costContext(tx, ctx.branchId)
         : undefined;
       const results: ProductCost[] = [];
+      const bases = new Map<string, ProfitabilityBasis>();
       for (const row of rows) {
+        let profitConfig: Configuration | undefined;
         const refs = new Set<string>();
         const cost = (
           components: Component[],
@@ -254,6 +271,7 @@ export async function catalogProductCosts(
           const min = sumCosts([fixed, ...ranges.map((r) => r.min)]);
           const max = sumCosts([fixed, ...ranges.map((r) => r.max)]);
           const defaults = selectedCost({ fixed, groups }, {});
+          profitConfig = config;
           model = {
             ...model,
             fixed,
@@ -269,6 +287,8 @@ export async function catalogProductCosts(
           referenceItems: [...refs],
           groups: input.detail ? model.groups : [],
         });
+        if (input.profitability)
+          bases.set(row.id, referenceBasis(model.defaultCost, profitConfig));
       }
       const available = definitions.length
         ? new Set(
@@ -294,12 +314,88 @@ export async function catalogProductCosts(
             definition.productId,
             comboCostRange(definition, byId, available),
           );
+      let profitability: ProfitabilityData[] | undefined;
+      if (input.profitability) {
+        const [commercial, prices, methods] = await Promise.all([
+          tx.select().from(products).where(inArray(products.id, input.ids)),
+          tx
+            .select()
+            .from(productPrices)
+            .where(inArray(productPrices.productId, input.ids)),
+          tx
+            .select({
+              id: paymentMethods.id,
+              name: paymentMethods.name,
+              percent: paymentMethods.commissionPercent,
+            })
+            .from(paymentMethods)
+            .where(isNull(paymentMethods.archivedAt))
+            .orderBy(asc(paymentMethods.name)),
+        ]);
+        profitability = commercial.map((product) => {
+          const definition = definitions.find(
+            (d) => d?.productId === product.id,
+          );
+          return {
+            productId: product.id,
+            vatRate: product.vatRate,
+            channels: profitabilityChannels.map((channel) => ({
+              id: channel,
+              enabled:
+                channel === "counter"
+                  ? product.enabledCounter
+                  : channel === "pedidosya"
+                    ? product.enabledPedidosYa
+                    : product.enabledUberEats,
+              netBase:
+                prices.find(
+                  (p) => p.productId === product.id && p.channel === channel,
+                )?.amount ?? null,
+            })),
+            basis: definition
+              ? referenceBasis("0.000000")
+              : bases.get(product.id)!,
+            groups:
+              definition?.groups.map((group) => ({
+                id: group.id,
+                name: group.name,
+                quantity: group.quantity,
+                options: group.options
+                  .filter((o) => !o.archived && available?.has(o.productId))
+                  .map((option) => {
+                    const basis =
+                      bases.get(option.productId) ?? referenceBasis(null);
+                    return {
+                      id: option.id,
+                      name: option.name,
+                      basis: {
+                        ...basis,
+                        extras: Object.fromEntries(
+                          profitabilityChannels.map((channel) => [
+                            channel,
+                            basis.extras[channel] == null
+                              ? null
+                              : cents(
+                                  integer(basis.extras[channel]!) +
+                                    integer(option[channel]),
+                                ),
+                          ]),
+                        ),
+                      },
+                    };
+                  }),
+              })) ?? [],
+            methods,
+          };
+        });
+      }
       return {
         branchId: ctx.branchId,
         branchName: branch.name,
         products: input.ids.flatMap((id) =>
           byId.has(id) ? [byId.get(id)!] : [],
         ),
+        ...(profitability ? { profitability } : {}),
       };
     },
     { isolationLevel: "repeatable read", accessMode: "read only" },

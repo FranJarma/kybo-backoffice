@@ -19,11 +19,13 @@ export function ComboTab({
   view,
   onBusy,
   onSaved,
+  cost,
 }: {
   productId: string;
   view: "recipe" | "cost";
   onBusy: (busy: boolean) => void;
   onSaved: () => void;
+  cost?: ProductCost;
 }) {
   const [groups, setGroups] = useState<Group[]>([]),
     [revision, setRevision] = useState(0),
@@ -33,10 +35,8 @@ export function ComboTab({
     [notice, setNotice] = useState(""),
     [query, setQuery] = useState("");
   const [choices, setChoices] = useState<
-      { id: string; name: string; kind: string }[]
-    >([]),
-    [cost, setCost] = useState<ProductCost | null>(null);
-  const [costRefresh, setCostRefresh] = useState(0);
+    { id: string; name: string; kind: string }[]
+  >([]);
   const [sharedGroups, setSharedGroups] = useState<
     { id: string; name: string; archivedAt: string | null }[]
   >([]);
@@ -111,26 +111,6 @@ export function ComboTab({
       clearTimeout(timer);
     };
   }, [query, productId]);
-  useEffect(() => {
-    if (view !== "cost") return;
-    let live = true;
-    fetch("/api/products/costs", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids: [productId] }),
-    })
-      .then(async (r) => {
-        const d = await r.json();
-        if (!r.ok) throw Error(d.error);
-        if (live) setCost(d.products[0]);
-      })
-      .catch((e) => {
-        if (live) setError(e.message);
-      });
-    return () => {
-      live = false;
-    };
-  }, [view, productId, revision, costRefresh]);
   const update = (i: number, g: Group) =>
     setGroups((all) => all.map((x, j) => (i === j ? g : x)));
   async function save() {
@@ -160,7 +140,6 @@ export function ComboTab({
       const d = await r.json();
       if (!r.ok) throw Error(d.error);
       setRevision(d.revision);
-      setCost(null);
       setNotice("Los componentes del combo están publicados.");
       onSaved();
     } catch (e) {
@@ -278,17 +257,6 @@ export function ComboTab({
               </p>
             </div>
           )}
-          <Button
-            className="mt-5"
-            variant="outline"
-            onClick={() => {
-              setError("");
-              setCost(null);
-              setCostRefresh((n) => n + 1);
-            }}
-          >
-            Actualizar costo
-          </Button>
         </div>
       ) : (
         <fieldset disabled={busy || !ready} className="space-y-6">
@@ -458,7 +426,7 @@ export function ComboTab({
                       ] as const
                     ).map(([key, label]) => (
                       <label key={key} className="text-sm">
-                        Adicional {label}
+                        Adicional neto {label} (sin IVA)
                         <Input
                           inputMode="decimal"
                           value={o[key]}

@@ -141,6 +141,20 @@
       "when": 1792300000000,
       "tag": "0019_product_option_groups",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1792360000000,
+      "tag": "0020_replenishment_policies",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1792400000000,
+      "tag": "0021_product_vat_payment_fees",
+      "breakpoints": true
     }
   ]
 }

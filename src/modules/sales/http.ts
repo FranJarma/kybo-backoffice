@@ -6,6 +6,7 @@ import {
   errorResponse,
 } from "@/modules/catalog/http";
 import { salesAccess } from "./validation";
+import { salesVisibility } from "./visibility";
 export async function salesResponse(
   request: Request | null,
   action: (actor: Actor, input: unknown) => Promise<unknown>,
@@ -14,9 +15,12 @@ export async function salesResponse(
     const actor = await operationalActor(request);
     salesAccess(actor);
     return privateJson(
-      await action(
+      salesVisibility(
         actor,
-        request ? await requestInput(request, 300000) : undefined,
+        await action(
+          actor,
+          request ? await requestInput(request, 300000) : undefined,
+        ),
       ),
     );
   } catch (error) {

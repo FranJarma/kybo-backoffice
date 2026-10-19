@@ -122,6 +122,7 @@ export function AppShell({
     return () => desktop.removeEventListener("change", closeAtDesktop);
   }, []);
   const path = usePathname();
+  const register = path === "/sales";
   const entries = visibleNavigation({ role, catalogManager });
   const visibleGroups = [...new Set(entries.map((n) => n.area))].map(
     (label) => ({
@@ -165,7 +166,7 @@ export function AppShell({
         <Button
           variant="ghost"
           size="icon"
-          className="ml-auto lg:hidden"
+          className={cn("ml-auto min-h-12 min-w-12", !register && "lg:hidden")}
           aria-label="Cerrar menú"
           onClick={() => setOpen(false)}
         >
@@ -241,26 +242,45 @@ export function AppShell({
     </>
   );
   return (
-    <div className="min-h-screen lg:grid lg:grid-cols-[250px_minmax(0,1fr)] xl:grid-cols-[264px_minmax(0,1fr)]">
+    <div
+      className={cn(
+        "min-h-screen",
+        !register &&
+          "lg:grid lg:grid-cols-[250px_minmax(0,1fr)] xl:grid-cols-[264px_minmax(0,1fr)]",
+      )}
+    >
       <a
         href="#main-content"
         className="sr-only fixed left-4 top-4 z-[100] rounded-lg bg-white p-3 focus:not-sr-only"
       >
         Ir al contenido
       </a>
-      <aside className="sticky top-0 hidden h-dvh flex-col border-r border-line bg-white lg:flex">
+      <aside
+        className={cn(
+          "sticky top-0 hidden h-dvh flex-col border-r border-line bg-white",
+          !register && "lg:flex",
+        )}
+      >
         {navigation}
       </aside>
       <Dialog.Root open={open} onOpenChange={setOpen}>
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-40 bg-brand/35 backdrop-blur-[2px] lg:hidden" />
+          <Dialog.Overlay
+            className={cn(
+              "fixed inset-0 z-40 bg-brand/35 backdrop-blur-[2px]",
+              !register && "lg:hidden",
+            )}
+          />
           <Dialog.Content
             onCloseAutoFocus={(event) => {
               event.preventDefault();
-              if (!window.matchMedia("(min-width: 1024px)").matches)
+              if (register || !window.matchMedia("(min-width: 1024px)").matches)
                 menuButton.current?.focus();
             }}
-            className="fixed inset-y-0 left-0 z-50 flex w-[min(88vw,300px)] flex-col border-r border-line bg-white shadow-xl outline-none lg:hidden"
+            className={cn(
+              "fixed inset-y-0 left-0 z-50 flex w-[min(88vw,300px)] flex-col border-r border-line bg-white shadow-xl outline-none",
+              !register && "lg:hidden",
+            )}
             aria-describedby={undefined}
           >
             <Dialog.Title className="sr-only">Menú de Kybo</Dialog.Title>
@@ -268,7 +288,12 @@ export function AppShell({
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
-      <div className="min-w-0">
+      <div
+        className={cn(
+          "min-w-0",
+          register && "flex min-h-dvh flex-col md:h-dvh md:overflow-hidden",
+        )}
+      >
         <header
           data-topbar
           className="sticky top-0 z-20 flex min-h-16 flex-wrap items-center justify-between gap-3 border-b border-line bg-white/95 px-4 py-3 backdrop-blur-sm sm:flex-nowrap sm:px-7"
@@ -277,7 +302,7 @@ export function AppShell({
             <Button
               variant="ghost"
               size="icon"
-              className="lg:hidden"
+              className={cn("min-h-12 min-w-12", !register && "lg:hidden")}
               aria-label="Abrir menú"
               ref={menuButton}
               aria-expanded={open}
@@ -303,7 +328,14 @@ export function AppShell({
             )}
           </div>
         </header>
-        <main id="main-content" className="page-container">
+        <main
+          id="main-content"
+          className={
+            register
+              ? "min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4"
+              : "page-container"
+          }
+        >
           {children}
         </main>
       </div>

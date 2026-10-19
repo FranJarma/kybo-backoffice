@@ -14,6 +14,8 @@ export async function createDataModelTestContext(
     legacyWaste?: boolean;
     directory?: string;
     legacyComboGroups?: boolean;
+    legacyReplenishment?: boolean;
+    legacyPricing?: boolean;
   } = {},
 ) {
   requireMigrationTestPermission();
@@ -58,6 +60,20 @@ export async function createDataModelTestContext(
       await client.exec(
         await readFile("drizzle/0019_product_option_groups.sql", "utf8"),
       );
+    if (!options.legacyReplenishment)
+      await client.exec(
+        await readFile("drizzle/0020_replenishment_policies.sql", "utf8"),
+      );
+    if (!options.legacyPricing) {
+      await client.exec(
+        await readFile("drizzle/0021_product_vat_payment_fees.sql", "utf8"),
+      );
+      // Explicit convention for older untaxed fixture scenarios only. The
+      // production migration leaves rates unknown; pending tests insert NULL.
+      await client.exec(
+        "alter table products alter column vat_rate set default 0",
+      );
+    }
     return {
       ...fixture,
       client,

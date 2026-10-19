@@ -52,6 +52,7 @@ import { inventoryMovements } from "@/db/inventory-schema";
 import { stockMovements } from "@/db/stock-movement-schema";
 import { inventoryValuations } from "@/db/stock-schema";
 import { productFulfillmentVersions } from "@/db/product-fulfillment-schema";
+import { priceWithVat } from "@/modules/pricing/amounts";
 
 const tables = {
   suppliers,
@@ -90,6 +91,7 @@ async function enrich(
     const categories = await db.select().from(productCategories);
     return result.map((row) => ({
       ...row,
+      priceBasis: "net",
       categoryName:
         categories.find((c) => c.id === row.categoryId)?.name ?? null,
       categoryArchived: !!categories.find((c) => c.id === row.categoryId)
@@ -151,7 +153,12 @@ async function checkReferences(db: QueryDb, input: DbRow, previous?: DbRow) {
   }
 }
 
-async function writePrices(db: QueryDb, id: string, input: DbRow) {
+async function writePrices(
+  db: QueryDb,
+  id: string,
+  input: DbRow,
+  rate: string | null,
+) {
   await db.delete(productPrices).where(eq(productPrices.productId, id));
   const channels = [
     ["priceCounter", "counter"],
@@ -160,8 +167,10 @@ async function writePrices(db: QueryDb, id: string, input: DbRow) {
   ] as const;
   for (const [key, channel] of channels) {
     const amount = input[key] as string | null;
-    if (amount !== null)
+    if (amount !== null) {
+      priceWithVat(amount, rate);
       await db.insert(productPrices).values({ productId: id, channel, amount });
+    }
   }
 }
 
@@ -250,7 +259,12 @@ export function createCatalogService(db: AppDb) {
           .returning();
         if (entity === "products") {
           await bindProductImage(tx, actor.id, row.id, values);
-          await writePrices(tx, row.id, values);
+          await writePrices(
+            tx,
+            row.id,
+            values,
+            "vatRate" in row ? (row.vatRate as string | null) : null,
+          );
           if (setup) await applyProductSetup(tx, actor, row.id, setup);
         }
         const [after] = await enrich(tx, entity, [row]);
@@ -427,7 +441,13 @@ export function createCatalogService(db: AppDb) {
             "La ficha cambió. Recargá los datos.",
             409,
           );
-        if (entity === "products" && values) await writePrices(tx, id, values);
+        if (entity === "products" && values)
+          await writePrices(
+            tx,
+            id,
+            values,
+            "vatRate" in updated ? (updated.vatRate as string | null) : null,
+          );
         if (setup) await applyProductSetup(tx, actor, id, setup);
         const [after] = await enrich(tx, entity, [updated]);
         await tx.insert(auditEvents).values({

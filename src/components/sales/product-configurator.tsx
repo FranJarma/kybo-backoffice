@@ -1,11 +1,12 @@
 "use client";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Minus, Plus } from "lucide-react";
 import { money } from "@/components/inventory/shared";
 import { cents, integer } from "@/modules/inventory/decimal";
 import type { PublicConfiguration } from "@/modules/recipes/configuration";
 import type { Selection } from "@/modules/modifiers/types";
+import { priceWithVat } from "@/modules/pricing/amounts";
 export function ProductConfigurator({
   config,
   initialSelection,
@@ -21,6 +22,7 @@ export function ProductConfigurator({
     modifiers: Selection[];
     expectedPrice: string;
     modifierLabels: string[];
+    netSurcharge?: string;
   }) => void;
   onCancel: () => void;
 }) {
@@ -37,7 +39,10 @@ export function ProductConfigurator({
       ),
     ),
   );
-  let amount = config.basePrice == null ? null : integer(config.basePrice);
+  const netBase =
+    config.netBasePrice === undefined ? config.basePrice : config.netBasePrice;
+  let amount = netBase == null ? null : integer(netBase);
+  let surcharge = 0n;
   const problems: string[] = [];
   for (const g of config.groups) {
     let count = 0;
@@ -55,93 +60,177 @@ export function ProductConfigurator({
         o.price != null &&
         Number.isSafeInteger(n) &&
         n >= 0
-      )
-        amount += integer(o.price) * BigInt(n || 0);
+      ) {
+        const extra = integer(o.price) * BigInt(n || 0);
+        amount += extra;
+        surcharge += extra;
+      }
     }
     if (count < g.min || count > g.max)
       problems.push(`${g.name}: elegí entre ${g.min} y ${g.max}.`);
   }
+  if (amount !== null && config.vatRate !== undefined) {
+    try {
+      const final = priceWithVat(cents(amount), config.vatRate);
+      amount = final === null ? null : integer(final);
+    } catch {
+      amount = null;
+      problems.push(
+        "El precio configurado supera el máximo permitido. Revisá sus adicionales.",
+      );
+    }
+  }
   if (amount === null)
     problems.push("El producto no tiene precio en este canal.");
-  return (
-    <div className="space-y-5">
-      {config.groups.map((g) => (
-        <fieldset key={g.id} className="rounded-xl border border-line p-4">
-          <legend className="px-2 text-sm font-bold text-brand">
-            {g.name} {g.min > 0 ? "· obligatorio" : "· opcional"}
-          </legend>
-          <p className="mb-3 text-xs text-muted">
-            {g.max === 1 ? "Elegí una opción" : `Hasta ${g.max} elecciones`}
-          </p>
-          <div className="space-y-2">
-            {g.options.map((o) => (
-              <label
-                key={o.id}
-                className="flex min-h-12 items-center justify-between gap-3 rounded-lg border border-line px-3 py-2"
-              >
-                <span className="flex items-center gap-3">
-                  {g.max === 1 ? (
-                    <input
-                      type="radio"
-                      name={g.id}
-                      checked={choices[o.id] === 1}
-                      disabled={!o.available || o.price == null}
-                      onChange={() =>
-                        setChoices({
-                          ...choices,
-                          ...Object.fromEntries(
-                            g.options.map((x) => [x.id, x.id === o.id ? 1 : 0]),
-                          ),
-                        })
-                      }
-                    />
-                  ) : (
-                    <Input
-                      className="w-16"
-                      type="number"
-                      min={0}
-                      max={o.maxCount}
-                      aria-label={`Cantidad ${o.name}`}
-                      value={choices[o.id] ?? 0}
-                      disabled={!o.available || o.price == null}
-                      onChange={(e) =>
-                        setChoices({
-                          ...choices,
-                          [o.id]: Number(e.target.value),
-                        })
-                      }
-                    />
-                  )}
-                  <span className="text-sm font-semibold">{o.name}</span>
+  const renderGroup = (g: PublicConfiguration["groups"][number]) => {
+    const count = g.options.reduce((n, o) => n + (choices[o.id] ?? 0), 0);
+    return (
+      <div className="space-y-3">
+        <p className="text-xs text-muted">
+          {g.max === 1
+            ? "Elegí una opción"
+            : `Hasta ${g.max} elecciones · ${count} seleccionadas`}
+        </p>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {g.options.map((o) => {
+            const selected = choices[o.id] ?? 0;
+            let displayPrice = o.price;
+            try {
+              if (displayPrice !== null && config.vatRate)
+                displayPrice = priceWithVat(displayPrice, config.vatRate);
+            } catch {
+              displayPrice = null;
+            }
+            const unavailable = !o.available || displayPrice == null;
+            const description = !o.available
+              ? "No disponible"
+              : displayPrice == null
+                ? "Revisar precio"
+                : integer(displayPrice) === 0n
+                  ? "Incluido"
+                  : `+ ${money(displayPrice)}`;
+            const text = (
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold">{o.name}</span>
+                <span className="mt-1 block text-xs text-muted">
+                  {description}
                 </span>
-                <span className="text-xs text-muted">
-                  {!o.available
-                    ? "No disponible"
-                    : o.price == null
-                      ? "Sin precio"
-                      : integer(o.price) === 0n
-                        ? "Incluido"
-                        : `+ ${money(o.price)}`}
+              </span>
+            );
+            const style = `flex min-h-14 items-center justify-between gap-3 rounded-lg border p-3 ${selected > 0 ? "border-blue bg-blue/5" : "border-line"} ${unavailable ? "opacity-50" : ""}`;
+            return g.max === 1 ? (
+              <label key={o.id} className={`${style} cursor-pointer`}>
+                <span className="flex min-w-0 items-center gap-3">
+                  <input
+                    className="size-5 shrink-0 accent-blue"
+                    type="radio"
+                    name={g.id}
+                    checked={selected === 1}
+                    disabled={unavailable}
+                    onChange={() =>
+                      setChoices((current) => ({
+                        ...current,
+                        ...Object.fromEntries(
+                          g.options.map((x) => [x.id, x.id === o.id ? 1 : 0]),
+                        ),
+                      }))
+                    }
+                  />
+                  {text}
                 </span>
               </label>
-            ))}
-          </div>
-          {g.min === 0 && (
-            <Button
-              className="mt-2"
-              variant="ghost"
-              onClick={() =>
-                setChoices({
-                  ...choices,
-                  ...Object.fromEntries(g.options.map((o) => [o.id, 0])),
-                })
-              }
-            >
-              Sin selección
-            </Button>
-          )}
-        </fieldset>
-      ))}
+            ) : (
+              <div key={o.id} className={style}>
+                {text}
+                <div className="flex shrink-0 items-center rounded-lg border border-line bg-white">
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="min-h-12 min-w-12"
+                    aria-label={`Disminuir ${o.name}`}
+                    disabled={selected <= 0}
+                    onClick={() =>
+                      setChoices((current) => ({
+                        ...current,
+                        [o.id]: Math.max(0, (current[o.id] ?? 0) - 1),
+                      }))
+                    }
+                  >
+                    <Minus size={18} />
+                  </Button>
+                  <output
+                    aria-label={`Cantidad ${o.name}`}
+                    className="min-w-6 text-center font-semibold tabular-nums"
+                  >
+                    {selected}
+                  </output>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="min-h-12 min-w-12"
+                    aria-label={`Aumentar ${o.name}`}
+                    disabled={
+                      unavailable || selected >= o.maxCount || count >= g.max
+                    }
+                    onClick={() =>
+                      setChoices((current) => ({
+                        ...current,
+                        [o.id]: (current[o.id] ?? 0) + 1,
+                      }))
+                    }
+                  >
+                    <Plus size={18} />
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        {g.min === 0 && (
+          <Button
+            type="button"
+            className="min-h-12"
+            variant="ghost"
+            onClick={() =>
+              setChoices((current) => ({
+                ...current,
+                ...Object.fromEntries(g.options.map((o) => [o.id, 0])),
+              }))
+            }
+          >
+            Sin selección
+          </Button>
+        )}
+      </div>
+    );
+  };
+  return (
+    <div className="space-y-4">
+      {[...config.groups]
+        .sort((a, b) => Number(b.min > 0) - Number(a.min > 0))
+        .map((g) =>
+          g.min > 0 ? (
+            <fieldset key={g.id} className="rounded-xl border border-line p-4">
+              <legend className="px-2 text-sm font-bold text-brand">
+                {g.name} · obligatorio
+              </legend>
+              {renderGroup(g)}
+            </fieldset>
+          ) : (
+            <details key={g.id} className="rounded-xl border border-line px-4">
+              <summary className="flex min-h-14 cursor-pointer items-center justify-between gap-3 text-sm font-bold text-brand">
+                <span>{g.name} · opcional</span>
+                <span className="text-xs font-normal text-muted">
+                  {g.options.reduce((n, o) => n + (choices[o.id] ?? 0), 0)}{" "}
+                  seleccionadas · +
+                </span>
+              </summary>
+              <div className="pb-4">{renderGroup(g)}</div>
+            </details>
+          ),
+        )}
       {problems.length > 0 && (
         <p role="status" className="text-sm text-amber-800">
           {problems[0]}
@@ -152,15 +241,23 @@ export function ProductConfigurator({
           {amount === null ? "Sin precio" : money(cents(amount))}
         </strong>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={onCancel}>
+          <Button
+            type="button"
+            className="min-h-12"
+            variant="outline"
+            onClick={onCancel}
+          >
             Cancelar
           </Button>
           <Button
+            type="button"
+            className="min-h-12"
             disabled={problems.length > 0}
             onClick={() =>
               onConfirm({
                 expectedRecipeVersionId: config.recipeVersionId,
                 expectedPrice: cents(amount!),
+                netSurcharge: cents(surcharge),
                 modifiers: Object.entries(choices)
                   .filter(([, count]) => count > 0)
                   .map(([recipeModifierOptionId, count]) => ({
