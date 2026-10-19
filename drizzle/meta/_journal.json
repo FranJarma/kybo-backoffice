@@ -120,6 +120,20 @@
       "when": 1792150000000,
       "tag": "0016_production_result_review",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1792160000000,
+      "tag": "0017_username_login",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1792170000000,
+      "tag": "0018_product_combos",
+      "breakpoints": true
     }
   ]
 }

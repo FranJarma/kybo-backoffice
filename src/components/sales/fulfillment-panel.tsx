@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { decimal, integer, six } from "@/modules/inventory/decimal";
 type Row = {
+  notes?: string | null;
   returnLots: { lotId: string; lotCode: string | null; quantity: string }[];
   lineId: string;
   name: string;
@@ -25,6 +26,11 @@ type Row = {
   } | null;
 };
 type State = {
+  combos?: {
+    id: string;
+    name: string;
+    progress: { ordered: number; delivered: number; cancelled: number };
+  }[];
   rows: Row[];
   cancelled: boolean;
   resolution: { id: string; state: string } | null;
@@ -71,6 +77,15 @@ export function SaleFulfillmentPanel({
       {operation.uncertain && (
         <Button onClick={operation.retry}>Reintentar el mismo envío</Button>
       )}
+      {data?.combos?.map((combo) => (
+        <p key={combo.id} className="rounded-lg bg-surface p-3 text-sm">
+          <strong>{combo.name}</strong> · {combo.progress.delivered} de{" "}
+          {combo.progress.ordered} combos entregados
+          {combo.progress.cancelled
+            ? ` · ${combo.progress.cancelled} cancelados`
+            : ""}
+        </p>
+      ))}
       {data?.rows.map((row) => (
         <ProgressRow
           key={`${row.lineId}:${version}`}
@@ -147,7 +162,12 @@ function ProgressRow({
   }
   return (
     <div className="space-y-2 border-t pt-3">
-      <p className="text-sm font-semibold">{r.name}</p>
+      <p className="text-sm font-semibold">
+        {r.name}
+        {r.notes?.startsWith("Combo:") && (
+          <span className="ml-2 text-xs font-normal text-muted">{r.notes}</span>
+        )}
+      </p>
       <p className="text-xs text-muted">
         Pedido: {r.progress.ordered} · Preparado: {r.progress.completed} ·
         Entregado: {r.progress.delivered} · Cancelado: {r.progress.cancelled}
@@ -352,6 +372,11 @@ function ReturnRow({
     <details className="border-t pt-3">
       <summary className="cursor-pointer text-sm font-semibold">
         Devolución física · {row.name}
+        {row.notes?.startsWith("Combo:") && (
+          <span className="ml-2 text-xs font-normal text-muted">
+            {row.notes}
+          </span>
+        )}
       </summary>
       <p className="my-2 text-sm text-muted">
         Registrá sólo mercadería que efectivamente volvió al local. Esto no

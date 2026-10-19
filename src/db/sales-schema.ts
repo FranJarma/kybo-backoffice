@@ -1,4 +1,5 @@
 import { branches } from "./branch-schema";
+import { comboVersions, comboGroups, comboOptions } from "./combo-schema";
 import { sql } from "drizzle-orm";
 import {
   pgTable,
@@ -165,6 +166,13 @@ export const saleLines = pgTable(
     lineTotal: amount("line_total"),
     priceReason: text("price_reason"),
     notes: text("notes"),
+    lineKind: text("line_kind").notNull().default("individual"),
+    comboVersionId: uuid("combo_version_id").references(() => comboVersions.id),
+    parentLineId: uuid("parent_line_id").references(
+      (): AnyPgColumn => saleLines.id,
+    ),
+    comboGroupId: uuid("combo_group_id").references(() => comboGroups.id),
+    comboOptionId: uuid("combo_option_id").references(() => comboOptions.id),
     compositionStatus: text("composition_status")
       .notNull()
       .default("legacy_unknown"),
@@ -178,6 +186,14 @@ export const saleLines = pgTable(
   },
   (t) => [
     uniqueIndex("sale_line_recipe_owner").on(t.id, t.recipeVersionId),
+    index("sale_line_combo_parent").on(t.parentLineId),
+    check(
+      "sale_line_combo_shape",
+      sql`
+      (${t.lineKind}='individual' AND ${t.comboVersionId} IS NULL AND ${t.parentLineId} IS NULL AND ${t.comboGroupId} IS NULL AND ${t.comboOptionId} IS NULL) OR
+      (${t.lineKind}='combo' AND ${t.comboVersionId} IS NOT NULL AND ${t.parentLineId} IS NULL AND ${t.comboGroupId} IS NULL AND ${t.comboOptionId} IS NULL AND ${t.recipeVersionId} IS NULL AND ${t.fulfillmentVersionId} IS NULL) OR
+      (${t.lineKind}='combo_component' AND ${t.parentLineId} IS NOT NULL AND ${t.comboVersionId} IS NOT NULL AND ${t.comboGroupId} IS NOT NULL AND ${t.comboOptionId} IS NOT NULL AND ${t.unitPrice}=0 AND ${t.lineTotal}=0 AND ${t.fulfillmentVersionId} IS NOT NULL)`,
+    ),
     uniqueIndex("sale_line_branch").on(t.id, t.branchId),
     uniqueIndex("sale_line_product").on(t.id, t.productId),
     foreignKey({

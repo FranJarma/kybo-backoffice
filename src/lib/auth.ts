@@ -1,5 +1,7 @@
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { betterAuth } from "better-auth";
+import { username as usernamePlugin } from "better-auth/plugins/username";
+import { branches, branchMemberships } from "../db/branch-schema";
 import { hashPassword } from "better-auth/crypto";
 import { eq } from "drizzle-orm";
 import { headers } from "next/headers";
@@ -19,6 +21,7 @@ export function createAuth(
   if (options.secret.length < 32)
     throw new Error("BETTER_AUTH_SECRET must contain at least 32 characters.");
   return betterAuth({
+    plugins: [usernamePlugin({ displayUsername: false })],
     database: drizzleAdapter(db, { provider: "pg", schema: authSchema }),
     secret: options.secret,
     baseURL: options.baseURL,
@@ -36,7 +39,10 @@ export function createAuth(
       modelName: "rateLimit",
       window: 60,
       max: 60,
-      customRules: { "/sign-in/email": { window: 60, max: 5 } },
+      customRules: {
+        "/sign-in/email": { window: 60, max: 5 },
+        "/sign-in/username": { window: 60, max: 5 },
+      },
     },
   });
 }
@@ -124,12 +130,25 @@ export async function requireActor(): Promise<Actor> {
 /** Trusted server-only administrative action. Never expose through an HTTP endpoint. */
 export async function provisionUser(
   db: AppDb,
-  input: { name: string; email: string; password: string; role: Actor["role"] },
+  input: {
+    name: string;
+    email?: string;
+    username?: string;
+    password: string;
+    role: Actor["role"];
+    branchId?: string;
+  },
 ): Promise<string> {
   const name = input.name.trim();
-  const email = input.email.trim().toLowerCase();
+  const username = input.username?.trim().toLowerCase();
+  const suppliedEmail = input.email?.trim().toLowerCase();
+  // Better Auth requires an email internally. This reserved domain cannot receive mail.
+  const email = suppliedEmail || `${crypto.randomUUID()}@users.invalid`;
   if (
     !name ||
+    (!suppliedEmail && !username) ||
+    (input.username !== undefined &&
+      (!username || !/^[a-z0-9_.]{3,30}$/.test(username))) ||
     !z.email().safeParse(email).success ||
     input.password.length < 8 ||
     input.password.length > 128 ||
@@ -144,7 +163,24 @@ export async function provisionUser(
   const passwordHash = await hashPassword(input.password);
   const id = crypto.randomUUID();
   await db.transaction(async (tx) => {
-    await tx.insert(user).values({ id, name, email, emailVerified: true });
+    if (input.branchId) {
+      const [branch] = await tx
+        .select()
+        .from(branches)
+        .where(eq(branches.id, input.branchId))
+        .for("share");
+      if (!branch || branch.archivedAt || input.role === "admin")
+        throw new AppError("INVALID_INPUT", "Sucursal o rol inválidos.", 400);
+    }
+    await tx
+      .insert(user)
+      .values({
+        id,
+        name,
+        email,
+        username,
+        emailVerified: Boolean(suppliedEmail),
+      });
     await tx.insert(account).values({
       id: crypto.randomUUID(),
       accountId: id,
@@ -153,6 +189,10 @@ export async function provisionUser(
       password: passwordHash,
     });
     await tx.insert(operationalUsers).values({ userId: id, role: input.role });
+    if (input.branchId)
+      await tx
+        .insert(branchMemberships)
+        .values({ userId: id, branchId: input.branchId, role: input.role });
   });
   return id;
 }

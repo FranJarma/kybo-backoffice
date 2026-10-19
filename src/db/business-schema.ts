@@ -72,6 +72,7 @@ export const products = pgTable(
   "products",
   {
     ...common(),
+    kind: text("kind").notNull().default("individual"),
     categoryId: uuid("category_id").references(() => productCategories.id, {
       onDelete: "restrict",
     }),
@@ -86,6 +87,7 @@ export const products = pgTable(
   },
   (t) => [
     check("product_order", sql`${t.sortOrder} >= 0`),
+    check("products_kind_check", sql`${t.kind} in ('individual','combo')`),
     uniqueIndex("product_image_unique").on(t.imageAssetId),
   ],
 );

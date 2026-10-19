@@ -145,6 +145,15 @@ export const definitions: Record<Entity, EntityDefinition> = {
     fields: [
       name,
       {
+        key: "kind",
+        label: "Tipo de producto",
+        type: "select",
+        options: [
+          { value: "individual", label: "Producto individual" },
+          { value: "combo", label: "Combo de productos" },
+        ],
+      },
+      {
         key: "categoryId",
         label: "Categoría principal",
         type: "reference",

@@ -383,6 +383,12 @@ export function createCatalogService(db: AppDb) {
             );
         }
         if (entity === "products" && values) {
+          if (values.kind && values.kind !== before.kind)
+            throw new AppError(
+              "VALIDATION",
+              "El tipo de producto no se puede cambiar. Creá otra ficha.",
+              400,
+            );
           await checkProductCategory(tx, values, before);
           await bindProductImage(tx, actor.id, id, values, before);
         }

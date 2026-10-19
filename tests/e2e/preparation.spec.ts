@@ -19,7 +19,7 @@ async function login(page: Page, staff = false) {
   if (!restored) {
     await page.goto("/login");
     await page
-      .getByLabel("Correo electrónico")
+      .getByLabel("Usuario o correo")
       .fill((staff ? process.env.E2E_STAFF_EMAIL : process.env.E2E_EMAIL)!);
     await page.getByLabel("Contraseña").fill(process.env.E2E_PASSWORD!);
     await page.getByRole("button", { name: "Ingresar" }).click();

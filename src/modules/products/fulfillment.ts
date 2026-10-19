@@ -56,6 +56,8 @@ export async function publishFulfillment(
     .where(eq(products.id, productId))
     .for("update");
   if (!product || product.archivedAt) fail("El producto no está activo.");
+  if (product.kind === "combo")
+    fail("La preparación se configura en cada componente del combo.");
   const [current] = await tx
     .select({ version: productFulfillmentVersions.version })
     .from(productFulfillments)

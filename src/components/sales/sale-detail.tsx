@@ -103,11 +103,15 @@ export function SaleDetailPanel({
                           {line.quantity} × {line.name}
                         </p>
                         <p className="mt-1 text-xs text-muted">
-                          {money(line.unitPrice)} por unidad
+                          {line.lineKind === "combo_component"
+                            ? "Incluido en el combo"
+                            : `${money(line.unitPrice)} por unidad`}
                         </p>
                       </div>
                       <strong className="shrink-0 text-sm tabular-nums">
-                        {money(line.lineTotal)}
+                        {line.lineKind === "combo_component"
+                          ? "Incluido"
+                          : money(line.lineTotal)}
                       </strong>
                     </div>
                     {line.priceReason && (

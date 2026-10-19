@@ -112,6 +112,8 @@ export async function saleDetail(
       lines: lines
         .filter((l) => l.orderId === o.id)
         .map(({ line: l }) => ({
+          lineKind: l.lineKind,
+          parentLineId: l.parentLineId,
           compositionStatus: l.compositionStatus,
           modifiers: modifiers.filter((m) => m.saleLineId === l.id),
           id: l.id,

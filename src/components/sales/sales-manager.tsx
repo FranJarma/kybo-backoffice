@@ -1,4 +1,8 @@
 "use client";
+import {
+  ComboConfigurator,
+  type ComboSaleConfiguration,
+} from "./combo-configurator";
 
 import { paths } from "@/lib/navigation";
 import { ProductConfigurator } from "./product-configurator";
@@ -181,7 +185,7 @@ export function SalesManager({
   }
   const [configuring, setConfiguring] = useState<{
     row: SaleLookup["rows"][number];
-    config: PublicConfiguration;
+    config: PublicConfiguration | ComboSaleConfiguration;
     index?: number;
   } | null>(null);
   async function configure(row: SaleLookup["rows"][number], index?: number) {
@@ -189,6 +193,16 @@ export function SalesManager({
     setLoading(true);
     setError("");
     try {
+      if (
+        row.kind === "combo" ||
+        (index !== undefined && lines[index]?.expectedComboVersionId)
+      ) {
+        const config = await getJson<ComboSaleConfiguration>(
+          `/api/sales/products/${row.id}/combo?channel=${channel}`,
+        );
+        setConfiguring({ row, config, index });
+        return;
+      }
       const config = await getJson<PublicConfiguration>(
         `/api/sales/products/${row.id}/configuration?channel=${channel}`,
       );
@@ -228,7 +242,11 @@ export function SalesManager({
         expectedRecipeVersionId,
         expectedFulfillmentVersionId,
         modifiers,
+        expectedComboVersionId,
+        comboChoices,
       }) => ({
+        expectedComboVersionId,
+        comboChoices,
         expectedRecipeVersionId,
         expectedFulfillmentVersionId,
         modifiers,
@@ -283,7 +301,10 @@ export function SalesManager({
     try {
       const updated = await Promise.all(
         lines.map(async (line) => {
-          if (line.expectedRecipeVersionId && line.modifiers)
+          if (
+            line.expectedComboVersionId ||
+            (line.expectedRecipeVersionId && line.modifiers)
+          )
             throw new Error(
               `Revisá las opciones de ${line.name} con Editar opciones.`,
             );
@@ -332,42 +353,74 @@ export function SalesManager({
           if (!open) setConfiguring(null);
         }}
       >
-        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>{configuring?.row.name}</DialogTitle>
             <DialogDescription>
               Elegí las opciones de este producto.
             </DialogDescription>
           </DialogHeader>
-          {configuring && (
-            <ProductConfigurator
-              key={configuring.config.recipeVersionId}
-              config={configuring.config}
-              initialSelection={
-                configuring.index === undefined
-                  ? undefined
-                  : lines[configuring.index]?.modifiers
-              }
-              onCancel={() => setConfiguring(null)}
-              onConfirm={(data) => {
-                setLines((current) => {
-                  const index = configuring.index;
-                  const item = {
-                    ...(index === undefined
-                      ? newCartLine(configuring.row)
-                      : current[index]),
-                    ...data,
-                    price: inputDecimal(data.expectedPrice),
-                    priceReason: "",
-                  };
-                  return index === undefined
-                    ? [...current, item]
-                    : current.map((l, i) => (i === index ? item : l));
-                });
-                setConfiguring(null);
-              }}
-            />
-          )}
+          {configuring &&
+            ("definition" in configuring.config ? (
+              <ComboConfigurator
+                config={configuring.config}
+                initialChoices={
+                  configuring.index === undefined
+                    ? undefined
+                    : lines[configuring.index]?.comboChoices
+                }
+                channel={channel}
+                onCancel={() => setConfiguring(null)}
+                onConfirm={(data) => {
+                  setLines((current) => {
+                    const index = configuring.index;
+                    const item = {
+                      ...(index === undefined
+                        ? newCartLine(configuring.row)
+                        : current[index]),
+                      ...data,
+                      expectedFulfillmentVersionId: undefined,
+                      expectedRecipeVersionId: undefined,
+                      modifiers: [],
+                      price: inputDecimal(data.expectedPrice),
+                      priceReason: "",
+                    };
+                    return index === undefined
+                      ? [...current, item]
+                      : current.map((l, i) => (i === index ? item : l));
+                  });
+                  setConfiguring(null);
+                }}
+              />
+            ) : (
+              <ProductConfigurator
+                key={configuring.config.recipeVersionId}
+                config={configuring.config}
+                initialSelection={
+                  configuring.index === undefined
+                    ? undefined
+                    : lines[configuring.index]?.modifiers
+                }
+                onCancel={() => setConfiguring(null)}
+                onConfirm={(data) => {
+                  setLines((current) => {
+                    const index = configuring.index;
+                    const item = {
+                      ...(index === undefined
+                        ? newCartLine(configuring.row)
+                        : current[index]),
+                      ...data,
+                      price: inputDecimal(data.expectedPrice),
+                      priceReason: "",
+                    };
+                    return index === undefined
+                      ? [...current, item]
+                      : current.map((l, i) => (i === index ? item : l));
+                  });
+                  setConfiguring(null);
+                }}
+              />
+            ))}
         </DialogContent>
       </Dialog>
       <div className="page-heading">

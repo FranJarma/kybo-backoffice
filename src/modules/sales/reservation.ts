@@ -38,6 +38,7 @@ export async function reserveOrder(
     .orderBy(saleLines.id);
   const demandGroups = [];
   for (const line of lines) {
+    if (line.lineKind === "combo") continue;
     if (!line.fulfillmentVersionId)
       fail("El producto necesita una configuración física publicada.");
     const [version] = await tx
@@ -108,16 +109,14 @@ export async function reserveOrder(
       documentId: document.id,
       demands,
     });
-    await tx
-      .insert(saleLineFulfillments)
-      .values({
-        saleLineId: line.id,
-        branchId: ctx.branchId,
-        versionId: version.id,
-        documentId: document.id,
-        reservationId: reservation.reservationId,
-        mode: version.mode,
-        ordered: line.quantity,
-      });
+    await tx.insert(saleLineFulfillments).values({
+      saleLineId: line.id,
+      branchId: ctx.branchId,
+      versionId: version.id,
+      documentId: document.id,
+      reservationId: reservation.reservationId,
+      mode: version.mode,
+      ordered: line.quantity,
+    });
   }
 }

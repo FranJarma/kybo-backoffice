@@ -9,11 +9,13 @@ import type { Selection } from "@/modules/modifiers/types";
 export function ProductConfigurator({
   config,
   initialSelection,
+  confirmLabel = "Agregar al pedido",
   onConfirm,
   onCancel,
 }: {
   config: PublicConfiguration;
   initialSelection?: Selection[];
+  confirmLabel?: string;
   onConfirm: (data: {
     expectedRecipeVersionId: string | null;
     modifiers: Selection[];
@@ -173,7 +175,7 @@ export function ProductConfigurator({
               })
             }
           >
-            Agregar al pedido
+            {confirmLabel}
           </Button>
         </div>
       </div>

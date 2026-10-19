@@ -10,6 +10,8 @@ import { inputDecimal } from "@/components/recipes/shared";
 import { cents, decimal, integer } from "@/modules/inventory/decimal";
 import type { SaleChannel, SaleLookup } from "@/modules/sales/types";
 export type CartLine = {
+  expectedComboVersionId?: string;
+  comboChoices?: import("@/modules/sales/validation").LineInput["comboChoices"];
   expectedFulfillmentVersionId?: string;
   expectedRecipeVersionId?: string | null;
   modifiers?: import("@/modules/modifiers/types").Selection[];

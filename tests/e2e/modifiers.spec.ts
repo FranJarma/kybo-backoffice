@@ -8,7 +8,7 @@ test("manages reusable modifier groups from recipes", async ({ page }) => {
   test.skip(!process.env.E2E_EMAIL, "Temporary credentials required");
   if (!(await restoreAdminSession(page))) {
     await page.goto("/login");
-    await page.getByLabel("Correo electrónico").fill(process.env.E2E_EMAIL!);
+    await page.getByLabel("Usuario o correo").fill(process.env.E2E_EMAIL!);
     await page.getByLabel("Contraseña").fill(process.env.E2E_PASSWORD!);
     await page.getByRole("button", { name: "Ingresar" }).click();
     await expect(page).toHaveURL("/", { timeout: 25000 });
@@ -35,7 +35,7 @@ test("costs configurations, sells separate rows and retains kitchen history", as
   test.skip(!process.env.E2E_EMAIL, "Temporary credentials required");
   if (!(await restoreAdminSession(page))) {
     await page.goto("/login");
-    await page.getByLabel("Correo electrónico").fill(process.env.E2E_EMAIL!);
+    await page.getByLabel("Usuario o correo").fill(process.env.E2E_EMAIL!);
     await page.getByLabel("Contraseña").fill(process.env.E2E_PASSWORD!);
     await page.getByRole("button", { name: "Ingresar" }).click();
     await expect(page).toHaveURL("/", { timeout: 25000 });

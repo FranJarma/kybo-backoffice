@@ -13,7 +13,7 @@ async function signIn(page: Page) {
     return;
   }
   await page.goto("/login");
-  await page.getByLabel("Correo electrónico").fill(email!);
+  await page.getByLabel("Usuario o correo").fill(email!);
   await page.getByLabel("Contraseña").fill(password!);
   await page.getByRole("button", { name: "Ingresar" }).click();
   await expect(page).toHaveURL("/", { timeout: 20_000 });

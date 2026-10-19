@@ -51,6 +51,7 @@ export async function lookupProducts(
     .where(filter);
   const rows = await tx
     .select({
+      kind: products.kind,
       id: products.id,
       name: products.name,
       description: products.description,

@@ -22,16 +22,24 @@ export function LoginForm() {
     setError("");
     setBusy(true);
     try {
-      const response = await fetch("/api/auth/sign-in/email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
+      const identifier = email.trim().toLowerCase();
+      const isEmail = identifier.includes("@");
+      const response = await fetch(
+        `/api/auth/sign-in/${isEmail ? "email" : "username"}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            [isEmail ? "email" : "username"]: identifier,
+            password,
+          }),
+        },
+      );
       if (!response.ok) {
         setError(
           response.status === 429
             ? "Demasiados intentos. Probá de nuevo más tarde."
-            : "No pudimos iniciar sesión. Revisá el correo y la contraseña.",
+            : "No pudimos iniciar sesión. Revisá el usuario o correo y la contraseña.",
         );
         return;
       }
@@ -47,7 +55,7 @@ export function LoginForm() {
     <form onSubmit={submit}>
       <fieldset disabled={!hydrated || busy} className="space-y-6">
         <div>
-          <Label htmlFor="email">Correo electrónico</Label>
+          <Label htmlFor="email">Usuario o correo</Label>
           <div className="relative">
             <Mail
               size={18}
@@ -57,8 +65,10 @@ export function LoginForm() {
             <Input
               id="email"
               autoComplete="username"
-              type="email"
-              placeholder="tu@correo.com"
+              type="text"
+              autoCapitalize="none"
+              spellCheck={false}
+              placeholder="Tu usuario o correo"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}

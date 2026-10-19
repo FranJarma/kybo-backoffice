@@ -28,8 +28,9 @@ export function SalesScope() {
     <div className="flex items-start gap-2 rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2.5 text-xs leading-relaxed text-blue-900">
       <Info size={15} className="mt-0.5 shrink-0" />
       <p>
-        Al confirmar, el pedido aparece en Comandas. El descuento de stock
-        todavía no está conectado a las ventas.
+        Al confirmar se reserva el stock. Los productos a preparar aparecen en
+        Comandas y descuentan sus ingredientes al terminar; los de venta directa
+        se descuentan al entregarlos.
       </p>
     </div>
   );

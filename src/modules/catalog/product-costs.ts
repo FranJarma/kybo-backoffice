@@ -1,3 +1,5 @@
+import { loadCombo } from "../combos/service";
+import { comboCostRange } from "../combos/costs";
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import type { AppDb } from "@/db/client";
@@ -8,7 +10,7 @@ import {
   productFulfillmentVersions,
 } from "@/db/product-fulfillment-schema";
 import { recipes, recipeVersions } from "@/db/recipe-schema";
-import { branches } from "@/db/branch-schema";
+import { branches, branchProducts } from "@/db/branch-schema";
 import {
   requireCatalogRead,
   requireOperationalContext,
@@ -52,6 +54,24 @@ export async function catalogProductCosts(
         .select({ name: branches.name })
         .from(branches)
         .where(eq(branches.id, ctx.branchId));
+      const comboIds = await tx
+        .select({ id: products.id })
+        .from(products)
+        .where(
+          and(inArray(products.id, input.ids), eq(products.kind, "combo")),
+        );
+      const definitions = await Promise.all(
+        comboIds.map(({ id }) => loadCombo(tx, id)),
+      );
+      const allIds = [
+        ...new Set([
+          ...input.ids,
+          ...definitions.flatMap(
+            (d) =>
+              d?.groups.flatMap((g) => g.options.map((o) => o.productId)) ?? [],
+          ),
+        ]),
+      ];
       const rows = await tx
         .select({
           id: products.id,
@@ -76,7 +96,7 @@ export async function catalogProductCosts(
             eq(recipeVersions.version, recipes.revision),
           ),
         )
-        .where(inArray(products.id, input.ids));
+        .where(inArray(products.id, allIds));
       // Empty/unconfigured batches do not need inventory or preparation graphs.
       const estimate = rows.some(
         (row) =>
@@ -245,10 +265,36 @@ export async function catalogProductCosts(
           groups: input.detail ? model.groups : [],
         });
       }
+      const available = definitions.length
+        ? new Set(
+            (
+              await tx
+                .select({ id: branchProducts.productId })
+                .from(branchProducts)
+                .where(
+                  and(
+                    eq(branchProducts.branchId, ctx.branchId),
+                    eq(branchProducts.enabled, true),
+                    eq(branchProducts.temporarilySoldOut, false),
+                    inArray(branchProducts.productId, allIds),
+                  ),
+                )
+            ).map((p) => p.id),
+          )
+        : undefined;
+      const byId = new Map(results.map((r) => [r.productId, r]));
+      for (const definition of definitions)
+        if (definition)
+          byId.set(
+            definition.productId,
+            comboCostRange(definition, byId, available),
+          );
       return {
         branchId: ctx.branchId,
         branchName: branch.name,
-        products: results,
+        products: input.ids.flatMap((id) =>
+          byId.has(id) ? [byId.get(id)!] : [],
+        ),
       };
     },
     { isolationLevel: "repeatable read", accessMode: "read only" },

@@ -20,3 +20,5 @@ export * from "./transition-schema";
 
 export * from "./media-schema";
 export * from "./sourcing-schema";
+
+export * from "./combo-schema";

@@ -171,7 +171,7 @@ export const navigation = [
     label: "Sucursales y ubicaciones",
     href: "/settings/branches",
     icon: "Store",
-    access: "all",
+    access: "manager",
   },
 ] as const;
 export type NavigationId = (typeof navigation)[number]["id"];
