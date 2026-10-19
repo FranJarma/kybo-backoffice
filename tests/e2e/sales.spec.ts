@@ -20,7 +20,7 @@ async function signIn(page: Page) {
     return;
   }
   await page.goto("/login");
-  await page.getByLabel("Correo electrónico").fill(email!);
+  await page.getByLabel("Usuario o correo").fill(email!);
   await page.getByLabel("Contraseña").fill(password!);
   await page.getByRole("button", { name: "Ingresar" }).click();
   await expect(page).toHaveURL("/", { timeout: 25000 });
@@ -70,7 +70,7 @@ test("staff reaches POS without administrative catalog access", async ({
   if (!(await restoreStaffSession(page))) {
     await page.goto("/login");
     await page
-      .getByLabel("Correo electrónico")
+      .getByLabel("Usuario o correo")
       .fill(process.env.E2E_STAFF_EMAIL!);
     await page.getByLabel("Contraseña").fill(password!);
     await page.getByRole("button", { name: "Ingresar" }).click();

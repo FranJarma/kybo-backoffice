@@ -32,5 +32,9 @@ export async function listAccessibleBranches(db: AppDb, actor: Actor) {
             ),
       ),
     )
-    .orderBy(branches.name);
+    .orderBy(
+      ...(actor.role === "staff"
+        ? [branches.createdAt, branches.id]
+        : [branches.name]),
+    );
 }

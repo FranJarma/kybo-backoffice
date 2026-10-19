@@ -9,10 +9,14 @@ import {
   requireMigrationTestPermission,
 } from "./data-model-fixture";
 export async function createDataModelTestContext(
-  options: { legacyCatalog?: boolean; legacyWaste?: boolean } = {},
+  options: {
+    legacyCatalog?: boolean;
+    legacyWaste?: boolean;
+    directory?: string;
+  } = {},
 ) {
   requireMigrationTestPermission();
-  const client = new PGlite();
+  const client = new PGlite(options.directory);
   try {
     const fixture = await prepareEmptyTestDatabase(
       client as unknown as PoolClient,
@@ -42,6 +46,12 @@ export async function createDataModelTestContext(
     );
     await client.exec(
       await readFile("drizzle/0016_production_result_review.sql", "utf8"),
+    );
+    await client.exec(
+      await readFile("drizzle/0017_username_login.sql", "utf8"),
+    );
+    await client.exec(
+      await readFile("drizzle/0018_product_combos.sql", "utf8"),
     );
     return {
       ...fixture,

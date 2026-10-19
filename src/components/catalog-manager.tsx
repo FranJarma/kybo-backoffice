@@ -19,6 +19,7 @@ import {
 import { itemClasses, itemClassLabel } from "@/modules/catalog/item-classes";
 import { suggestItemCode } from "@/modules/items/code";
 import { SearchCombobox } from "@/components/ui/search-combobox";
+import { ComboTab } from "@/components/products/combo-tab";
 import { PhotoEditor, ProductPhoto } from "@/components/products/photo";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import {
@@ -424,6 +425,9 @@ export function CatalogManager({
       ...(!row && ingredientsOnly
         ? { recipeUsable: "true", class: "food" }
         : {}),
+      ...(entity === "products"
+        ? { kind: String(row?.kind ?? "individual") }
+        : {}),
       imageAssetId: String(row?.imageAssetId ?? ""),
       ...(duplicate ? { name: "", code: "" } : {}),
     });
@@ -639,7 +643,11 @@ export function CatalogManager({
       );
     if (field.type === "select")
       return (
-        <select {...common} className="form-control">
+        <select
+          {...common}
+          disabled={field.key === "kind" && !!editing}
+          className="form-control"
+        >
           <option value="">Seleccioná una opción</option>
           {field.options?.map((option) => (
             <option key={option.value} value={option.value}>
@@ -1334,43 +1342,51 @@ export function CatalogManager({
                       { id: "cost", label: "Costeo" },
                       { id: "preparation", label: "Preparación" },
                     ] as const
-                  ).map((tab) => (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      role="tab"
-                      id={`${formId}-tab-${tab.id}`}
-                      aria-controls={`${formId}-panel-${tab.id === "cost" || tab.id === "preparation" ? "recipe" : tab.id}`}
-                      aria-selected={productTab === tab.id}
-                      tabIndex={productTab === tab.id ? 0 : -1}
-                      className={formTabClassName}
-                      disabled={
-                        saving ||
-                        uploading ||
-                        recipeBusy ||
-                        preparationBusy ||
-                        (!editing && tab.id !== "product")
-                      }
-                      onClick={() => {
-                        setProductTab(tab.id);
-                        if (
-                          tab.id === "recipe" ||
-                          tab.id === "cost" ||
-                          tab.id === "preparation"
-                        )
-                          setRecipeOpened(true);
-                        if (tab.id === "preparation")
-                          setPreparationOpened(true);
-                      }}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
+                  )
+                    .filter(
+                      (tab) =>
+                        draft.kind !== "combo" || tab.id !== "preparation",
+                    )
+                    .map((tab) => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        role="tab"
+                        id={`${formId}-tab-${tab.id}`}
+                        aria-controls={`${formId}-panel-${tab.id === "cost" || tab.id === "preparation" ? "recipe" : tab.id}`}
+                        aria-selected={productTab === tab.id}
+                        tabIndex={productTab === tab.id ? 0 : -1}
+                        className={formTabClassName}
+                        disabled={
+                          saving ||
+                          uploading ||
+                          recipeBusy ||
+                          preparationBusy ||
+                          (!editing && tab.id !== "product")
+                        }
+                        onClick={() => {
+                          setProductTab(tab.id);
+                          if (
+                            tab.id === "recipe" ||
+                            tab.id === "cost" ||
+                            tab.id === "preparation"
+                          )
+                            setRecipeOpened(true);
+                          if (tab.id === "preparation")
+                            setPreparationOpened(true);
+                        }}
+                      >
+                        {draft.kind === "combo" && tab.id === "recipe"
+                          ? "Componentes"
+                          : tab.label}
+                      </button>
+                    ))}
                 </div>
                 {!editing && (
                   <p className="mb-5 text-xs text-muted">
-                    Guardá los datos del producto para agregar su receta y
-                    elegir dónde se prepara.
+                    {draft.kind === "combo"
+                      ? "Guardá el combo para elegir los productos incluidos."
+                      : "Guardá los datos del producto para agregar su receta y elegir dónde se prepara."}
                   </p>
                 )}
                 {editing && recipeOpened && (
@@ -1380,21 +1396,30 @@ export function CatalogManager({
                     id={`${formId}-panel-recipe`}
                     aria-labelledby={`${formId}-tab-${productTab === "cost" ? "cost" : productTab === "preparation" ? "preparation" : "recipe"}`}
                   >
-                    <ProductRecipeTab
-                      view={
-                        productTab === "cost"
-                          ? "cost"
-                          : productTab === "preparation"
-                            ? "preparation"
-                            : "recipe"
-                      }
-                      key={editing.id}
-                      productId={editing.id}
-                      actorId={actorId}
-                      onBusy={setRecipeBusy}
-                      onSaved={() => setCostRevision((n) => n + 1)}
-                      onBack={() => setProductTab("product")}
-                    />
+                    {draft.kind === "combo" ? (
+                      <ComboTab
+                        productId={editing.id}
+                        view={productTab === "cost" ? "cost" : "recipe"}
+                        onBusy={setRecipeBusy}
+                        onSaved={() => setCostRevision((n) => n + 1)}
+                      />
+                    ) : (
+                      <ProductRecipeTab
+                        view={
+                          productTab === "cost"
+                            ? "cost"
+                            : productTab === "preparation"
+                              ? "preparation"
+                              : "recipe"
+                        }
+                        key={editing.id}
+                        productId={editing.id}
+                        actorId={actorId}
+                        onBusy={setRecipeBusy}
+                        onSaved={() => setCostRevision((n) => n + 1)}
+                        onBack={() => setProductTab("product")}
+                      />
+                    )}
                     {editing && preparationOpened && (
                       <div
                         hidden={productTab !== "preparation"}
@@ -1683,7 +1708,9 @@ export function CatalogManager({
                     className="max-w-full whitespace-normal text-center"
                     disabled={saving || uploading}
                   >
-                    Guardar y continuar con la receta
+                    {draft.kind === "combo"
+                      ? "Guardar y elegir componentes"
+                      : "Guardar y continuar con la receta"}
                     <ArrowRight aria-hidden="true" />
                   </Button>
                 )}

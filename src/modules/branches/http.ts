@@ -1,7 +1,7 @@
 import { headers, cookies } from "next/headers";
 import { getDb } from "@/db/client";
 import { requireActor } from "@/lib/auth";
-import { requireOperationalContext } from "./context";
+import { resolveOperationalContext } from "./active";
 import type { Actor } from "@/lib/access";
 export async function operationalContext(request: Request | null = null) {
   const actor = await requireActor();
@@ -10,7 +10,7 @@ export async function operationalContext(request: Request | null = null) {
     source.get("X-Kybo-Branch-Id") ??
     (await cookies()).get("kybo-branch")?.value ??
     "";
-  return requireOperationalContext(await getDb(), actor, branchId);
+  return resolveOperationalContext(await getDb(), actor, branchId);
 }
 export async function operationalActor(
   request: Request | null = null,

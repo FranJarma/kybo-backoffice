@@ -23,7 +23,6 @@ describe("navegación por áreas", () => {
       "tables",
       "kitchen",
       "production",
-      "branches",
     ]);
     expect(
       breadcrumbs("/sales/tables", { role: "staff" }).map((b) => b.href),

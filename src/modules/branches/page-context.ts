@@ -9,6 +9,11 @@ export async function requirePageActor() {
   } catch (error) {
     if (
       error instanceof AppError &&
+      error.code === "BRANCH_ASSIGNMENT_REQUIRED"
+    )
+      redirect("/branch-assignment");
+    if (
+      error instanceof AppError &&
       ["BRANCH_REQUIRED", "BRANCH_UNAVAILABLE", "FORBIDDEN"].includes(
         error.code,
       )
@@ -21,6 +26,11 @@ export async function shellActor(actor: Actor): Promise<Actor> {
   try {
     return { ...actor, ...(await operationalActor()) };
   } catch (error) {
+    if (
+      error instanceof AppError &&
+      error.code === "BRANCH_ASSIGNMENT_REQUIRED"
+    )
+      redirect("/branch-assignment");
     if (
       error instanceof AppError &&
       ["BRANCH_REQUIRED", "BRANCH_UNAVAILABLE", "FORBIDDEN"].includes(

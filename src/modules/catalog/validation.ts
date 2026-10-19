@@ -102,6 +102,7 @@ const schemas = {
   }, itemSchema),
   products: z
     .object({
+      kind: z.enum(["individual", "combo"]).optional(),
       name,
       categoryId: optionalId.optional(),
       imageAssetId: optionalId.optional(),

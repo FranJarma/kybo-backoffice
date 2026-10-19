@@ -15,7 +15,31 @@ const amount = z.string().transform((v) => decimal(v, 2)!);
 export const channelSchema = z.enum(["counter", "pedidosya", "ubereats"]);
 const lineSchema = z
   .object({
-    expectedFulfillmentVersionId: uuid,
+    expectedFulfillmentVersionId: uuid.optional(),
+    expectedComboVersionId: uuid.optional(),
+    comboChoices: z
+      .array(
+        z
+          .object({
+            groupId: uuid,
+            optionId: uuid,
+            expectedFulfillmentVersionId: uuid,
+            expectedRecipeVersionId: uuid.nullable(),
+            modifiers: z
+              .array(
+                z
+                  .object({
+                    recipeModifierOptionId: uuid,
+                    count: z.number().int().min(0).max(100),
+                  })
+                  .strict(),
+              )
+              .max(150),
+          })
+          .strict(),
+      )
+      .max(10)
+      .optional(),
     expectedRecipeVersionId: uuid.nullable().optional(),
     modifiers: z
       .array(

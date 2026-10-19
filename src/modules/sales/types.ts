@@ -25,6 +25,8 @@ export type SaleSummary = {
   closedAt: string | null;
 };
 export type SaleLine = {
+  lineKind?: string;
+  parentLineId?: string | null;
   compositionStatus: string;
   modifiers: import("@/modules/modifiers/types").ResolvedModifier[];
   id: string;
@@ -67,6 +69,7 @@ export type SaleLookup = {
   categories?: { id: string; name: string }[];
   offset?: number;
   rows: {
+    kind?: string;
     id: string;
     name: string;
     price?: string | null;

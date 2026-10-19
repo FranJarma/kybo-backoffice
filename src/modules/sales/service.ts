@@ -1,3 +1,4 @@
+import { loadCombo } from "../combos/service";
 import { lookupProducts } from "./product-lookup";
 import { canSellProduct } from "../products/availability";
 import { requireOperationalContext } from "../branches/context";
@@ -87,11 +88,12 @@ async function lockSale(
   if (row.status === "cancelled") conflict("Esta venta está anulada.");
   return row;
 }
-async function prepareLines(
+async function prepareIndividualLines(
   tx: Tx,
   actor: Actor,
   channel: SaleChannel,
   lines: LineInput[],
+  included = false,
 ) {
   const ctx = await requireOperationalContext(tx, actor, actor.branchId ?? "");
   await tx.insert(recipeGraphLock).values({ id: 1 }).onConflictDoNothing();
@@ -111,7 +113,8 @@ async function prepareLines(
       .from(products)
       .where(eq(products.id, id))
       .for("share");
-    if (!product || product.archivedAt) invalid("Elegí productos activos.");
+    if (!product || product.archivedAt || product.kind !== "individual")
+      invalid("Elegí productos individuales activos.");
     const [local] = await tx
       .select()
       .from(branchProducts)
@@ -154,6 +157,12 @@ async function prepareLines(
   const values = [];
   for (const [position, line] of lines.entries()) {
     const product = catalog.get(line.productId)!;
+    if (
+      !line.expectedFulfillmentVersionId ||
+      line.comboChoices ||
+      line.expectedComboVersionId
+    )
+      return invalid("Configuración individual inválida.");
     const physical = await resolveFulfillment(tx, ctx, {
       productId: line.productId,
       quantity: "1.000000",
@@ -206,11 +215,11 @@ async function prepareLines(
       product.price === null
         ? null
         : moneyBound(integer(product.price) + integer(composition.surcharge));
-    if (configuredPrice !== line.expectedPrice)
+    if (!included && configuredPrice !== line.expectedPrice)
       conflict(
         `Cambió el precio de ${product.name}. Actualizá la carta y revisá el pedido.`,
       );
-    if (line.price !== configuredPrice) {
+    if (!included && line.price !== configuredPrice) {
       if (!line.priceReason)
         invalid(`Indicá el motivo del precio aplicado a ${product.name}.`);
       if (channel === "counter" && ctx.role === "staff")
@@ -237,6 +246,166 @@ async function prepareLines(
       recipeVersionId: product.recipeVersionId,
     });
   }
+  return { values, snapshots, totalAmount: moneyBound(total) };
+}
+async function prepareLines(
+  tx: Tx,
+  actor: Actor,
+  channel: SaleChannel,
+  lines: LineInput[],
+) {
+  if (!lines.some((l) => l.expectedComboVersionId || l.comboChoices))
+    return prepareIndividualLines(tx, actor, channel, lines);
+  const ctx = await requireOperationalContext(tx, actor, actor.branchId ?? "");
+  await tx.insert(recipeGraphLock).values({ id: 1 }).onConflictDoNothing();
+  await tx
+    .select()
+    .from(recipeGraphLock)
+    .where(eq(recipeGraphLock.id, 1))
+    .for("update");
+  const values: Omit<typeof saleLines.$inferInsert, "orderId" | "branchId">[] =
+    [];
+  const snapshots: ResolvedComposition[] = [];
+  let total = 0n;
+  for (const line of lines) {
+    if (!line.expectedComboVersionId) {
+      const individual = await prepareIndividualLines(tx, actor, channel, [
+        line,
+      ]);
+      values.push({ ...individual.values[0], position: values.length });
+      snapshots.push(individual.snapshots[0]);
+      total += integer(individual.totalAmount);
+      continue;
+    }
+    if (
+      line.expectedFulfillmentVersionId ||
+      line.expectedRecipeVersionId ||
+      line.modifiers.length
+    )
+      invalid("Los modificadores del combo se eligen en sus productos.");
+    const [p] = await tx
+      .select()
+      .from(products)
+      .where(eq(products.id, line.productId))
+      .for("share");
+    const [local] = await tx
+      .select()
+      .from(branchProducts)
+      .where(
+        and(
+          eq(branchProducts.productId, line.productId),
+          eq(branchProducts.branchId, ctx.branchId),
+        ),
+      )
+      .for("share");
+    if (!p || p.kind !== "combo" || !canSellProduct(p, local, channel))
+      invalid("El combo no está disponible en esta sucursal y canal.");
+    const definition = await loadCombo(tx, p.id);
+    if (!definition || definition.id !== line.expectedComboVersionId)
+      return conflict("Cambió el combo. Revisá las elecciones.");
+    const choices = line.comboChoices ?? [];
+    if (
+      choices.length !== definition.groups.length ||
+      new Set(choices.map((c) => c.groupId)).size !== choices.length
+    )
+      invalid("Elegí un producto en cada grupo del combo.");
+    const [price] = await tx
+      .select()
+      .from(productPrices)
+      .where(
+        and(
+          eq(productPrices.productId, p.id),
+          eq(productPrices.channel, channel),
+        ),
+      );
+    if (!price) invalid("El combo no tiene precio en este canal.");
+    const parentId = randomUUID(),
+      parentPosition = values.length;
+    values.push({
+      id: parentId,
+      position: parentPosition,
+      productId: p.id,
+      name: p.name,
+      quantity: line.quantity,
+      unitPrice: line.price,
+      lineTotal: "0",
+      lineKind: "combo",
+      comboVersionId: definition.id,
+      compositionStatus: "resolved",
+      notes: line.notes || null,
+    });
+    snapshots.push({ components: [], modifiers: [], surcharge: "0.00" });
+    let unitPrice = integer(price.amount);
+    for (const group of definition.groups) {
+      const choice = choices.find((c) => c.groupId === group.id);
+      const option = group.options.find((o) => o.id === choice?.optionId);
+      if (!choice || !option || option.archived)
+        return invalid("Elegí una opción vigente del combo.");
+      const quantity = line.quantity * group.quantity;
+      if (quantity > 999 || values.length >= 500)
+        invalid("El pedido supera la cantidad máxima de componentes.");
+      const child = await prepareIndividualLines(
+        tx,
+        actor,
+        channel,
+        [
+          {
+            productId: option.productId,
+            quantity,
+            price: "0.00",
+            expectedPrice: null,
+            priceReason: "",
+            notes: line.notes,
+            expectedFulfillmentVersionId: choice.expectedFulfillmentVersionId,
+            expectedRecipeVersionId: choice.expectedRecipeVersionId,
+            modifiers: choice.modifiers,
+          },
+        ],
+        true,
+      );
+      unitPrice +=
+        (integer(option[channel]) + integer(child.snapshots[0].surcharge)) *
+        BigInt(group.quantity);
+      values.push({
+        ...child.values[0],
+        notes: [`Combo: ${p.name} · ${group.name}`, line.notes]
+          .filter(Boolean)
+          .join(" — "),
+        listPrice: null,
+        position: values.length,
+        lineKind: "combo_component",
+        comboVersionId: definition.id,
+        parentLineId: parentId,
+        comboGroupId: group.id,
+        comboOptionId: option.id,
+      });
+      snapshots.push(child.snapshots[0]);
+    }
+    const configured = moneyBound(unitPrice);
+    if (configured !== line.expectedPrice)
+      conflict(
+        "Cambió el precio del combo o sus adicionales. Revisá el pedido.",
+      );
+    if (line.price !== configured) {
+      if (!line.priceReason)
+        invalid("Indicá el motivo del precio aplicado al combo.");
+      if (channel === "counter" && ctx.role === "staff")
+        invalid(
+          "Un encargado debe autorizar cambios de precio.",
+          "FORBIDDEN",
+          403,
+        );
+    }
+    const lineTotal = moneyBound(integer(line.price) * BigInt(line.quantity));
+    Object.assign(values[parentPosition], {
+      listPrice: configured,
+      lineTotal,
+      priceReason: line.priceReason || null,
+    });
+    total += integer(lineTotal);
+  }
+  if (values.filter((v) => v.lineKind !== "combo").length > 500)
+    invalid("Demasiados componentes en el pedido.");
   return { values, snapshots, totalAmount: moneyBound(total) };
 }
 async function preparePayments(

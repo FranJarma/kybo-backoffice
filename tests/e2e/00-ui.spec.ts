@@ -44,7 +44,7 @@ test("prototype layout aligns headers, shows actual records, and works on mobile
   test.slow();
   await mkdir("docs/previews", { recursive: true });
   await page.goto("/login");
-  await page.getByLabel("Correo electrónico").fill(email!);
+  await page.getByLabel("Usuario o correo").fill(email!);
   await page.getByLabel("Contraseña").fill(password!);
   await page.getByRole("button", { name: "Ingresar", exact: true }).click();
   await expect(page).toHaveURL("/", { timeout: 20_000 });

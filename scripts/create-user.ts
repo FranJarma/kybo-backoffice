@@ -4,12 +4,18 @@ import { provisionUser } from "../src/lib/auth";
 import type { Actor } from "../src/lib/access";
 
 const argumentsProvided = process.argv.slice(2);
-const [name, email, role] = argumentsProvided;
+const [name, identifier, role, branchId] = argumentsProvided;
 const password = process.env.KYBO_NEW_USER_PASSWORD;
 
-if (argumentsProvided.length !== 3 || !name || !email || !role || !password) {
+if (
+  ![3, 4].includes(argumentsProvided.length) ||
+  !name ||
+  !identifier ||
+  !role ||
+  !password
+) {
   throw new Error(
-    'Usage: KYBO_NEW_USER_PASSWORD=<temporary secret> npm run user:create -- "Name" email@example.com admin|manager|staff',
+    'Usage: KYBO_NEW_USER_PASSWORD=<temporary secret> npm run user:create -- "Name" username-or-email admin|manager|staff [branchId]',
   );
 }
 if (!(["admin", "manager", "staff"] as string[]).includes(role))
@@ -18,7 +24,10 @@ if (!(["admin", "manager", "staff"] as string[]).includes(role))
 try {
   await provisionUser(await getDb(), {
     name,
-    email,
+    ...(identifier.includes("@")
+      ? { email: identifier }
+      : { username: identifier }),
+    branchId,
     role: role as Actor["role"],
     password,
   });

@@ -280,7 +280,19 @@ export function AppShell({
             <Breadcrumb items={breadcrumbs(path, { role, catalogManager })} />
           </div>
           <div className="flex w-full min-w-0 items-center gap-3 sm:w-auto sm:shrink-0">
-            <BranchSelector rows={branches} selected={selectedBranchId} />
+            {role === "staff" ? (
+              <p
+                className="truncate text-sm text-muted"
+                title="Sucursal asignada"
+              >
+                {
+                  branches.find((branch) => branch.id === selectedBranchId)
+                    ?.name
+                }
+              </p>
+            ) : (
+              <BranchSelector rows={branches} selected={selectedBranchId} />
+            )}
           </div>
         </header>
         <main id="main-content" className="page-container">

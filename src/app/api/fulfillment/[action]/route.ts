@@ -1,3 +1,4 @@
+import { comboProgress } from "@/modules/combos/progress";
 import { z } from "zod";
 import { getDb } from "@/db/client";
 import { salesResponse } from "@/modules/sales/http";
@@ -43,6 +44,9 @@ export async function GET(
       );
     const rows = await db
       .select({
+        parentLineId: saleLines.parentLineId,
+        quantity: saleLines.quantity,
+        notes: saleLines.notes,
         lineId: saleLines.id,
         name: saleLines.name,
         orderId: saleOrders.id,
@@ -65,6 +69,17 @@ export async function GET(
       )
       .where(eq(saleOrders.saleId, saleId))
       .orderBy(saleOrders.sequence, saleLines.position);
+    const parents = await db
+      .select({
+        id: saleLines.id,
+        name: saleLines.name,
+        quantity: saleLines.quantity,
+      })
+      .from(saleLines)
+      .innerJoin(saleOrders, eq(saleOrders.id, saleLines.orderId))
+      .where(
+        and(eq(saleOrders.saleId, saleId), eq(saleLines.lineKind, "combo")),
+      );
     const [resolution] = await db
       .select({ id: stockResolutions.id, state: stockResolutions.state })
       .from(stockResolutions)
@@ -121,6 +136,13 @@ export async function GET(
             )
         : [];
     return {
+      combos: parents.map((p) => ({
+        ...p,
+        progress: comboProgress(
+          p.quantity,
+          rows.filter((r) => r.parentLineId === p.id),
+        ),
+      })),
       rows: rows.map((row) => ({
         ...row,
         returnLots: [

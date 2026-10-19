@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { createTestDb } from "./helpers/database";
+import { createDataModelTestContext as createTestDb } from "./helpers/data-model-database";
 import { operationalUsers, rateLimit, user } from "../src/db/schema";
 import {
   actorFromHeaders,
@@ -51,6 +51,42 @@ async function request(
 }
 
 describe("private authentication", () => {
+  it("signs in a username-only employee case-insensitively and enforces unique usernames", async () => {
+    const { auth, db } = await setup();
+    await provisionUser(db, {
+      name: "Abi",
+      username: "Abi",
+      password,
+      role: "staff",
+    });
+    const response = await request(auth, "/sign-in/username", {
+      username: "ABI",
+      password,
+    });
+    expect(response.status).toBe(200);
+    const cookie = response.headers.get("set-cookie")?.split(";")[0];
+    await expect(
+      actorFromHeaders(new Headers({ cookie: cookie ?? "" }), db, auth),
+    ).resolves.toMatchObject({ role: "staff", catalogManager: false });
+    await expect(
+      provisionUser(db, {
+        name: "Duplicate",
+        username: "abi",
+        password,
+        role: "staff",
+      }),
+    ).rejects.toBeDefined();
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const denied = await request(auth, "/sign-in/username", {
+        username: "abi",
+        password: "incorrect-password",
+      });
+      expect(denied.headers.get("set-cookie") ?? "").not.toContain(
+        "session_token",
+      );
+      if (attempt === 5) expect(denied.status).toBe(429);
+    }
+  });
   it.each([
     {
       email: "valid@example.test",

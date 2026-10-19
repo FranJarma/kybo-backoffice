@@ -1,3 +1,6 @@
+import { productFulfillments } from "@/db/product-fulfillment-schema";
+import { branchProducts } from "@/db/branch-schema";
+import { canSellProduct } from "@/modules/products/availability";
 import { randomUUID } from "node:crypto";
 import { publishGroup } from "@/modules/modifiers/service";
 import { eq, asc, and, inArray } from "drizzle-orm";
@@ -349,6 +352,21 @@ export async function getProductConfiguration(
         .from(products)
         .where(eq(products.id, productId));
       if (!p || p.archivedAt) notFound();
+      const [physical] = await tx
+        .select({ id: productFulfillments.versionId })
+        .from(productFulfillments)
+        .where(eq(productFulfillments.productId, productId));
+      const [local] = await tx
+        .select()
+        .from(branchProducts)
+        .where(
+          and(
+            eq(branchProducts.productId, productId),
+            eq(branchProducts.branchId, actor.branchId!),
+          ),
+        );
+      if (!canSellProduct(p, local, channel))
+        invalid("El producto no está disponible en esta sucursal y canal.");
       const [price] = await tx
         .select()
         .from(productPrices)
@@ -371,6 +389,7 @@ export async function getProductConfiguration(
         .where(eq(recipes.productId, productId));
       if (!r)
         return {
+          fulfillmentVersionId: physical?.id ?? null,
           recipeVersionId: null,
           model: "unavailable",
           groups: [],
@@ -378,6 +397,7 @@ export async function getProductConfiguration(
         };
       const c = await loadConfiguration(tx, r.v.id);
       return {
+        fulfillmentVersionId: physical?.id ?? null,
         recipeVersionId: c.recipeVersionId,
         model: c.model,
         basePrice: price?.amount ?? null,
