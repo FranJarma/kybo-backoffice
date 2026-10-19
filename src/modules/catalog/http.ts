@@ -93,10 +93,9 @@ export async function requestInput(
 
 export async function catalogContext(value: string) {
   const actor = await requireActor();
-  if (actor.role !== "admin" && !actor.catalogManager)
-    actor.branchId =
-      (await headers()).get("X-Kybo-Branch-Id") ??
-      (await cookies()).get("kybo-branch")?.value;
+  actor.branchId =
+    (await headers()).get("X-Kybo-Branch-Id") ??
+    (await cookies()).get("kybo-branch")?.value;
   const entity = entityFromParam(value);
   return { actor, entity, service: createCatalogService(await getDb()) };
 }

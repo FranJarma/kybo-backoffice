@@ -75,6 +75,7 @@ export async function catalogProductCosts(
       const rows = await tx
         .select({
           id: products.id,
+          kind: products.kind,
           fulfillment: productFulfillmentVersions,
           recipeId: recipes.id,
           versionId: recipeVersions.id,
@@ -133,6 +134,10 @@ export async function catalogProductCosts(
         let model: ProductCost = {
           productId: row.id,
           status: "unconfigured",
+          pendingReasons:
+            row.kind === "combo"
+              ? ["Publicá los componentes del combo para calcular su costo."]
+              : [],
           fixed: null,
           min: null,
           max: null,

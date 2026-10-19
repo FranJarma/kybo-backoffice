@@ -44,6 +44,8 @@ import {
   auditEvents,
 } from "@/db/business-schema";
 import { parseInput, parseUpdate } from "./validation";
+import type { ProductSetup } from "./validation";
+import { applyProductSetup, lockProductSetup } from "../products/onboarding";
 import { recipes, recipeOptions, recipeLines } from "@/db/recipe-schema";
 import { productionOrders } from "@/db/production-order-schema";
 import { inventoryMovements } from "@/db/inventory-schema";
@@ -225,7 +227,14 @@ export function createCatalogService(db: AppDb) {
     ): Promise<CatalogRow> {
       await requireCatalogManagement(db, actor);
       const values = parseInput(entity, input);
+      const setup =
+        entity === "products"
+          ? (values.setup as ProductSetup | undefined)
+          : undefined;
+      if (setup && !values.kind)
+        values.kind = setup.mode === "combo" ? "combo" : "individual";
       return db.transaction(async (tx) => {
+        if (setup) await lockProductSetup(tx);
         if (isOrderedEntity(entity))
           values.sortOrder = await nextCatalogOrder(tx, entity);
         if (entity === "presentations") await checkReferences(tx, values);
@@ -242,6 +251,7 @@ export function createCatalogService(db: AppDb) {
         if (entity === "products") {
           await bindProductImage(tx, actor.id, row.id, values);
           await writePrices(tx, row.id, values);
+          if (setup) await applyProductSetup(tx, actor, row.id, setup);
         }
         const [after] = await enrich(tx, entity, [row]);
         await tx.insert(auditEvents).values({
@@ -269,9 +279,14 @@ export function createCatalogService(db: AppDb) {
         throw new AppError("VALIDATION", "Identificador inválido.", 400);
       const change = parseUpdate(input);
       const values = change.fields ? parseInput(entity, change.fields) : null;
+      const setup =
+        entity === "products"
+          ? (values?.setup as ProductSetup | undefined)
+          : undefined;
       if (values && isOrderedEntity(entity)) delete values.sortOrder;
       const table = tables[entity];
       return db.transaction(async (tx) => {
+        if (setup) await lockProductSetup(tx);
         if (isOrderedEntity(entity)) await lockCatalogOrder(tx, entity);
         const [current] = await tx
           .select()
@@ -413,6 +428,7 @@ export function createCatalogService(db: AppDb) {
             409,
           );
         if (entity === "products" && values) await writePrices(tx, id, values);
+        if (setup) await applyProductSetup(tx, actor, id, setup);
         const [after] = await enrich(tx, entity, [updated]);
         await tx.insert(auditEvents).values({
           actorId: actor.id,

@@ -78,6 +78,48 @@ const optionalId = z.preprocess(
   (v) => (v === "" ? null : v),
   z.uuid().nullable(),
 );
+const setupCommon = {
+  branchId: z.uuid(),
+  branchRevision: z.number().int().nonnegative().default(0),
+  enabled: z.boolean().default(true),
+};
+export const productSetupSchema = z.discriminatedUnion("mode", [
+  z.object({ ...setupCommon, mode: z.literal("combo") }).strict(),
+  z
+    .object({
+      ...setupCommon,
+      mode: z.literal("recipe"),
+      stationId: z.uuid(),
+      preparationRevision: z.number().int().nonnegative().default(0),
+    })
+    .strict(),
+  z
+    .object({
+      ...setupCommon,
+      mode: z.literal("direct"),
+      dispatchLocationId: z.uuid(),
+      quantity: decimal(6, true, true).default("1.000000"),
+      expectedVersion: z.number().int().nonnegative().default(0),
+      source: z.union([
+        z.object({ itemId: z.uuid() }).strict(),
+        z
+          .object({
+            newItem: z
+              .object({
+                name,
+                class: z
+                  .enum(["food", "beverage", "packaging", "other"])
+                  .default("beverage"),
+                unitCost: decimal(6),
+              })
+              .strict(),
+          })
+          .strict(),
+      ]),
+    })
+    .strict(),
+]);
+export type ProductSetup = z.infer<typeof productSetupSchema>;
 const schemas = {
   categories: z.object({ name, sortOrder: order.optional() }).strict(),
   suppliers: z
@@ -102,6 +144,7 @@ const schemas = {
   }, itemSchema),
   products: z
     .object({
+      setup: productSetupSchema.optional(),
       kind: z.enum(["individual", "combo"]).optional(),
       name,
       categoryId: optionalId.optional(),

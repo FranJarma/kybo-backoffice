@@ -153,7 +153,9 @@ export function ProductPicker({
             <button
               key={row.id}
               type="button"
-              disabled={locked || !!row.temporarilySoldOut}
+              disabled={
+                locked || !!row.temporarilySoldOut || row.configured === false
+              }
               aria-label={`Agregar ${row.name}`}
               onClick={() => onAdd(row)}
               className="group flex min-h-40 min-w-0 flex-col items-start rounded-xl border border-line bg-white p-4 text-left transition-colors hover:border-orange-300 hover:bg-orange-50/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue disabled:opacity-50"
@@ -164,6 +166,11 @@ export function ProductPicker({
               {row.temporarilySoldOut && (
                 <span className="mb-2 text-xs font-bold text-amber-700">
                   Agotado temporalmente
+                </span>
+              )}
+              {row.configured === false && (
+                <span className="mb-2 text-xs font-bold text-amber-700">
+                  Falta completar la ficha
                 </span>
               )}
               <span className="mb-3 line-clamp-2 text-sm font-bold leading-snug text-brand">

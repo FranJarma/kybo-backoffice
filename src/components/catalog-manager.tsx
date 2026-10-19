@@ -20,6 +20,12 @@ import { itemClasses, itemClassLabel } from "@/modules/catalog/item-classes";
 import { suggestItemCode } from "@/modules/items/code";
 import { SearchCombobox } from "@/components/ui/search-combobox";
 import { ComboTab } from "@/components/products/combo-tab";
+import {
+  ProductSetupFields,
+  productSetupPayload,
+  type ProductSetupDraft,
+} from "@/components/products/setup-fields";
+import { ProductDirectCost } from "@/components/products/direct-cost";
 import { PhotoEditor, ProductPhoto } from "@/components/products/photo";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import {
@@ -66,11 +72,7 @@ const ItemSuppliersTab = dynamic(() =>
 const ProductRecipeTab = dynamic(() =>
   import("@/components/products/recipe-tab").then((m) => m.ProductRecipeTab),
 );
-const ProductPreparationTab = dynamic(() =>
-  import("@/components/products/preparation-tab").then(
-    (m) => m.ProductPreparationTab,
-  ),
-);
+
 type RefLists = Partial<Record<Entity, CatalogRow[]>>;
 function decimalInput(value: unknown) {
   return value === null || value === undefined
@@ -254,14 +256,16 @@ export function CatalogManager({
     "product" | "recipe" | "cost" | "preparation"
   >("product");
   const [recipeOpened, setRecipeOpened] = useState(false);
-  const [preparationOpened, setPreparationOpened] = useState(false);
   const [recipeBusy, setRecipeBusy] = useState(false);
-  const [preparationBusy, setPreparationBusy] = useState(false);
   const [itemTab, setItemTab] = useState<"details" | "suppliers">("details");
   const [suppliersOpened, setSuppliersOpened] = useState(false);
   const [suppliersBusy, setSuppliersBusy] = useState(false);
   const [manualCode, setManualCode] = useState(false);
   const [costRevision, setCostRevision] = useState(0);
+  const [productSetup, setProductSetup] = useState<ProductSetupDraft | null>(
+    null,
+  );
+  const [setupGeneration, setSetupGeneration] = useState(0);
   const costs = useProductCosts(
     entity === "products" ? rows.map((r) => r.id) : [],
     entity === "products" && !loading,
@@ -384,15 +388,15 @@ export function CatalogManager({
     };
   }, [definition, referenceSearch]);
   function openForm(row: CatalogRow | null, duplicate = false) {
+    setProductSetup(null);
+    setSetupGeneration((n) => n + 1);
     setManualCode(Boolean(row && !duplicate));
     setItemTab("details");
     setSuppliersOpened(false);
     setSuppliersBusy(false);
     setProductTab("product");
     setRecipeOpened(false);
-    setPreparationOpened(false);
     setRecipeBusy(false);
-    setPreparationBusy(false);
     setEditing(duplicate ? null : row);
     setCopiedFrom(duplicate && row ? row.name : "");
     setDraft({
@@ -434,13 +438,7 @@ export function CatalogManager({
     setFormError(referenceError);
   }
   function closeForm() {
-    if (
-      !saving &&
-      !uploading &&
-      !recipeBusy &&
-      !preparationBusy &&
-      !suppliersBusy
-    ) {
+    if (!saving && !uploading && !recipeBusy && !suppliersBusy) {
       setEditing(undefined);
       setFormError("");
     }
@@ -458,12 +456,20 @@ export function CatalogManager({
         "data-next-tab",
       ) === "recipe";
     if (editing === undefined || uploading || saving) return;
+    if (entity === "products" && !productSetup) {
+      setFormError("Esperá a que cargue la configuración de la sucursal.");
+      return;
+    }
     setSaving(true);
     setFormError("");
-    const payload: Record<string, string | number> = Object.fromEntries(
+    const payload: Record<string, unknown> = Object.fromEntries(
       definition.fields.map((field) => [field.key, draft[field.key] ?? ""]),
     );
     if (entity === "products") payload.imageAssetId = draft.imageAssetId ?? "";
+    if (entity === "products" && productSetup) {
+      payload.setup = productSetupPayload(productSetup, draft.name);
+      payload.kind = productSetup.mode === "combo" ? "combo" : "individual";
+    }
     if (ingredientsOnly) payload.recipeUsable = "true";
     if (editing) payload.revision = editing.revision;
     if (entity === "items") {
@@ -503,8 +509,11 @@ export function CatalogManager({
         setItemTab("suppliers");
       } else if (continueWithRecipe) {
         const { row } = (await response.json()) as { row: CatalogRow };
-        if (editing) setEditing(row);
-        else openForm(row);
+        if (editing) {
+          setEditing(row);
+          setProductSetup(null);
+          setSetupGeneration((n) => n + 1);
+        } else openForm(row);
         setRecipeOpened(true);
         setProductTab("recipe");
       } else setEditing(undefined);
@@ -1345,7 +1354,10 @@ export function CatalogManager({
                   )
                     .filter(
                       (tab) =>
-                        draft.kind !== "combo" || tab.id !== "preparation",
+                        (draft.kind !== "combo" || tab.id !== "preparation") &&
+                        (productSetup?.mode !== "direct" ||
+                          tab.id === "product" ||
+                          tab.id === "cost"),
                     )
                     .map((tab) => (
                       <button
@@ -1361,7 +1373,7 @@ export function CatalogManager({
                           saving ||
                           uploading ||
                           recipeBusy ||
-                          preparationBusy ||
+                          (!productSetup && tab.id !== "product") ||
                           (!editing && tab.id !== "product")
                         }
                         onClick={() => {
@@ -1372,8 +1384,6 @@ export function CatalogManager({
                             tab.id === "preparation"
                           )
                             setRecipeOpened(true);
-                          if (tab.id === "preparation")
-                            setPreparationOpened(true);
                         }}
                       >
                         {draft.kind === "combo" && tab.id === "recipe"
@@ -1396,7 +1406,12 @@ export function CatalogManager({
                     id={`${formId}-panel-recipe`}
                     aria-labelledby={`${formId}-tab-${productTab === "cost" ? "cost" : productTab === "preparation" ? "preparation" : "recipe"}`}
                   >
-                    {draft.kind === "combo" ? (
+                    {productSetup?.mode === "direct" ? (
+                      <ProductDirectCost
+                        productId={editing.id}
+                        revision={costRevision}
+                      />
+                    ) : draft.kind === "combo" ? (
                       <ComboTab
                         productId={editing.id}
                         view={productTab === "cost" ? "cost" : "recipe"}
@@ -1416,22 +1431,13 @@ export function CatalogManager({
                         productId={editing.id}
                         actorId={actorId}
                         onBusy={setRecipeBusy}
-                        onSaved={() => setCostRevision((n) => n + 1)}
+                        onSaved={() => {
+                          setCostRevision((n) => n + 1);
+                          setProductSetup(null);
+                          setSetupGeneration((n) => n + 1);
+                        }}
                         onBack={() => setProductTab("product")}
                       />
-                    )}
-                    {editing && preparationOpened && (
-                      <div
-                        hidden={productTab !== "preparation"}
-                        className="mt-8 border-t border-line pt-8"
-                      >
-                        <ProductPreparationTab
-                          key={editing.id}
-                          productId={editing.id}
-                          actorId={actorId}
-                          onBusy={setPreparationBusy}
-                        />
-                      </div>
                     )}
                   </div>
                 )}
@@ -1599,7 +1605,8 @@ export function CatalogManager({
                     {(entity === "products"
                       ? [
                           ...basicFields.filter(
-                            (field) => field.type !== "textarea",
+                            (field) =>
+                              field.type !== "textarea" && field.key !== "kind",
                           ),
                           ...basicFields.filter(
                             (field) => field.type === "textarea",
@@ -1608,6 +1615,20 @@ export function CatalogManager({
                       : basicFields
                     ).map(renderField)}
                   </div>
+                )}
+                {entity === "products" && (
+                  <ProductSetupFields
+                    key={`${editing?.id ?? "new"}:${setupGeneration}`}
+                    productId={editing?.id}
+                    initialKind={editing ? String(editing.kind) : undefined}
+                    productName={draft.name ?? ""}
+                    value={productSetup}
+                    onChange={setProductSetup}
+                    onKindChange={(kind) =>
+                      setDraft((current) => ({ ...current, kind }))
+                    }
+                    disabled={saving || uploading}
+                  />
                 )}
                 {entity === "products" && (
                   <PhotoEditor
@@ -1675,18 +1696,24 @@ export function CatalogManager({
                 <Button
                   type="submit"
                   variant={
-                    entity === "products" ||
+                    (entity === "products" &&
+                      productSetup?.mode !== "direct") ||
                     (entity === "items" && draft.purchasable === "true")
                       ? "outline"
                       : "default"
                   }
                   className={
-                    entity === "products" ||
+                    (entity === "products" &&
+                      productSetup?.mode !== "direct") ||
                     (entity === "items" && draft.purchasable === "true")
                       ? "border-line bg-white text-brand shadow-none"
                       : undefined
                   }
-                  disabled={saving || uploading}
+                  disabled={
+                    saving ||
+                    uploading ||
+                    (entity === "products" && !productSetup)
+                  }
                 >
                   {saving ? "Guardando…" : "Guardar"}
                 </Button>
@@ -1701,12 +1728,12 @@ export function CatalogManager({
                     <ArrowRight aria-hidden="true" />
                   </Button>
                 )}
-                {entity === "products" && (
+                {entity === "products" && productSetup?.mode !== "direct" && (
                   <Button
                     type="submit"
                     data-next-tab="recipe"
                     className="max-w-full whitespace-normal text-center"
-                    disabled={saving || uploading}
+                    disabled={saving || uploading || !productSetup}
                   >
                     {draft.kind === "combo"
                       ? "Guardar y elegir componentes"

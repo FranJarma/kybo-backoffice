@@ -189,7 +189,7 @@ export function SalesManager({
     index?: number;
   } | null>(null);
   async function configure(row: SaleLookup["rows"][number], index?: number) {
-    if (locked || row.temporarilySoldOut) return;
+    if (locked || row.temporarilySoldOut || row.configured === false) return;
     setLoading(true);
     setError("");
     try {

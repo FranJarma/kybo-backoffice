@@ -37,6 +37,7 @@ export function ComboTab({
       { id: string; name: string; kind: string }[]
     >([]),
     [cost, setCost] = useState<ProductCost | null>(null);
+  const [costRefresh, setCostRefresh] = useState(0);
   useEffect(() => {
     let live = true;
     getJson<ComboDefinition | null>(`/api/products/${productId}/combo`)
@@ -106,7 +107,7 @@ export function ComboTab({
     return () => {
       live = false;
     };
-  }, [view, productId, revision]);
+  }, [view, productId, revision, costRefresh]);
   const update = (i: number, g: Group) =>
     setGroups((all) => all.map((x, j) => (i === j ? g : x)));
   async function save() {
@@ -166,6 +167,39 @@ export function ComboTab({
                   ? money(cost.min)
                   : `${money(cost.min)} – ${money(cost.max)}`}
           </p>
+          {cost?.pendingReasons && cost.pendingReasons.length > 0 && (
+            <div className="mt-5 space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm">
+              <h4 className="font-semibold text-brand">
+                Qué falta para calcularlo
+              </h4>
+              <ul className="list-disc space-y-2 pl-5">
+                {cost.pendingReasons.map((reason) => (
+                  <li key={reason}>{reason}</li>
+                ))}
+              </ul>
+              <p>
+                Completá la ficha de cada componente en Catálogo y precios. Para
+                una bebida, elegí «Lo compramos listo», vinculá su artículo y
+                dejá una unidad por venta. Su disponibilidad en la sucursal se
+                guarda desde esa misma ficha.
+              </p>
+              <p>
+                El costo viene del inventario de la sucursal o de la referencia
+                del artículo. El precio de venta no se usa como costo.
+              </p>
+            </div>
+          )}
+          <Button
+            className="mt-5"
+            variant="outline"
+            onClick={() => {
+              setError("");
+              setCost(null);
+              setCostRefresh((n) => n + 1);
+            }}
+          >
+            Actualizar costo
+          </Button>
         </div>
       ) : (
         <fieldset disabled={busy || !ready} className="space-y-6">

@@ -70,6 +70,7 @@ export type SaleLookup = {
   offset?: number;
   rows: {
     kind?: string;
+    configured?: boolean;
     id: string;
     name: string;
     price?: string | null;

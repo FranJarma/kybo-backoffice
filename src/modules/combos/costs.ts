@@ -10,14 +10,34 @@ export function comboCostRange(
     max = 0n,
     unknown = false;
   const refs = new Set<string>();
+  const pendingReasons = new Set<string>();
   for (const group of definition.groups) {
-    const options = group.options
-      .filter(
-        (o) =>
-          !o.archived &&
-          (!availableProductIds || availableProductIds.has(o.productId)),
-      )
-      .map((o) => costs.get(o.productId));
+    const activeOptions = group.options.filter((o) => !o.archived);
+    const eligible = activeOptions.filter(
+      (o) => !availableProductIds || availableProductIds.has(o.productId),
+    );
+    if (!eligible.length) {
+      unknown = true;
+      pendingReasons.add(
+        activeOptions.length
+          ? `${group.name}: no hay opciones habilitadas y disponibles en esta sucursal (${activeOptions.map((o) => o.name).join(", ")}).`
+          : `${group.name}: no tiene productos activos. Revisá sus componentes.`,
+      );
+    }
+    // When nothing is enabled, expose configuration omissions too so fixing
+    // availability does not merely replace one unexplained pending state with another.
+    for (const option of eligible.length ? eligible : activeOptions) {
+      const cost = costs.get(option.productId);
+      if (!cost || cost.status === "unconfigured")
+        pendingReasons.add(
+          `${option.name}: falta publicar su receta o vincular un artículo de venta directa.`,
+        );
+      else if (cost.min === null || cost.max === null)
+        pendingReasons.add(
+          `${option.name}: hay ingredientes o artículos con costo pendiente. Revisá el costeo de ese producto.`,
+        );
+    }
+    const options = eligible.map((o) => costs.get(o.productId));
     if (
       !options.length ||
       options.some((o) => !o || o.min === null || o.max === null)
@@ -39,6 +59,7 @@ export function comboCostRange(
     fixed: null,
     defaultCost: null,
     groups: [],
+    pendingReasons: [...pendingReasons],
     referenceItems: [...refs],
   };
 }
