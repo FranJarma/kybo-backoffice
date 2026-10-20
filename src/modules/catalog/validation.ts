@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Entity } from "./types";
 import { AppError } from "@/lib/errors";
 import { itemSchema } from "../items/validation";
+import { vatRates } from "@/modules/pricing/amounts";
 
 export function parseDecimal(input: unknown, scale: number): string | null {
   if (input === null || input === undefined || input === "") return null;
@@ -78,6 +79,48 @@ const optionalId = z.preprocess(
   (v) => (v === "" ? null : v),
   z.uuid().nullable(),
 );
+const setupCommon = {
+  branchId: z.uuid(),
+  branchRevision: z.number().int().nonnegative().default(0),
+  enabled: z.boolean().default(true),
+};
+export const productSetupSchema = z.discriminatedUnion("mode", [
+  z.object({ ...setupCommon, mode: z.literal("combo") }).strict(),
+  z
+    .object({
+      ...setupCommon,
+      mode: z.literal("recipe"),
+      stationId: z.uuid(),
+      preparationRevision: z.number().int().nonnegative().default(0),
+    })
+    .strict(),
+  z
+    .object({
+      ...setupCommon,
+      mode: z.literal("direct"),
+      dispatchLocationId: z.uuid(),
+      quantity: decimal(6, true, true).default("1.000000"),
+      expectedVersion: z.number().int().nonnegative().default(0),
+      source: z.union([
+        z.object({ itemId: z.uuid() }).strict(),
+        z
+          .object({
+            newItem: z
+              .object({
+                name,
+                class: z
+                  .enum(["food", "beverage", "packaging", "other"])
+                  .default("beverage"),
+                unitCost: decimal(6),
+              })
+              .strict(),
+          })
+          .strict(),
+      ]),
+    })
+    .strict(),
+]);
+export type ProductSetup = z.infer<typeof productSetupSchema>;
 const schemas = {
   categories: z.object({ name, sortOrder: order.optional() }).strict(),
   suppliers: z
@@ -85,7 +128,16 @@ const schemas = {
     .strict(),
   customers: z.object({ name, email, phone }).strict(),
   "payment-methods": z
-    .object({ name, kind: z.enum(["cash", "card", "transfer", "other"]) })
+    .object({
+      name,
+      kind: z.enum(["cash", "card", "transfer", "other"]),
+      commissionPercent: decimal(2)
+        .refine(
+          (v) => v === null || BigInt(v.replace(".", "")) <= 10000n,
+          "La comisión debe estar entre 0% y 100%.",
+        )
+        .optional(),
+    })
     .strict(),
   items: z.preprocess((raw) => {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return raw;
@@ -102,8 +154,15 @@ const schemas = {
   }, itemSchema),
   products: z
     .object({
+      setup: productSetupSchema.optional(),
       kind: z.enum(["individual", "combo"]).optional(),
       name,
+      vatRate: decimal(2)
+        .refine(
+          (v) => v === null || (vatRates as readonly string[]).includes(v),
+          "Elegí una alícuota de IVA válida.",
+        )
+        .optional(),
       categoryId: optionalId.optional(),
       imageAssetId: optionalId.optional(),
       description: optionalText(2000).optional(),

@@ -287,4 +287,19 @@ it("inherits recipe waste and modifiers, consumes at preparation and dispatches 
     ids: [combo.id],
   });
   expect(revisedCosts.products[0].min).toBe("20.000000");
+  await c.db
+    .update(schema.branchProducts)
+    .set({ enabled: false })
+    .where(eq(schema.branchProducts.productId, soda.id));
+  const unavailable = await catalogProductCosts(c.db, actor, {
+    ids: [combo.id],
+  });
+  expect(unavailable.products[0]).toMatchObject({
+    status: "pending",
+    min: null,
+    max: null,
+  });
+  expect(unavailable.products[0].pendingReasons).toContain(
+    "Gaseosa: no hay opciones habilitadas y disponibles en esta sucursal (Gaseosa).",
+  );
 });

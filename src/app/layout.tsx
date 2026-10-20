@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
+import { FormFeedback } from "@/components/ui/form-feedback";
 const manrope = localFont({
   src: "../../public/fonts/manrope.ttf",
   variable: "--font-manrope",
@@ -10,6 +11,9 @@ const manrope = localFont({
 export const metadata: Metadata = {
   title: "Kybo Operations",
   description: "Gestión interna de Kybo",
+  icons: {
+    icon: "/favicon.ico",
+  },
 };
 export default function RootLayout({
   children,
@@ -18,7 +22,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es-AR" className={manrope.variable}>
-      <body>{children}</body>
+      <body>
+        {children}
+        <FormFeedback />
+      </body>
     </html>
   );
 }

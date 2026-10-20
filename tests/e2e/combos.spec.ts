@@ -105,7 +105,9 @@ test("combo selection, switching products and editing retain the right modifiers
   await page.getByLabel("Usuario o correo").fill(process.env.E2E_EMAIL!);
   await page.getByLabel("Contraseña").fill(process.env.E2E_PASSWORD!);
   await page.getByRole("button", { name: "Ingresar", exact: true }).click();
-  await expect(page).toHaveURL("/", { timeout: 45000 });
+  await expect(page).toHaveURL(/\/(?:settings\/branches)?$/, {
+    timeout: 45000,
+  });
   const branches = await (await page.request.get("/api/branches")).json();
   const selected = await page.request.post("/api/branches/select", {
     data: { branchId: branches.rows[0].id },
@@ -133,12 +135,17 @@ test("combo selection, switching products and editing retain the right modifiers
   await dialog.getByRole("radio", { name: "Masa común" }).check();
   await dialog.getByRole("button", { name: "Confirmar opción" }).click();
   await dialog.getByRole("button", { name: "Gaseosa", exact: true }).click();
-  await dialog.getByRole("button", { name: "Confirmar opción" }).click();
+  await expect(
+    dialog.getByRole("button", { name: "Confirmar opción" }),
+  ).toHaveCount(0);
   await dialog
     .getByRole("button", { name: "Agregar combo", exact: true })
     .click();
   await page
-    .getByRole("button", { name: "Editar opciones", exact: true })
+    .getByRole("button", {
+      name: "Editar opciones de Combo waffle",
+      exact: true,
+    })
     .click();
   await expect(
     dialog.getByRole("button", { name: "Agregar combo", exact: true }),
@@ -156,6 +163,6 @@ test("combo selection, switching products and editing retain the right modifiers
     .getByRole("button", { name: "Agregar combo", exact: true })
     .click();
   await expect(
-    page.getByText("1 × Salah (incluido)", { exact: true }),
+    page.getByTestId("cart-line").getByText(/1 × Salah \(incluido\)/),
   ).toBeVisible();
 });

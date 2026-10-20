@@ -5,12 +5,14 @@ import type { Tx } from "@/modules/inventory/service";
 import { AppError } from "@/lib/errors";
 export function productFields(values: Record<string, unknown>) {
   const {
+    setup: _setup,
     priceCounter: _a,
     pricePedidosYa: _b,
     priceUberEats: _c,
     ...fields
   } = values;
   void _a;
+  void _setup;
   void _b;
   void _c;
   return fields as { name: string };

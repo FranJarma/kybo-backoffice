@@ -47,8 +47,19 @@ export const customers = pgTable("customers", {
 });
 export const paymentMethods = pgTable(
   "payment_methods",
-  { ...common(), kind: text("kind").notNull() },
+  {
+    ...common(),
+    kind: text("kind").notNull(),
+    commissionPercent: numeric("commission_percent", {
+      precision: 5,
+      scale: 2,
+    }),
+  },
   (t) => [
+    check(
+      "payment_commission_valid",
+      sql`${t.commissionPercent} between 0 and 100`,
+    ),
     check(
       "payment_method_kind",
       sql`${t.kind} in ('cash','card','transfer','other')`,
@@ -73,6 +84,7 @@ export const products = pgTable(
   {
     ...common(),
     kind: text("kind").notNull().default("individual"),
+    vatRate: numeric("vat_rate", { precision: 5, scale: 2 }),
     categoryId: uuid("category_id").references(() => productCategories.id, {
       onDelete: "restrict",
     }),
@@ -87,6 +99,7 @@ export const products = pgTable(
   },
   (t) => [
     check("product_order", sql`${t.sortOrder} >= 0`),
+    check("product_vat_rate_valid", sql`${t.vatRate} in (0,2.5,5,10.5,21,27)`),
     check("products_kind_check", sql`${t.kind} in ('individual','combo')`),
     uniqueIndex("product_image_unique").on(t.imageAssetId),
   ],

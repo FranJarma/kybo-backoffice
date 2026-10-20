@@ -43,13 +43,36 @@ it("una nueva generación consulta datos frescos y los errores permiten reintent
   expect(fetcher).toHaveBeenCalledTimes(3);
 });
 
-it("limita cada solicitud a diez productos", async () => {
+it("agrupa el resumen en lotes de hasta cincuenta productos", async () => {
   const fetcher = vi.fn(async (ids: string[]) => response(ids));
-  const ids = Array.from({ length: 23 }, (_, i) => String(i));
+  const ids = Array.from({ length: 73 }, (_, i) => String(i));
   expect((await createProductCostLoader(fetcher)(ids)).products).toHaveLength(
-    23,
+    73,
   );
-  expect(fetcher.mock.calls.map(([batch]) => batch.length)).toEqual([
-    10, 10, 3,
-  ]);
+  expect(fetcher.mock.calls.map(([batch]) => batch.length)).toEqual([50, 23]);
+});
+
+it("entrega cada lote listo sin esperar a los demás", async () => {
+  const finishes: ((result: ReturnType<typeof response>) => void)[] = [];
+  const batches: string[][] = [];
+  const fetcher = vi.fn((ids: string[]) => {
+    batches.push(ids);
+    return new Promise<ReturnType<typeof response>>((resolve) =>
+      finishes.push(resolve),
+    );
+  });
+  const onBatch = vi.fn();
+  const load = createProductCostLoader(fetcher, onBatch);
+  const complete = vi.fn();
+  const pending = load(Array.from({ length: 60 }, (_, i) => String(i))).then(
+    complete,
+  );
+  finishes[1](response(batches[1]));
+  await vi.waitFor(() => expect(onBatch).toHaveBeenCalledTimes(1));
+  expect(onBatch.mock.calls[0][0].products).toHaveLength(10);
+  expect(complete).not.toHaveBeenCalled();
+  finishes[0](response(batches[0]));
+  await pending;
+  expect(onBatch).toHaveBeenCalledTimes(2);
+  expect(complete).toHaveBeenCalledTimes(1);
 });

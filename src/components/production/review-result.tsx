@@ -1,4 +1,7 @@
 "use client";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
+import { FieldCaption } from "@/components/ui/field-caption";
+import { OperationAlert } from "@/components/ui/operation-alert";
 import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,7 +48,7 @@ export function ReviewProductionResult({
     ),
   );
   const [reason, setReason] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError, errorAttempt] = useErrorFeedback();
   function save(e: FormEvent) {
     e.preventDefault();
     try {
@@ -85,7 +88,7 @@ export function ReviewProductionResult({
       <form onSubmit={save} className="mt-5">
         <fieldset disabled={locked} className="space-y-6">
           <label className="block">
-            Total producido ({baseUnit})
+            <FieldCaption required>Total producido ({baseUnit})</FieldCaption>
             <Input
               required
               inputMode="decimal"
@@ -100,7 +103,9 @@ export function ReviewProductionResult({
           <div className="grid gap-5 md:grid-cols-2">
             {components.map((c) => (
               <label key={c.itemId} className="block">
-                Total utilizado: {c.name} ({c.baseUnit})
+                <FieldCaption required>
+                  Total utilizado: {c.name} ({c.baseUnit})
+                </FieldCaption>
                 <Input
                   required
                   inputMode="decimal"
@@ -129,7 +134,7 @@ export function ReviewProductionResult({
             ))}
           </div>
           <label className="block">
-            Motivo de la revisión
+            <FieldCaption required>Motivo de la revisión</FieldCaption>
             <textarea
               required
               maxLength={2000}
@@ -150,9 +155,12 @@ export function ReviewProductionResult({
           </Button>
         </fieldset>
         {error && (
-          <p role="alert" className="mt-3 text-red-700">
-            {error}
-          </p>
+          <OperationAlert
+            eventKey={errorAttempt}
+            tone="error"
+            title="No pudimos completar la operación"
+            message={error}
+          />
         )}
       </form>
     </details>

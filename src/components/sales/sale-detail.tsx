@@ -127,6 +127,15 @@ export function SaleDetailPanel({
                         {m.count} × {m.optionName}
                       </p>
                     ))}
+                    {canCancel &&
+                      line.lineKind !== "combo_component" &&
+                      line.vatRate != null && (
+                        <p className="mt-2 text-xs text-muted">
+                          Neto: {money(line.netTotal!)} · IVA{" "}
+                          {Number(line.vatRate).toLocaleString("es-AR")}%:{" "}
+                          {money(line.vatTotal!)}
+                        </p>
+                      )}
                     {line.notes && (
                       <p className="mt-2 whitespace-pre-wrap text-xs text-muted">
                         {line.notes}
@@ -253,6 +262,29 @@ export function SaleDetailPanel({
                     {p.reference && (
                       <p className="mt-2 break-all text-xs font-medium">
                         {p.reference}
+                      </p>
+                    )}
+                    {canCancel && p.kind === "collection" && (
+                      <p className="mt-2 text-xs leading-5 text-muted">
+                        {p.commissionAmount == null ? (
+                          "Comisión sin determinar."
+                        ) : (
+                          <>
+                            Comisión{" "}
+                            {Number(p.commissionPercent).toLocaleString(
+                              "es-AR",
+                            )}
+                            %: {money(p.commissionAmount)} · Neto estimado:{" "}
+                            {money(p.settlementNet!)}. Antes de retenciones y
+                            ajustes de liquidación.
+                          </>
+                        )}
+                      </p>
+                    )}
+                    {canCancel && p.kind === "refund" && (
+                      <p className="mt-2 text-xs text-muted">
+                        La devolución no confirma el reintegro de la comisión
+                        del proveedor.
                       </p>
                     )}
                   </div>

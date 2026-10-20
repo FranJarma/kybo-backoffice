@@ -89,11 +89,22 @@ export const navigation = [
   {
     id: "modifiers",
     area: "Productos",
-    label: "Modificadores",
+    label: "Grupos de opciones",
+    breadcrumb: "Modificadores",
     href: "/products/modifiers",
     icon: "Layers3",
     access: "catalog",
     parent: "products",
+  },
+  {
+    id: "combo-groups",
+    area: "Productos",
+    label: "Productos para combos",
+    href: "/products/combo-groups",
+    icon: "Layers3",
+    access: "catalog",
+    parent: "products",
+    sidebar: false,
   },
   {
     id: "inventory",
@@ -158,6 +169,14 @@ export const navigation = [
     parent: "inventory",
   },
   {
+    id: "expenses",
+    area: "Finanzas",
+    label: "Gastos del negocio",
+    href: "/finance/expenses",
+    icon: "WalletCards",
+    access: "manager",
+  },
+  {
     id: "payment-methods",
     area: "Configuración",
     label: "Medios de pago",
@@ -187,7 +206,15 @@ export function canNavigate(
   );
 }
 export function visibleNavigation(actor: NavigationAccess) {
-  return navigation.filter((n) => canNavigate(n, actor));
+  return navigation.filter(
+    (n) => canNavigate(n, actor) && !("sidebar" in n && !n.sidebar),
+  );
+}
+export function navigationIsActive(href: string, path: string) {
+  return (
+    href === path ||
+    (href === "/products/modifiers" && path === "/products/combo-groups")
+  );
 }
 export function resolveNavigation(path: string) {
   return navigation.find(
@@ -212,7 +239,9 @@ export function breadcrumbs(path: string, actor: NavigationAccess): Crumb[] {
     });
   } else if (current.area === "Configuración")
     result.push({ label: "Configuración" });
-  result.push({ label: current.label });
+  result.push({
+    label: "breadcrumb" in current ? current.breadcrumb : current.label,
+  });
   return result;
 }
 export const legacyRedirects = [

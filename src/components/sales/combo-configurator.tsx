@@ -1,16 +1,24 @@
 "use client";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
+import { OperationAlert } from "@/components/ui/operation-alert";
+import { FieldCaption } from "@/components/ui/field-caption";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { getJson, money } from "@/components/inventory/shared";
 import { ProductConfigurator } from "./product-configurator";
+import { simpleComboSelection } from "./touch-selection";
 import { cents, integer } from "@/modules/inventory/decimal";
 import type { ComboDefinition } from "@/modules/combos/service";
 import type { PublicConfiguration } from "@/modules/recipes/configuration";
 import type { LineInput } from "@/modules/sales/validation";
 import type { SaleChannel } from "@/modules/sales/types";
+import { catalogFinalPrice } from "@/modules/pricing/amounts";
 export type ComboSaleConfiguration = {
   definition: ComboDefinition;
   basePrice: string;
+  catalogBasePrice?: string;
+  vatRate?: string;
+  pricingRevision?: number;
   unavailableProductIds?: string[];
 };
 type Choice = NonNullable<LineInput["comboChoices"]>[number];
@@ -33,7 +41,7 @@ export function ComboConfigurator({
   }) => void;
   onCancel: () => void;
 }) {
-  const [error, setError] = useState("");
+  const [error, setError, errorAttempt] = useErrorFeedback();
   const cache = useRef(new Map<string, Promise<PublicConfiguration>>());
   const loadConfiguration = useCallback(
     (productId: string) => {
@@ -101,7 +109,7 @@ export function ComboConfigurator({
     return () => {
       live = false;
     };
-  }, [initialChoices, config.definition, loadConfiguration]);
+  }, [initialChoices, config.definition, loadConfiguration, setError]);
   const [editing, setEditing] = useState<{
     groupId: string;
     optionId: string;
@@ -122,7 +130,25 @@ export function ComboConfigurator({
           throw Error(
             "Este producto no tiene una modalidad de entrega publicada.",
           );
-        setEditing({ ...pending, config: { ...c, basePrice: "0.00" } });
+        const simple = simpleComboSelection(
+          pending.groupId,
+          pending.optionId,
+          c,
+        );
+        if (simple) {
+          setSelected((all) => ({ ...all, [pending.groupId]: simple }));
+          setEditing(null);
+        } else {
+          setEditing({
+            ...pending,
+            config: {
+              ...c,
+              basePrice: "0.00",
+              catalogBasePrice: "0.00",
+              vatRate: config.vatRate,
+            },
+          });
+        }
         setPending(null);
       })
       .catch((e) => {
@@ -134,9 +160,9 @@ export function ComboConfigurator({
     return () => {
       live = false;
     };
-  }, [pending, loadConfiguration]);
-  const total =
-    integer(config.basePrice) +
+  }, [pending, loadConfiguration, config.vatRate, setError]);
+  const netTotal =
+    integer(config.catalogBasePrice ?? config.basePrice) +
     config.definition.groups.reduce((sum, g) => {
       const s = selected[g.id];
       if (!s) return sum;
@@ -145,6 +171,13 @@ export function ComboConfigurator({
         sum + (integer(o[channel]) + integer(s.extra)) * BigInt(g.quantity)
       );
     }, 0n);
+  let total: bigint | null = netTotal;
+  try {
+    if (config.vatRate !== undefined)
+      total = integer(catalogFinalPrice(cents(netTotal), config.vatRate)!);
+  } catch {
+    total = null;
+  }
   return (
     <div className="space-y-6">
       <p className="text-sm text-muted">
@@ -157,38 +190,57 @@ export function ComboConfigurator({
           key={g.id}
         >
           <h3 className="font-semibold">
-            {g.name} · {g.quantity} {g.quantity === 1 ? "unidad" : "unidades"}
+            <FieldCaption required>
+              {g.name} · {g.quantity} {g.quantity === 1 ? "unidad" : "unidades"}
+            </FieldCaption>
           </h3>
           <div className="flex flex-wrap gap-2">
-            {g.options.map((o) => (
-              <Button
-                key={o.id}
-                variant={
-                  selected[g.id]?.choice.optionId === o.id
-                    ? "secondary"
-                    : "outline"
-                }
-                disabled={
-                  o.archived ||
-                  config.unavailableProductIds?.includes(o.productId) ||
-                  !!pending ||
-                  restoring
-                }
-                onClick={() => {
-                  setError("");
+            {g.options.map((o) => {
+              let optionPrice: string | null = o[channel];
+              try {
+                if (config.vatRate)
+                  optionPrice = catalogFinalPrice(optionPrice, config.vatRate);
+              } catch {
+                optionPrice = null;
+              }
+              return (
+                <Button
+                  key={o.id}
+                  type="button"
+                  className="min-h-14 whitespace-normal px-5 text-left"
+                  aria-pressed={selected[g.id]?.choice.optionId === o.id}
+                  variant={
+                    selected[g.id]?.choice.optionId === o.id
+                      ? "secondary"
+                      : "outline"
+                  }
+                  disabled={
+                    o.archived ||
+                    optionPrice === null ||
+                    config.unavailableProductIds?.includes(o.productId) ||
+                    !!pending ||
+                    restoring
+                  }
+                  onClick={() => {
+                    setError("");
 
-                  setEditing(null);
-                  setPending({
-                    groupId: g.id,
-                    optionId: o.id,
-                    productId: o.productId,
-                  });
-                }}
-              >
-                {o.name}
-                {integer(o[channel]) > 0n ? ` (+${money(o[channel])})` : ""}
-              </Button>
-            ))}
+                    setEditing(null);
+                    setPending({
+                      groupId: g.id,
+                      optionId: o.id,
+                      productId: o.productId,
+                    });
+                  }}
+                >
+                  {o.name}
+                  {optionPrice === null
+                    ? " · Revisar precio"
+                    : integer(o[channel]) > 0n
+                      ? ` (+${money(optionPrice)})`
+                      : ""}
+                </Button>
+              );
+            })}
           </div>
           {selected[g.id] && (
             <p className="text-sm text-muted">
@@ -219,7 +271,7 @@ export function ComboConfigurator({
                       expectedRecipeVersionId: data.expectedRecipeVersionId,
                       modifiers: data.modifiers,
                     },
-                    extra: data.expectedPrice,
+                    extra: data.selectionSurcharge ?? data.expectedPrice,
                     labels: data.modifierLabels,
                   },
                 }));
@@ -231,17 +283,32 @@ export function ComboConfigurator({
       ))}
       {(pending || restoring) && <p role="status">Cargando opciones…</p>}
       {error && (
-        <p role="alert" className="text-red-700">
-          {error}
-        </p>
+        <OperationAlert
+          eventKey={errorAttempt}
+          tone="error"
+          title="No pudimos completar la operación"
+          message={error}
+        />
       )}
-      <div className="flex items-center justify-between gap-3 border-t border-line pt-5">
-        <strong>{money(cents(total))}</strong>
-        <Button variant="ghost" onClick={onCancel}>
+      <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 border-t border-line bg-white py-4">
+        <strong>
+          {total === null
+            ? "Revisá el precio y los adicionales del combo."
+            : money(cents(total))}
+        </strong>
+        <Button
+          type="button"
+          className="min-h-12"
+          variant="ghost"
+          onClick={onCancel}
+        >
           Cancelar
         </Button>
         <Button
+          type="button"
+          className="min-h-12"
           disabled={
+            total === null ||
             restoring ||
             !!pending ||
             !!editing ||
@@ -253,7 +320,7 @@ export function ComboConfigurator({
               comboChoices: config.definition.groups.map(
                 (g) => selected[g.id].choice,
               ),
-              expectedPrice: cents(total),
+              expectedPrice: cents(total!),
               modifierLabels: config.definition.groups.flatMap((g) => {
                 const s = selected[g.id],
                   o = g.options.find((o) => o.id === s.choice.optionId)!;

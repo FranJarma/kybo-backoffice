@@ -1,6 +1,7 @@
 "use client";
 import { useId } from "react";
 import { Input } from "@/components/ui/input";
+import { FieldCaption } from "@/components/ui/field-caption";
 import { Info } from "lucide-react";
 import {
   decimal,
@@ -49,8 +50,7 @@ export function Field({
         htmlFor={id}
         className="mb-2 block text-xs font-semibold text-brand"
       >
-        {label}
-        {required ? " *" : ""}
+        <FieldCaption required={required}>{label}</FieldCaption>
       </label>
       <div className="relative">
         <Input

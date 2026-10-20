@@ -44,12 +44,15 @@ import {
   auditEvents,
 } from "@/db/business-schema";
 import { parseInput, parseUpdate } from "./validation";
+import type { ProductSetup } from "./validation";
+import { applyProductSetup, lockProductSetup } from "../products/onboarding";
 import { recipes, recipeOptions, recipeLines } from "@/db/recipe-schema";
 import { productionOrders } from "@/db/production-order-schema";
 import { inventoryMovements } from "@/db/inventory-schema";
 import { stockMovements } from "@/db/stock-movement-schema";
 import { inventoryValuations } from "@/db/stock-schema";
 import { productFulfillmentVersions } from "@/db/product-fulfillment-schema";
+import { catalogFinalPrice } from "@/modules/pricing/amounts";
 
 const tables = {
   suppliers,
@@ -88,6 +91,7 @@ async function enrich(
     const categories = await db.select().from(productCategories);
     return result.map((row) => ({
       ...row,
+      priceBasis: "net",
       categoryName:
         categories.find((c) => c.id === row.categoryId)?.name ?? null,
       categoryArchived: !!categories.find((c) => c.id === row.categoryId)
@@ -149,7 +153,12 @@ async function checkReferences(db: QueryDb, input: DbRow, previous?: DbRow) {
   }
 }
 
-async function writePrices(db: QueryDb, id: string, input: DbRow) {
+async function writePrices(
+  db: QueryDb,
+  id: string,
+  input: DbRow,
+  rate: string | null,
+) {
   await db.delete(productPrices).where(eq(productPrices.productId, id));
   const channels = [
     ["priceCounter", "counter"],
@@ -158,8 +167,10 @@ async function writePrices(db: QueryDb, id: string, input: DbRow) {
   ] as const;
   for (const [key, channel] of channels) {
     const amount = input[key] as string | null;
-    if (amount !== null)
+    if (amount !== null) {
+      catalogFinalPrice(amount, rate);
       await db.insert(productPrices).values({ productId: id, channel, amount });
+    }
   }
 }
 
@@ -225,7 +236,14 @@ export function createCatalogService(db: AppDb) {
     ): Promise<CatalogRow> {
       await requireCatalogManagement(db, actor);
       const values = parseInput(entity, input);
+      const setup =
+        entity === "products"
+          ? (values.setup as ProductSetup | undefined)
+          : undefined;
+      if (setup && !values.kind)
+        values.kind = setup.mode === "combo" ? "combo" : "individual";
       return db.transaction(async (tx) => {
+        if (setup) await lockProductSetup(tx);
         if (isOrderedEntity(entity))
           values.sortOrder = await nextCatalogOrder(tx, entity);
         if (entity === "presentations") await checkReferences(tx, values);
@@ -241,7 +259,13 @@ export function createCatalogService(db: AppDb) {
           .returning();
         if (entity === "products") {
           await bindProductImage(tx, actor.id, row.id, values);
-          await writePrices(tx, row.id, values);
+          await writePrices(
+            tx,
+            row.id,
+            values,
+            "vatRate" in row ? (row.vatRate as string | null) : null,
+          );
+          if (setup) await applyProductSetup(tx, actor, row.id, setup);
         }
         const [after] = await enrich(tx, entity, [row]);
         await tx.insert(auditEvents).values({
@@ -269,9 +293,14 @@ export function createCatalogService(db: AppDb) {
         throw new AppError("VALIDATION", "Identificador inválido.", 400);
       const change = parseUpdate(input);
       const values = change.fields ? parseInput(entity, change.fields) : null;
+      const setup =
+        entity === "products"
+          ? (values?.setup as ProductSetup | undefined)
+          : undefined;
       if (values && isOrderedEntity(entity)) delete values.sortOrder;
       const table = tables[entity];
       return db.transaction(async (tx) => {
+        if (setup) await lockProductSetup(tx);
         if (isOrderedEntity(entity)) await lockCatalogOrder(tx, entity);
         const [current] = await tx
           .select()
@@ -412,7 +441,14 @@ export function createCatalogService(db: AppDb) {
             "La ficha cambió. Recargá los datos.",
             409,
           );
-        if (entity === "products" && values) await writePrices(tx, id, values);
+        if (entity === "products" && values)
+          await writePrices(
+            tx,
+            id,
+            values,
+            "vatRate" in updated ? (updated.vatRate as string | null) : null,
+          );
+        if (setup) await applyProductSetup(tx, actor, id, setup);
         const [after] = await enrich(tx, entity, [updated]);
         await tx.insert(auditEvents).values({
           actorId: actor.id,

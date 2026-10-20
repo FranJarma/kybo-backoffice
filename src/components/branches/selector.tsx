@@ -1,4 +1,6 @@
 "use client";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
+import { OperationAlert } from "@/components/ui/operation-alert";
 import { useState } from "react";
 import { Store } from "lucide-react";
 export type BranchChoice = { id: string; name: string };
@@ -9,7 +11,7 @@ export function BranchSelector({
   rows?: BranchChoice[];
   selected?: string;
 }) {
-  const [error, setError] = useState("");
+  const [error, setError, errorAttempt] = useErrorFeedback();
   const [busy, setBusy] = useState(false);
   async function select(branchId: string) {
     if (!branchId || branchId === selected) return;
@@ -61,12 +63,12 @@ export function BranchSelector({
         ))}
       </select>
       {error && (
-        <p
-          role="alert"
-          className="absolute right-0 top-full z-30 mt-2 w-64 rounded-lg border border-red-200 bg-white p-3 text-xs text-red-700 shadow-sm"
-        >
-          {error}
-        </p>
+        <OperationAlert
+          eventKey={errorAttempt}
+          tone="error"
+          title="No pudimos completar la operación"
+          message={error}
+        />
       )}
     </div>
   );

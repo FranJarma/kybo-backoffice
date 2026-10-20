@@ -20,6 +20,7 @@ export type ProductCost = {
   defaultCost: string | null;
   fixed: string | null;
   referenceItems: string[];
+  pendingReasons?: string[];
   groups: CostGroup[];
 };
 export function sumCosts(costs: (string | null)[]): string | null {

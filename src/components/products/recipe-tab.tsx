@@ -5,6 +5,7 @@ import { RecipeEditor } from "@/components/recipes/recipes-manager";
 import { getJson, useOperation } from "@/components/inventory/shared";
 import { Button } from "@/components/ui/button";
 import { OperationAlert } from "@/components/ui/operation-alert";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
 import type { RecipeDetail, RecipeInput } from "@/modules/recipes/types";
 
 export function ProductRecipeTab({
@@ -23,7 +24,7 @@ export function ProductRecipeTab({
   view?: "recipe" | "cost" | "preparation";
 }) {
   const [recipe, setRecipe] = useState<RecipeDetail | null>();
-  const [loadError, setLoadError] = useState("");
+  const [loadError, setLoadError, loadErrorAttempt] = useErrorFeedback();
   const [notice, setNotice] = useState("");
   const [refresh, setRefresh] = useState(0);
   const operation = useOperation<RecipeInput>(actorId, "recipe", (result) => {
@@ -53,11 +54,16 @@ export function ProductRecipeTab({
     return () => {
       live = false;
     };
-  }, [productId, refresh]);
+  }, [productId, refresh, setLoadError]);
   if (loadError)
     return (
-      <div role="alert" className="space-y-3">
-        <p>{loadError}</p>
+      <div className="space-y-3">
+        <OperationAlert
+          message={loadError}
+          eventKey={loadErrorAttempt}
+          title="No pudimos cargar la receta"
+          tone="error"
+        />
         <Button variant="outline" onClick={() => setRefresh((n) => n + 1)}>
           Reintentar carga
         </Button>
@@ -69,6 +75,7 @@ export function ProductRecipeTab({
     initial: recipe ?? undefined,
     disabled: operation.locked,
     error: operation.error,
+    errorAttempt: operation.errorAttempt,
     onSave: (input: RecipeInput) => {
       setNotice("");
       operation.submit("/api/recipes", input);
@@ -77,15 +84,7 @@ export function ProductRecipeTab({
   };
   return (
     <div className="space-y-5">
-      <OperationAlert
-        message={operation.error || notice}
-        title={
-          operation.error
-            ? "No se pudo confirmar la publicación"
-            : "Receta publicada"
-        }
-        tone={operation.error ? "error" : "success"}
-      />
+      <OperationAlert message={notice} title="Receta publicada" />
       {!recipe && (
         <p className="text-sm text-muted">
           Sin receta. Podés crearla ahora o dejarla para después. Los productos

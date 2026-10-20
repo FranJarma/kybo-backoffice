@@ -755,7 +755,9 @@ export function createRecipeService(db: AppDb) {
               version: recipeVersions,
               productArchived: products.archivedAt,
               itemArchived: items.archivedAt,
-              priceCounter: productPrices.amount,
+              priceCounter: sql<
+                string | null
+              >`case when ${products.vatRate} is null then null else ${productPrices.amount} end`,
             })
             .from(recipes)
             .innerJoin(

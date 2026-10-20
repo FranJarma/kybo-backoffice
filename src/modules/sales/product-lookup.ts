@@ -7,6 +7,7 @@ import {
 } from "@/db/business-schema";
 import { branchProducts } from "@/db/branch-schema";
 import { productFulfillments } from "@/db/product-fulfillment-schema";
+import { comboVersions } from "@/db/combo-schema";
 import type { Tx } from "@/modules/inventory/service";
 export async function lookupProducts(
   tx: Tx,
@@ -52,12 +53,17 @@ export async function lookupProducts(
   const rows = await tx
     .select({
       kind: products.kind,
+      vatPending: sql<boolean>`${products.vatRate} is null`,
+      pricingRevision: products.revision,
+      configured: sql<boolean>`case when ${products.kind} = 'combo' then exists(select 1 from ${comboVersions} where ${comboVersions.productId} = ${products.id}) else ${productFulfillments.versionId} is not null end`,
       id: products.id,
       name: products.name,
       description: products.description,
       imageAssetId: products.imageAssetId,
       categoryId: effectiveCategory,
-      price: productPrices.amount,
+      price: sql<
+        string | null
+      >`case when ${products.vatRate} is null then null else ${productPrices.amount} end`,
       temporarilySoldOut: branchProducts.temporarilySoldOut,
       fulfillmentVersionId: productFulfillments.versionId,
     })

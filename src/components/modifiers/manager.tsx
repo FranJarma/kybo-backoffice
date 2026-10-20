@@ -1,5 +1,6 @@
 "use client";
 import { recipeSection } from "@/modules/catalog/item-classes";
+import { OptionGroupTabs } from "@/components/products/option-group-tabs";
 
 import { paths } from "@/lib/navigation";
 import { Control as Field } from "@/components/sales/shared";
@@ -8,6 +9,8 @@ import Link from "next/link";
 import { Plus, Pencil, Archive, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { OperationAlert } from "@/components/ui/operation-alert";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
 import {
   Dialog,
   DialogContent,
@@ -67,13 +70,14 @@ export function ComponentFields({
                   entity="items"
                   itemScope="recipe"
                   label={`Componente ${i + 1}`}
+                  required
                   value={c.itemId}
                   initial={
                     c.itemId && c.name
                       ? {
                           id: c.itemId,
-                        name: c.name,
-                        class: c.itemClass ?? "unclassified",
+                          name: c.name,
+                          class: c.itemClass ?? "unclassified",
                           baseUnit: c.baseUnit ?? null,
                           revision: 1,
                           archivedAt: null,
@@ -96,11 +100,15 @@ export function ComponentFields({
                     )
                   }
                 />
-                <Field label={`Cantidad (${c.baseUnit ?? "unidad base"})`}>
+                <Field
+                  label={`Cantidad (${c.baseUnit ?? "unidad base"})`}
+                  required
+                >
                   <Input
                     aria-label={`Cantidad de componente ${i + 1}`}
                     value={c.quantity}
                     inputMode="decimal"
+                    required
                     onChange={(e) =>
                       onChange(
                         value.map((x, j) =>
@@ -194,7 +202,7 @@ function GroupEditor({
           },
         ],
   );
-  const [error, setError] = useState(""),
+  const [error, setError, errorAttempt] = useErrorFeedback(),
     [busy, setBusy] = useState(false);
   const [requestId] = useState(() => crypto.randomUUID());
   return (
@@ -231,7 +239,7 @@ function GroupEditor({
       }}
     >
       <fieldset disabled={busy} className="space-y-8">
-        <Field label="Nombre del grupo">
+        <Field label="Nombre del grupo" required>
           <Input
             aria-label="Nombre del grupo"
             value={name}
@@ -251,7 +259,7 @@ function GroupEditor({
           >
             <div className="flex items-end gap-2">
               <div className="flex-1">
-                <Field label={`Opción ${i + 1}`}>
+                <Field label={`Opción ${i + 1}`} required>
                   <Input
                     aria-label={`Nombre de opción ${i + 1}`}
                     value={o.name}
@@ -276,30 +284,33 @@ function GroupEditor({
                 <Trash2 size={16} />
               </Button>
             </div>
-            <select
-              className="form-control"
-              aria-label={`Tipo de opción ${i + 1}`}
-              value={o.kind}
-              onChange={(e) =>
-                setOptions(
-                  options.map((x, j) =>
-                    j === i
-                      ? {
-                          ...x,
-                          kind: e.target.value as OptionDraft["kind"],
-                          components:
-                            e.target.value === "instruction"
-                              ? []
-                              : x.components,
-                        }
-                      : x,
-                  ),
-                )
-              }
-            >
-              <option value="composition">Ingredientes</option>
-              <option value="instruction">Instrucción de preparación</option>
-            </select>
+            <Field label={`Tipo de opción ${i + 1}`} required>
+              <select
+                className="form-control"
+                aria-label={`Tipo de opción ${i + 1}`}
+                required
+                value={o.kind}
+                onChange={(e) =>
+                  setOptions(
+                    options.map((x, j) =>
+                      j === i
+                        ? {
+                            ...x,
+                            kind: e.target.value as OptionDraft["kind"],
+                            components:
+                              e.target.value === "instruction"
+                                ? []
+                                : x.components,
+                          }
+                        : x,
+                    ),
+                  )
+                }
+              >
+                <option value="composition">Ingredientes</option>
+                <option value="instruction">Instrucción de preparación</option>
+              </select>
+            </Field>
             {o.kind === "composition" ? (
               <ComponentFields
                 value={o.components}
@@ -345,11 +356,12 @@ function GroupEditor({
           <Plus size={16} />
           Agregar opción
         </Button>
-        {error && (
-          <p role="alert" className="text-sm text-red-700">
-            {error}
-          </p>
-        )}
+        <OperationAlert
+          title="No pudimos guardar el grupo"
+          message={error}
+          eventKey={errorAttempt}
+          tone="error"
+        />
         <div className="flex justify-end border-t border-line pt-4">
           <Button disabled={busy || !options.length} type="submit">
             {busy ? "Guardando…" : "Publicar grupo"}
@@ -369,7 +381,7 @@ export function ModifiersManager() {
       }[]
     >([]),
     [editor, setEditor] = useState<{ initial?: GroupDetail } | null>(null),
-    [error, setError] = useState(""),
+    [error, setError, errorAttempt] = useErrorFeedback(),
     [refresh, setRefresh] = useState(0);
   useEffect(() => {
     let live = true;
@@ -383,12 +395,12 @@ export function ModifiersManager() {
     return () => {
       live = false;
     };
-  }, [refresh]);
+  }, [refresh, setError]);
   return (
     <div>
       <div className="page-heading">
         <div>
-          <h1 className="page-title">Modificadores</h1>
+          <h1 className="page-title">Grupos de opciones</h1>
           <p className="page-description">
             Opciones reutilizables para tus productos.
           </p>
@@ -403,11 +415,13 @@ export function ModifiersManager() {
           </Button>
         </div>
       </div>
-      {error && (
-        <p role="alert" className="mb-4 text-red-700">
-          {error}
-        </p>
-      )}
+      <OptionGroupTabs active="modifiers" />
+      <OperationAlert
+        title="No pudimos completar la operación"
+        message={error}
+        eventKey={errorAttempt}
+        tone="error"
+      />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {groups.map((g) => (
           <section className="surface-panel p-5" key={g.id}>

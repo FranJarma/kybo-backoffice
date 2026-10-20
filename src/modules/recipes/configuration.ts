@@ -3,7 +3,7 @@ import { branchProducts } from "@/db/branch-schema";
 import { canSellProduct } from "@/modules/products/availability";
 import { randomUUID } from "node:crypto";
 import { publishGroup } from "@/modules/modifiers/service";
-import { eq, asc, and, inArray } from "drizzle-orm";
+import { eq, asc, and, inArray, sql } from "drizzle-orm";
 import type { AppDb } from "@/db/client";
 import { items, products, productPrices } from "@/db/business-schema";
 import { recipeVersions, recipes } from "@/db/recipe-schema";
@@ -33,6 +33,7 @@ import type { SaleChannel } from "@/modules/sales/types";
 import type { Actor } from "@/lib/access";
 import { salesAccess } from "@/modules/sales/validation";
 import { defaultSelections, resolveComposition } from "./composition";
+import { catalogFinalPrice } from "@/modules/pricing/amounts";
 export async function loadConfiguration(
   db: AppDb | Tx,
   recipeVersionId: string,
@@ -343,85 +344,198 @@ export async function getProductConfiguration(
   actor: Actor,
   productId: string,
   channel: SaleChannel,
-) {
+): Promise<PublicConfiguration> {
   salesAccess(actor);
   return db.transaction(
     async (tx) => {
-      const [p] = await tx
-        .select()
+      // Sale options need neither the fixed composition nor recipe history/costs.
+      // Read the current commercial/recipe versions together in the same snapshot.
+      const [row] = await tx
+        .select({
+          product: products,
+          local: branchProducts,
+          fulfillmentVersionId: productFulfillments.versionId,
+          basePrice: productPrices.amount,
+          recipeVersionId: recipeVersions.id,
+          model: recipeVersions.compositionModel,
+        })
         .from(products)
-        .where(eq(products.id, productId));
-      if (!p || p.archivedAt) notFound();
-      const [physical] = await tx
-        .select({ id: productFulfillments.versionId })
-        .from(productFulfillments)
-        .where(eq(productFulfillments.productId, productId));
-      const [local] = await tx
-        .select()
-        .from(branchProducts)
-        .where(
+        .leftJoin(
+          productFulfillments,
+          eq(productFulfillments.productId, products.id),
+        )
+        .leftJoin(
+          branchProducts,
           and(
-            eq(branchProducts.productId, productId),
+            eq(branchProducts.productId, products.id),
             eq(branchProducts.branchId, actor.branchId!),
           ),
-        );
-      if (!canSellProduct(p, local, channel))
-        invalid("El producto no está disponible en esta sucursal y canal.");
-      const [price] = await tx
-        .select()
-        .from(productPrices)
-        .where(
+        )
+        .leftJoin(
+          productPrices,
           and(
-            eq(productPrices.productId, productId),
+            eq(productPrices.productId, products.id),
             eq(productPrices.channel, channel),
           ),
-        );
-      const [r] = await tx
-        .select({ v: recipeVersions })
-        .from(recipes)
-        .innerJoin(
+        )
+        .leftJoin(recipes, eq(recipes.productId, products.id))
+        .leftJoin(
           recipeVersions,
           and(
             eq(recipeVersions.recipeId, recipes.id),
             eq(recipeVersions.version, recipes.revision),
           ),
         )
-        .where(eq(recipes.productId, productId));
-      if (!r)
+        .where(eq(products.id, productId));
+      if (!row || row.product.archivedAt) notFound();
+      if (!canSellProduct(row.product, row.local ?? undefined, channel))
+        invalid("El producto no está disponible en esta sucursal y canal.");
+      if (!row.recipeVersionId)
         return {
-          fulfillmentVersionId: physical?.id ?? null,
+          fulfillmentVersionId: row.fulfillmentVersionId,
           recipeVersionId: null,
           model: "unavailable",
           groups: [],
-          basePrice: price?.amount ?? null,
+          basePrice:
+            row.basePrice === null
+              ? null
+              : catalogFinalPrice(row.basePrice, row.product.vatRate),
+          catalogBasePrice: row.basePrice,
+          vatRate: row.product.vatRate,
+          pricingRevision: row.product.revision,
         };
-      const c = await loadConfiguration(tx, r.v.id);
+      // Check only the effective components (override replaces inheritance).
+      // NOT EXISTS also leaves instruction-only options available with zero inputs.
+      const available = sql<boolean>`case when ${recipeModifierOptions.mode} = 'override' then
+        not exists (
+          select 1 from ${recipeModifierOptionComponents}
+          left join ${items} on ${items.id} = ${recipeModifierOptionComponents.itemId}
+          where ${recipeModifierOptionComponents.recipeModifierOptionId} = ${recipeModifierOptions.id}
+          and (${items.id} is null or ${items.archivedAt} is not null or ${items.baseUnit} <> ${recipeModifierOptionComponents.baseUnit})
+        ) else not exists (
+          select 1 from ${modifierOptionComponents}
+          left join ${items} on ${items.id} = ${modifierOptionComponents.itemId}
+          where ${modifierOptionComponents.optionId} = ${modifierOptions.id}
+          and (${items.id} is null or ${items.archivedAt} is not null or ${items.baseUnit} <> ${modifierOptionComponents.baseUnit})
+        ) end`;
+      const choices = await tx
+        .select({
+          group: {
+            id: recipeModifierGroups.id,
+            name: recipeModifierGroups.name,
+            min: recipeModifierGroups.min,
+            max: recipeModifierGroups.max,
+          },
+          option: {
+            id: recipeModifierOptions.id,
+            name: modifierOptions.name,
+            defaultCount: recipeModifierOptions.defaultCount,
+            maxCount: recipeModifierOptions.maxCount,
+            price: recipeModifierOptionPrices.surcharge,
+          },
+          available,
+        })
+        .from(recipeModifierGroups)
+        .leftJoin(
+          recipeModifierOptions,
+          and(
+            eq(
+              recipeModifierOptions.recipeModifierGroupId,
+              recipeModifierGroups.id,
+            ),
+            eq(recipeModifierOptions.enabled, true),
+          ),
+        )
+        .leftJoin(
+          modifierOptions,
+          eq(modifierOptions.id, recipeModifierOptions.optionId),
+        )
+        .leftJoin(
+          recipeModifierOptionPrices,
+          and(
+            eq(
+              recipeModifierOptionPrices.recipeModifierOptionId,
+              recipeModifierOptions.id,
+            ),
+            eq(recipeModifierOptionPrices.channel, channel),
+          ),
+        )
+        .where(eq(recipeModifierGroups.recipeVersionId, row.recipeVersionId))
+        .orderBy(
+          asc(recipeModifierGroups.position),
+          asc(modifierOptions.position),
+        );
+      const groups = new Map<
+        string,
+        {
+          id: string;
+          name: string;
+          min: number;
+          max: number;
+          options: {
+            id: string;
+            name: string;
+            defaultCount: number;
+            maxCount: number;
+            price: string | null;
+            available: boolean;
+          }[];
+        }
+      >();
+      for (const choice of choices) {
+        let group = groups.get(choice.group.id);
+        if (!group) {
+          group = { ...choice.group, options: [] };
+          groups.set(group.id, group);
+        }
+        if (choice.option?.id && choice.option.name !== null)
+          group.options.push({
+            id: choice.option.id,
+            name: choice.option.name,
+            defaultCount: choice.option.defaultCount!,
+            maxCount: choice.option.maxCount!,
+            price: choice.option.price,
+            available: choice.available,
+          });
+      }
       return {
-        fulfillmentVersionId: physical?.id ?? null,
-        recipeVersionId: c.recipeVersionId,
-        model: c.model,
-        basePrice: price?.amount ?? null,
-        groups: c.groups.map((g) => ({
-          id: g.id,
-          name: g.name,
-          min: g.min,
-          max: g.max,
-          options: g.options
-            .filter((o) => o.enabled)
-            .map((o) => ({
-              id: o.id,
-              name: o.name,
-              defaultCount: o.defaultCount,
-              maxCount: o.maxCount,
-              price: o.prices[channel] ?? null,
-              available: !o.components.some((c) => c.archived),
-            })),
-        })),
+        fulfillmentVersionId: row.fulfillmentVersionId,
+        recipeVersionId: row.recipeVersionId,
+        model: row.model!,
+        basePrice:
+          row.basePrice === null
+            ? null
+            : catalogFinalPrice(row.basePrice, row.product.vatRate),
+        catalogBasePrice: row.basePrice,
+        vatRate: row.product.vatRate,
+        pricingRevision: row.product.revision,
+        groups: [...groups.values()],
       };
     },
     { isolationLevel: "repeatable read", accessMode: "read only" },
   );
 }
-export type PublicConfiguration = Awaited<
-  ReturnType<typeof getProductConfiguration>
->;
+export type PublicConfiguration = {
+  fulfillmentVersionId: string | null;
+  recipeVersionId: string | null;
+  model: string;
+  basePrice: string | null;
+  /** Option prices and catalogBasePrice are final amounts including VAT. */
+  catalogBasePrice?: string | null;
+  vatRate?: string | null;
+  pricingRevision?: number;
+  groups: {
+    id: string;
+    name: string;
+    min: number;
+    max: number;
+    options: {
+      id: string;
+      name: string;
+      defaultCount: number;
+      maxCount: number;
+      price: string | null;
+      available: boolean;
+    }[];
+  }[];
+};

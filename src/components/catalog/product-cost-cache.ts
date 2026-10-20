@@ -5,6 +5,7 @@ type Result = { branchName: string; products: ProductCost[] };
 // One instance per mounted catalog and data generation, never a global cache.
 export function createProductCostLoader(
   fetcher: (ids: string[]) => Promise<Result>,
+  onBatch?: (result: Result) => void,
 ) {
   const entries = new Map<
     string,
@@ -13,9 +14,12 @@ export function createProductCostLoader(
   return async (ids: string[]): Promise<Result> => {
     const unique = [...new Set(ids)];
     const missing = unique.filter((id) => !entries.has(id));
-    for (let i = 0; i < missing.length; i += 10) {
-      const batch = missing.slice(i, i + 10);
-      const request = fetcher(batch);
+    for (let i = 0; i < missing.length; i += 50) {
+      const batch = missing.slice(i, i + 50);
+      const request = fetcher(batch).then((result) => {
+        onBatch?.(result);
+        return result;
+      });
       for (const id of batch) {
         const entry = request
           .then((result) => {

@@ -7,6 +7,8 @@ import { RecipeEditorTabs, type RecipeEditorView } from "./editor-tabs";
 import { useEffect, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { OperationAlert } from "@/components/ui/operation-alert";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
 import { SearchSelect, getJson } from "@/components/inventory/shared";
 import { quantity } from "@/lib/number-format";
 import { inputDecimal } from "./shared";
@@ -57,6 +59,7 @@ export function ModifierRecipeEditor({
   onCancel,
   disabled,
   error,
+  errorAttempt,
   productId,
   view,
 }: {
@@ -65,6 +68,7 @@ export function ModifierRecipeEditor({
   onCancel: () => void;
   disabled: boolean;
   error: string;
+  errorAttempt?: number;
   productId?: string;
   view?: RecipeEditorView;
 }) {
@@ -138,7 +142,7 @@ export function ModifierRecipeEditor({
       { id: string; name: string; archivedAt: string | null }[]
     >([]),
     [chosen, setChosen] = useState(""),
-    [localError, setLocalError] = useState(""),
+    [localError, setLocalError, localErrorAttempt] = useErrorFeedback(),
     [busy, setBusy] = useState(false);
   const [legacyReviewed, setLegacyReviewed] = useState(
     initial?.compositionModel !== "legacy",
@@ -155,7 +159,7 @@ export function ModifierRecipeEditor({
     return () => {
       live = false;
     };
-  }, []);
+  }, [setLocalError]);
   function draft(g: GroupDetail): GroupDraft {
     return {
       groupId: g.id,
@@ -329,6 +333,12 @@ export function ModifierRecipeEditor({
         } as RecipeInput);
       }}
     >
+      <OperationAlert
+        title="No pudimos completar la operación"
+        message={error || localError}
+        eventKey={error ? errorAttempt : localErrorAttempt}
+        tone="error"
+      />
       {!view && (
         <RecipeEditorTabs
           id={tabsId}
@@ -345,11 +355,6 @@ export function ModifierRecipeEditor({
         className="min-w-0 space-y-6"
       >
         <PreparationFields value={preparation} onChange={setPreparation} />
-        {(error || localError) && (
-          <p role="alert" className="text-sm text-red-700">
-            {error || localError}
-          </p>
-        )}
         <div className="flex justify-end border-t border-line pt-4">
           <Button
             type="submit"
@@ -557,32 +562,36 @@ export function ModifierRecipeEditor({
                   </p>
                 </div>
               )}
-              <Field label="Nombre visible del grupo">
+              <Field label="Nombre visible del grupo" required>
                 <Input
                   value={g.name}
+                  required
                   onChange={(e) => update(i, { name: e.target.value })}
                 />
               </Field>
               <div className="grid gap-5 sm:grid-cols-3">
-                <Field label="Mínimo">
+                <Field label="Mínimo" required>
                   <Input
                     type="number"
+                    required
                     min={0}
                     value={g.min}
                     onChange={(e) => update(i, { min: Number(e.target.value) })}
                   />
                 </Field>
-                <Field label="Máximo">
+                <Field label="Máximo" required>
                   <Input
                     type="number"
+                    required
                     min={0}
                     value={g.max}
                     onChange={(e) => update(i, { max: Number(e.target.value) })}
                   />
                 </Field>
-                <Field label="Factor de porción">
+                <Field label="Factor de porción" required>
                   <Input
                     inputMode="decimal"
+                    required
                     value={g.factor}
                     onChange={(e) => update(i, { factor: e.target.value })}
                   />
@@ -607,9 +616,10 @@ export function ModifierRecipeEditor({
                     {o.name}
                   </label>
                   <div className="grid gap-5 sm:grid-cols-2">
-                    <Field label="Selecciones por defecto">
+                    <Field label="Selecciones por defecto" required>
                       <Input
                         type="number"
+                        required
                         min={0}
                         aria-describedby={`default-count-${i}-${j}`}
                         value={o.defaultCount}
@@ -625,9 +635,10 @@ export function ModifierRecipeEditor({
                         1 = una elección. No indica gramos ni stock.
                       </span>
                     </Field>
-                    <Field label="Máximo por opción">
+                    <Field label="Máximo por opción" required>
                       <Input
                         type="number"
+                        required
                         min={0}
                         value={o.maxCount}
                         onChange={(e) =>
@@ -641,7 +652,7 @@ export function ModifierRecipeEditor({
                       (c) => (
                         <Field
                           key={c}
-                          label={`Recargo ${c === "counter" ? "local" : c === "pedidosya" ? "PedidosYa" : "Uber Eats"}`}
+                          label={`Recargo final ${c === "counter" ? "local" : c === "pedidosya" ? "PedidosYa" : "Uber Eats"}`}
                         >
                           <Input
                             value={o.prices[c]}
@@ -679,22 +690,25 @@ export function ModifierRecipeEditor({
                   )}
                   {o.kind === "composition" && (
                     <>
-                      <select
-                        className="form-control"
-                        aria-label={`Composición ${o.name}`}
-                        value={o.mode}
-                        onChange={(e) =>
-                          option(i, j, {
-                            mode: e.target.value as OptionDraft["mode"],
-                            components: [],
-                          })
-                        }
-                      >
-                        <option value="inherit">Heredado del grupo</option>
-                        <option value="override">
-                          Composición propia para este producto
-                        </option>
-                      </select>
+                      <Field label={`Composición ${o.name}`} required>
+                        <select
+                          className="form-control"
+                          aria-label={`Composición ${o.name}`}
+                          required
+                          value={o.mode}
+                          onChange={(e) =>
+                            option(i, j, {
+                              mode: e.target.value as OptionDraft["mode"],
+                              components: [],
+                            })
+                          }
+                        >
+                          <option value="inherit">Heredado del grupo</option>
+                          <option value="override">
+                            Composición propia para este producto
+                          </option>
+                        </select>
+                      </Field>
                       {o.mode === "override" && (
                         <ComponentFields
                           value={o.components}
@@ -753,14 +767,10 @@ export function ModifierRecipeEditor({
             </Button>
           </div>
           <p className="text-xs text-muted">
-            Los recargos vacíos se toman como cero. Un recargo no es el costo
-            del ingrediente.
+            Los recargos son importes finales; el IVA se desglosa en Costeo
+            según el producto al total. Los recargos vacíos se toman como cero.
+            Un recargo no es el costo del ingrediente.
           </p>
-          {(error || localError) && (
-            <p role="alert" className="text-sm text-red-700">
-              {error || localError}
-            </p>
-          )}
           <div className="flex justify-end gap-2 border-t border-line pt-4">
             <Button type="button" variant="outline" onClick={onCancel}>
               Cancelar

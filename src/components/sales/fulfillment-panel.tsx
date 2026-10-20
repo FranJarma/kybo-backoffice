@@ -1,4 +1,7 @@
 "use client";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
+import { FieldCaption } from "@/components/ui/field-caption";
+import { OperationAlert } from "@/components/ui/operation-alert";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { getJson, useOperation, quantity } from "@/components/inventory/shared";
 import { LocationSelect } from "@/components/branches/location-select";
@@ -46,7 +49,7 @@ export function SaleFulfillmentPanel({
 }) {
   const [data, setData] = useState<State>(),
     [version, setVersion] = useState(0),
-    [error, setError] = useState("");
+    [error, setError, errorAttempt] = useErrorFeedback();
   const refresh = useCallback(() => setVersion((v) => v + 1), []);
   const operation = useOperation<Record<string, unknown>>(
     actorId,
@@ -65,14 +68,17 @@ export function SaleFulfillmentPanel({
     return () => {
       live = false;
     };
-  }, [saleId, version]);
+  }, [saleId, version, setError]);
   return (
     <div className="surface-panel space-y-4 p-5">
       <h3 className="font-bold">Preparación y entrega</h3>
       {(error || operation.error) && (
-        <p role="alert" className="text-red-700">
-          {error || operation.error}
-        </p>
+        <OperationAlert
+          eventKey={error ? errorAttempt : operation.errorAttempt}
+          tone="error"
+          title="No pudimos completar la operación"
+          message={error || operation.error}
+        />
       )}
       {operation.uncertain && (
         <Button onClick={operation.retry}>Reintentar el mismo envío</Button>
@@ -175,7 +181,7 @@ function ProgressRow({
       {remaining > 0 && !disabled && (
         <form onSubmit={save} className="flex items-end gap-3">
           <label className="text-sm">
-            Cantidad
+            <FieldCaption required>Cantidad</FieldCaption>
             <Input
               type="number"
               min={1}
@@ -214,7 +220,7 @@ function ResolutionPanel({
   onSaved: () => void;
 }) {
   const [data, setData] = useState<Resolution>(),
-    [error, setError] = useState("");
+    [error, setError, errorAttempt] = useErrorFeedback();
   const operation = useOperation<Record<string, unknown>>(
     actorId,
     "stock-resolution",
@@ -232,7 +238,7 @@ function ResolutionPanel({
     return () => {
       live = false;
     };
-  }, [id]);
+  }, [id, setError]);
   return (
     <div className="space-y-3 rounded-lg border border-amber-300 p-4">
       <h4 className="font-semibold">Materiales de la preparación cancelada</h4>
@@ -240,7 +246,12 @@ function ResolutionPanel({
         Indicá lo realmente consumido y lo que quedó sin usar.
       </p>
       {(error || operation.error) && (
-        <p role="alert">{error || operation.error}</p>
+        <OperationAlert
+          eventKey={error ? errorAttempt : operation.errorAttempt}
+          tone="error"
+          title="No pudimos completar la operación"
+          message={error || operation.error}
+        />
       )}
       {operation.uncertain && (
         <Button onClick={operation.retry}>Reintentar el mismo envío</Button>
@@ -274,7 +285,7 @@ function ResolutionRow({
   const [used, setUsed] = useState("0"),
     [unused, setUnused] = useState("0"),
     [reason, setReason] = useState(""),
-    [error, setError] = useState("");
+    [error, setError, errorAttempt] = useErrorFeedback();
   const remaining = six(
     integer(line.pending) - integer(line.consumed) - integer(line.unused),
   );
@@ -306,7 +317,7 @@ function ResolutionRow({
       </p>
       <fieldset disabled={locked} className="grid gap-3 sm:grid-cols-2">
         <label className="text-sm">
-          Consumido
+          <FieldCaption required>Consumido</FieldCaption>
           <Input
             required
             value={used}
@@ -315,7 +326,7 @@ function ResolutionRow({
           />
         </label>
         <label className="text-sm">
-          Sin usar
+          <FieldCaption required>Sin usar</FieldCaption>
           <Input
             required
             value={unused}
@@ -324,7 +335,7 @@ function ResolutionRow({
           />
         </label>
         <label className="text-sm">
-          Motivo
+          <FieldCaption required>Motivo</FieldCaption>
           <Input
             required
             maxLength={2000}
@@ -334,7 +345,14 @@ function ResolutionRow({
         </label>
         <Button type="submit">Guardar resolución</Button>
       </fieldset>
-      {error && <p role="alert">{error}</p>}
+      {error && (
+        <OperationAlert
+          eventKey={errorAttempt}
+          tone="error"
+          title="No pudimos completar la operación"
+          message={error}
+        />
+      )}
     </form>
   );
 }
@@ -352,7 +370,7 @@ function ReturnRow({
     [location, setLocation] = useState(""),
     [amount, setAmount] = useState(""),
     [reason, setReason] = useState(""),
-    [error, setError] = useState("");
+    [error, setError, errorAttempt] = useErrorFeedback();
   function save(e: FormEvent) {
     e.preventDefault();
     try {
@@ -385,7 +403,7 @@ function ReturnRow({
       <form onSubmit={save}>
         <fieldset disabled={disabled} className="grid gap-3 sm:grid-cols-2">
           <label className="text-sm">
-            Lote entregado
+            <FieldCaption required>Lote entregado</FieldCaption>
             <select
               required
               value={lot}
@@ -403,7 +421,7 @@ function ReturnRow({
           </label>
           <LocationSelect value={location} onChange={setLocation} />
           <label className="text-sm">
-            Cantidad en unidad base
+            <FieldCaption required>Cantidad en unidad base</FieldCaption>
             <Input
               required
               value={amount}
@@ -412,7 +430,7 @@ function ReturnRow({
             />
           </label>
           <label className="text-sm">
-            Motivo
+            <FieldCaption required>Motivo</FieldCaption>
             <Input
               required
               value={reason}
@@ -422,7 +440,14 @@ function ReturnRow({
           </label>
           <Button type="submit">Registrar devolución física</Button>
         </fieldset>
-        {error && <p role="alert">{error}</p>}
+        {error && (
+          <OperationAlert
+            eventKey={errorAttempt}
+            tone="error"
+            title="No pudimos completar la operación"
+            message={error}
+          />
+        )}
       </form>
     </details>
   );

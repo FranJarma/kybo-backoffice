@@ -2,6 +2,9 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FieldCaption } from "@/components/ui/field-caption";
+import { OperationAlert } from "@/components/ui/operation-alert";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
 import { getJson, SearchSelect, useOperation, quantity } from "./shared";
 import { decimal, integer, six } from "@/modules/inventory/decimal";
 import type { LotRow } from "@/modules/inventory/types";
@@ -30,7 +33,7 @@ export function InventoryExceptions({
     [offset, setOffset] = useState(0),
     [more, setMore] = useState(false),
     [version, setVersion] = useState(0),
-    [error, setError] = useState("");
+    [error, setError, errorAttempt] = useErrorFeedback();
   const saved = useCallback(() => setVersion((v) => v + 1), []),
     operation = useOperation<Record<string, unknown>>(
       actorId,
@@ -46,6 +49,7 @@ export function InventoryExceptions({
         if (live) {
           setRows(r.rows);
           setMore(r.hasMore);
+          setError("");
         }
       })
       .catch((e) => {
@@ -54,7 +58,7 @@ export function InventoryExceptions({
     return () => {
       live = false;
     };
-  }, [version, offset]);
+  }, [version, offset, setError]);
   return (
     <section className="mt-8 space-y-5">
       <details className="surface-panel p-5">
@@ -66,9 +70,12 @@ export function InventoryExceptions({
           lote de la misma ubicación. Los traslados se anulan y se vuelven a
           confirmar.
         </p>
-        {(error || operation.error) && (
-          <p role="alert">{error || operation.error}</p>
-        )}
+        <OperationAlert
+          title="No pudimos completar la operación de reservas"
+          message={error || operation.error}
+          eventKey={error ? errorAttempt : operation.errorAttempt}
+          tone="error"
+        />
         {operation.uncertain && (
           <Button onClick={operation.retry}>Reintentar el mismo envío</Button>
         )}
@@ -136,7 +143,7 @@ function ReservationRow({
     [selected, setSelected] = useState(""),
     [amount, setAmount] = useState(remaining.replace(".", ",")),
     [reason, setReason] = useState(""),
-    [error, setError] = useState("");
+    [error, setError, errorAttempt] = useErrorFeedback();
   useEffect(() => {
     if (!open) return;
     let live = true;
@@ -147,6 +154,7 @@ function ReservationRow({
         if (live) {
           setLots(r.lots.rows);
           setMore(r.lots.total > offset + 100);
+          setError("");
         }
       })
       .catch((e) => {
@@ -155,9 +163,10 @@ function ReservationRow({
     return () => {
       live = false;
     };
-  }, [a.itemId, offset, open]);
+  }, [a.itemId, offset, open, setError]);
   function save(e: FormEvent) {
     e.preventDefault();
+    setError("");
     try {
       submit("/api/inventory/reservations", {
         requestId: crypto.randomUUID(),
@@ -183,7 +192,7 @@ function ReservationRow({
       <form onSubmit={save}>
         <fieldset disabled={locked} className="mt-3 grid gap-3 sm:grid-cols-2">
           <label className="text-sm">
-            Lote de reemplazo
+            <FieldCaption required>Lote de reemplazo</FieldCaption>
             <select
               required
               className="block rounded border p-2"
@@ -222,7 +231,7 @@ function ReservationRow({
             />
           </label>
           <label className="text-sm">
-            Cantidad
+            <FieldCaption required>Cantidad</FieldCaption>
             <Input
               required
               value={amount}
@@ -230,7 +239,7 @@ function ReservationRow({
             />
           </label>
           <label className="text-sm">
-            Motivo
+            <FieldCaption required>Motivo</FieldCaption>
             <Input
               required
               maxLength={2000}
@@ -240,7 +249,12 @@ function ReservationRow({
           </label>
           <Button type="submit">Reasignar reserva</Button>
         </fieldset>
-        {error && <p role="alert">{error}</p>}
+        <OperationAlert
+          title="No pudimos reasignar la reserva"
+          message={error}
+          eventKey={errorAttempt}
+          tone="error"
+        />
       </form>
     </details>
   );
@@ -260,11 +274,12 @@ function RecallPanel({ actorId }: { actorId: string }) {
     [selected, setSelected] = useState(""),
     [reason, setReason] = useState(""),
     [version, setVersion] = useState(0),
-    [error, setError] = useState("");
+    [error, setError, errorAttempt] = useErrorFeedback();
   const saved = useCallback(() => {
       setVersion((v) => v + 1);
       setSelected("");
-    }, []),
+      setError("");
+    }, [setError]),
     operation = useOperation<Record<string, unknown>>(actorId, "recall", saved);
   useEffect(() => {
     if (!item) return;
@@ -276,6 +291,7 @@ function RecallPanel({ actorId }: { actorId: string }) {
         if (live) {
           setLots(r.rows);
           setMore(r.hasMore);
+          setError("");
         }
       })
       .catch((e) => {
@@ -284,9 +300,10 @@ function RecallPanel({ actorId }: { actorId: string }) {
     return () => {
       live = false;
     };
-  }, [item, offset, version]);
+  }, [item, offset, version, setError]);
   function save(e: FormEvent) {
     e.preventDefault();
+    setError("");
     const lot = lots.find((l) => l.id === selected);
     if (lot)
       operation.submit("/api/inventory/recalls", {
@@ -306,9 +323,12 @@ function RecallPanel({ actorId }: { actorId: string }) {
         Bloquea el lote en todo el negocio. Levantar un retiro global conserva
         los bloqueos locales existentes.
       </p>
-      {(error || operation.error) && (
-        <p role="alert">{error || operation.error}</p>
-      )}
+      <OperationAlert
+        title="No pudimos actualizar el retiro del lote"
+        message={error || operation.error}
+        eventKey={error ? errorAttempt : operation.errorAttempt}
+        tone="error"
+      />
       {operation.uncertain && (
         <Button onClick={operation.retry}>Reintentar el mismo envío</Button>
       )}
@@ -327,9 +347,10 @@ function RecallPanel({ actorId }: { actorId: string }) {
               setSelected("");
               setLots([]);
             }}
+            required
           />
           <label className="text-sm">
-            Lote
+            <FieldCaption required>Lote</FieldCaption>
             <select
               required
               value={selected}
@@ -354,7 +375,7 @@ function RecallPanel({ actorId }: { actorId: string }) {
             />
           </label>
           <label className="text-sm">
-            Motivo
+            <FieldCaption required>Motivo</FieldCaption>
             <Input
               required
               maxLength={2000}

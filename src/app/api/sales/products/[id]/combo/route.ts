@@ -7,6 +7,7 @@ import { salesResponse } from "@/modules/sales/http";
 import { canSellProduct } from "@/modules/products/availability";
 import { channelSchema } from "@/modules/sales/validation";
 import { invalid } from "@/modules/inventory/service";
+import { catalogFinalPrice } from "@/modules/pricing/amounts";
 export async function GET(
   request: Request,
   context: { params: Promise<{ id: string }> },
@@ -29,6 +30,8 @@ export async function GET(
       );
     if (!p || p.kind !== "combo" || !canSellProduct(p, local, channel))
       invalid("Combo no disponible.");
+    if (p.vatRate === null)
+      invalid("Configurá el IVA del combo antes de venderlo.");
     const definition = await loadCombo(db, id);
     if (!definition)
       return invalid("Publicá los componentes del combo antes de venderlo.");
@@ -61,6 +64,13 @@ export async function GET(
     const unavailableProductIds = children
       .filter((c) => !canSellProduct(c.product, c.local ?? undefined, channel))
       .map((c) => c.product.id);
-    return { definition, basePrice: price.amount, unavailableProductIds };
+    return {
+      definition,
+      basePrice: catalogFinalPrice(price.amount, p.vatRate),
+      catalogBasePrice: price.amount,
+      vatRate: p.vatRate,
+      pricingRevision: p.revision,
+      unavailableProductIds,
+    };
   });
 }

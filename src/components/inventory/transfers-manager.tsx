@@ -3,6 +3,9 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { FieldCaption } from "@/components/ui/field-caption";
+import { OperationAlert } from "@/components/ui/operation-alert";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
 import { LocationSelect } from "@/components/branches/location-select";
 import { getJson, SearchSelect, useOperation, quantity } from "./shared";
 import { decimal, integer, six } from "@/modules/inventory/decimal";
@@ -42,7 +45,7 @@ export function TransfersManager({ actorId }: { actorId: string }) {
     [scope, setScope] = useState("active");
   const [data, setData] = useState<Directory>(),
     [version, setVersion] = useState(0),
-    [error, setError] = useState("");
+    [error, setError, errorAttempt] = useErrorFeedback();
   const [origin, setOrigin] = useState(""),
     [destination, setDestination] = useState(""),
     [itemId, setItemId] = useState(""),
@@ -51,7 +54,7 @@ export function TransfersManager({ actorId }: { actorId: string }) {
   const onSuccess = useCallback(() => {
     setVersion((v) => v + 1);
     setError("");
-  }, []);
+  }, [setError]);
   const operation = useOperation<Record<string, unknown>>(
     actorId,
     "transfer",
@@ -61,7 +64,10 @@ export function TransfersManager({ actorId }: { actorId: string }) {
     let live = true;
     getJson<Directory>(`/api/transfers?scope=${scope}&offset=${offset}`)
       .then((result) => {
-        if (live) setData(result);
+        if (live) {
+          setData(result);
+          setError("");
+        }
       })
       .catch((e) => {
         if (live) setError(e.message);
@@ -69,9 +75,10 @@ export function TransfersManager({ actorId }: { actorId: string }) {
     return () => {
       live = false;
     };
-  }, [version, scope, offset]);
+  }, [version, scope, offset, setError]);
   function submit(event: FormEvent) {
     event.preventDefault();
+    setError("");
     try {
       operation.submit("/api/transfers", {
         requestId: crypto.randomUUID(),
@@ -94,11 +101,12 @@ export function TransfersManager({ actorId }: { actorId: string }) {
           destino.
         </p>
       </header>
-      {(error || operation.error) && (
-        <p role="alert" className="text-red-700">
-          {error || operation.error}
-        </p>
-      )}
+      <OperationAlert
+        title="No pudimos completar el traslado"
+        message={error || operation.error}
+        eventKey={error ? errorAttempt : operation.errorAttempt}
+        tone="error"
+      />
       {operation.uncertain && (
         <Button onClick={operation.retry} disabled={operation.busy}>
           Reintentar el mismo envío
@@ -112,7 +120,7 @@ export function TransfersManager({ actorId }: { actorId: string }) {
           >
             <LocationSelect value={origin} onChange={setOrigin} />
             <label className="space-y-2 text-sm font-semibold">
-              Destino
+              <FieldCaption required>Destino</FieldCaption>
               <select
                 required
                 value={destination}
@@ -137,7 +145,7 @@ export function TransfersManager({ actorId }: { actorId: string }) {
               required
             />
             <label className="text-sm font-semibold">
-              Cantidad en unidad base
+              <FieldCaption required>Cantidad en unidad base</FieldCaption>
               <Input
                 required
                 inputMode="decimal"
@@ -146,7 +154,7 @@ export function TransfersManager({ actorId }: { actorId: string }) {
               />
             </label>
             <label className="text-sm font-semibold">
-              Motivo
+              <FieldCaption required>Motivo</FieldCaption>
               <Input
                 required
                 maxLength={2000}
@@ -267,10 +275,11 @@ function AllocationForm({
   const [amount, setAmount] = useState(""),
     [reason, setReason] = useState(""),
     [kind, setKind] = useState("loss"),
-    [error, setError] = useState("");
+    [error, setError, errorAttempt] = useErrorFeedback();
   const receiving = t.destinationBranchId === branchId;
   function save(event: FormEvent) {
     event.preventDefault();
+    setError("");
     try {
       const q = decimal(amount, 6, true, true)!;
       if (integer(q) > integer(remaining))
@@ -299,7 +308,7 @@ function AllocationForm({
             className="mt-3 flex flex-wrap items-end gap-3"
           >
             <label className="text-sm">
-              Cantidad
+              <FieldCaption required>Cantidad</FieldCaption>
               <Input
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
@@ -310,8 +319,9 @@ function AllocationForm({
             {!receiving && (
               <>
                 <label className="text-sm">
-                  Resolución
+                  <FieldCaption required>Resolución</FieldCaption>
                   <select
+                    required
                     className="block rounded border p-2"
                     value={kind}
                     onChange={(e) => setKind(e.target.value)}
@@ -321,7 +331,7 @@ function AllocationForm({
                   </select>
                 </label>
                 <label className="text-sm">
-                  Motivo
+                  <FieldCaption required>Motivo</FieldCaption>
                   <Input
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
@@ -335,11 +345,16 @@ function AllocationForm({
               {receiving ? "Registrar recepción" : "Resolver diferencia"}
             </Button>
           </fieldset>
-          {error && (
-            <p role="alert" className="text-red-700">
-              {error}
-            </p>
-          )}
+          <OperationAlert
+            title={
+              receiving
+                ? "No pudimos registrar la recepción"
+                : "No pudimos resolver la diferencia"
+            }
+            message={error}
+            eventKey={errorAttempt}
+            tone="error"
+          />
         </form>
       )}
     </div>

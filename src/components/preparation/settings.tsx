@@ -1,4 +1,6 @@
 "use client";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
+import { OperationAlert } from "@/components/ui/operation-alert";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Plus, Save, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -23,7 +25,7 @@ export function PreparationSettings({
     [offset, setOffset] = useState(0),
     [version, setVersion] = useState(0),
     [loading, setLoading] = useState(true),
-    [error, setError] = useState(""),
+    [error, setError, errorAttempt] = useErrorFeedback(),
     [name, setName] = useState(""),
     [locationId, setLocationId] = useState(""),
     [notice, setNotice] = useState("");
@@ -66,7 +68,7 @@ export function PreparationSettings({
       live = false;
       clearTimeout(timer);
     };
-  }, [q, offset, version, includeArchived]);
+  }, [q, offset, version, includeArchived, setError]);
   const locked = operation.locked || loading;
   function saveStation(archived = false) {
     if (locked) return;
@@ -100,6 +102,7 @@ export function PreparationSettings({
         cambios se aplican a los próximos pedidos.
       </p>
       <OperationNotice
+        eventKey={operation.errorAttempt}
         error={operation.error}
         uncertain={operation.uncertain}
         busy={operation.busy}
@@ -114,9 +117,12 @@ export function PreparationSettings({
         </p>
       )}
       {error && (
-        <p role="alert" className="text-sm text-rose-700">
-          {error}
-        </p>
+        <OperationAlert
+          eventKey={errorAttempt}
+          tone="error"
+          title="No pudimos completar la operación"
+          message={error}
+        />
       )}
       <div className="grid items-start gap-5 xl:grid-cols-[330px_minmax(0,1fr)]">
         <div className="rounded-xl border border-line bg-white p-5">
@@ -131,7 +137,10 @@ export function PreparationSettings({
               saveStation();
             }}
           >
-            <Control label={draft ? "Nombre de estación" : "Nueva estación"}>
+            <Control
+              label={draft ? "Nombre de estación" : "Nueva estación"}
+              required
+            >
               <Input
                 required
                 maxLength={60}
@@ -145,7 +154,7 @@ export function PreparationSettings({
                 }
               />
             </Control>
-            <Control label="Ubicación de consumo">
+            <Control label="Ubicación de consumo" required>
               <select
                 className={selectClass}
                 value={draft ? (draft.consumptionLocationId ?? "") : locationId}

@@ -41,12 +41,16 @@ export const definitions: Record<Entity, EntityDefinition> = {
     singular: "medio de pago",
     description: "Cómo cobrás. Los canales de venta se registran por separado.",
     fields: [
-      name,
+      {
+        ...name,
+        hint: "El nombre que verá la caja. Por ejemplo: Efectivo, Mercado Pago QR o Transferencia Banco Nación.",
+      },
       {
         key: "kind",
         label: "Tipo",
         type: "select",
         required: true,
+        hint: "Indica cómo se cobra. Efectivo habilita el cálculo de vuelto; para QR elegí el tipo de la operación: transferencia o tarjeta.",
         options: [
           { value: "cash", label: "Efectivo" },
           { value: "card", label: "Tarjeta" },
@@ -54,8 +58,14 @@ export const definitions: Record<Entity, EntityDefinition> = {
           { value: "other", label: "Otro" },
         ],
       },
+      {
+        key: "commissionPercent",
+        label: "Comisión total (%)",
+        type: "decimal",
+        hint: "Costo total que te cobra el proveedor sobre el importe cobrado. Incluí los impuestos del servicio si corresponden. 0 significa sin comisión; vacío queda pendiente. No se suma al cliente.",
+      },
     ],
-    columns: ["name", "kind"],
+    columns: ["name", "kind", "commissionPercent"],
   },
   items: {
     title: "Catálogo de inventario",
@@ -160,6 +170,20 @@ export const definitions: Record<Entity, EntityDefinition> = {
         reference: "categories",
       },
       { key: "description", label: "Descripción", type: "textarea" },
+      {
+        key: "vatRate",
+        label: "IVA del producto",
+        type: "select",
+        hint: "Se desglosa dentro del precio final en Costeo; no se suma otro importe en caja. Confirmá la alícuota antes de vender.",
+        options: [
+          { value: "0", label: "0% (sin IVA)" },
+          { value: "2,5", label: "2,5%" },
+          { value: "5", label: "5%" },
+          { value: "10,5", label: "10,5%" },
+          { value: "21", label: "21%" },
+          { value: "27", label: "27%" },
+        ],
+      },
       ...(
         [
           ["enabledCounter", "Disponible en mostrador"],
@@ -177,26 +201,24 @@ export const definitions: Record<Entity, EntityDefinition> = {
       })),
       {
         key: "priceCounter",
-        label: "Precio mostrador",
+        label: "Precio final mostrador",
         type: "decimal",
         required: true,
-        hint: "ARS. Usá coma para decimales.",
+        hint: "Es el importe que paga el cliente. El IVA ya está incluido.",
       },
       {
         key: "pricePedidosYa",
-        label: "Precio PedidosYa",
+        label: "Precio final PedidosYa",
         type: "decimal",
         hint: "Opcional; vacío significa sin precio definido.",
       },
-      { key: "priceUberEats", label: "Precio Uber Eats", type: "decimal" },
+      {
+        key: "priceUberEats",
+        label: "Precio final Uber Eats",
+        type: "decimal",
+      },
     ],
-    columns: [
-      "name",
-      "categoryName",
-      "priceCounter",
-      "pricePedidosYa",
-      "priceUberEats",
-    ],
+    columns: ["name", "categoryName", "prices"],
   },
   presentations: {
     title: "Presentaciones de compra",

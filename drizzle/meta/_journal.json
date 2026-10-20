@@ -134,6 +134,41 @@
       "when": 1792170000000,
       "tag": "0018_product_combos",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792300000000,
+      "tag": "0019_product_option_groups",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1792360000000,
+      "tag": "0020_replenishment_policies",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1792400000000,
+      "tag": "0021_product_vat_payment_fees",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1792410000000,
+      "tag": "0022_business_overheads",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1792420000000,
+      "tag": "0023_costing_iibb",
+      "breakpoints": true
     }
   ]
 }

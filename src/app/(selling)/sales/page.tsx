@@ -9,8 +9,9 @@ export default async function SalesPage({
     query = await searchParams;
   return (
     <SalesManager
-      key={`${query.account ?? ""}:${query.table ?? ""}`}
+      key={`${actor.branchId}:${query.account ?? ""}:${query.table ?? ""}`}
       actorId={actor.id}
+      branchId={actor.branchId!}
       role={actor.role}
       initialAccount={
         typeof query.account === "string" ? query.account : undefined

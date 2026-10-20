@@ -1,4 +1,7 @@
 "use client";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
+import { OperationAlert } from "@/components/ui/operation-alert";
+import { FieldCaption } from "@/components/ui/field-caption";
 import { useEffect, useId, useState } from "react";
 import { getJson } from "@/components/inventory/shared";
 export function LocationSelect({
@@ -14,7 +17,7 @@ export function LocationSelect({
   const [locations, setLocations] = useState<{ id: string; name: string }[]>(
     [],
   );
-  const [error, setError] = useState("");
+  const [error, setError, errorAttempt] = useErrorFeedback();
   useEffect(() => {
     let live = true;
     getJson<{ locations: typeof locations }>("/api/branches/current")
@@ -28,11 +31,11 @@ export function LocationSelect({
     return () => {
       live = false;
     };
-  }, []);
+  }, [setError]);
   return (
     <div className="space-y-2">
       <label htmlFor={id} className="text-sm font-semibold">
-        Ubicación
+        <FieldCaption required>Ubicación</FieldCaption>
       </label>
       <select
         id={id}
@@ -50,9 +53,12 @@ export function LocationSelect({
         ))}
       </select>
       {error && (
-        <p role="alert" className="text-sm text-red-700">
-          {error}
-        </p>
+        <OperationAlert
+          eventKey={errorAttempt}
+          tone="error"
+          title="No pudimos completar la operación"
+          message={error}
+        />
       )}
     </div>
   );

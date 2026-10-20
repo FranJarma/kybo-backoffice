@@ -39,12 +39,18 @@ export type SaleLine = {
   priceReason: string | null;
   notes: string | null;
   recipeVersionId: string | null;
+  vatRate?: string | null;
+  netTotal?: string | null;
+  vatTotal?: string | null;
 };
 export type SalePayment = {
   id: string;
   kind: "collection" | "refund";
   collector: "local" | "platform";
   methodName: string | null;
+  commissionPercent?: string | null;
+  commissionAmount?: string | null;
+  settlementNet?: string | null;
   amount: string;
   reference: string | null;
   originalPaymentId: string | null;
@@ -70,6 +76,9 @@ export type SaleLookup = {
   offset?: number;
   rows: {
     kind?: string;
+    configured?: boolean;
+    vatPending?: boolean;
+    pricingRevision?: number;
     id: string;
     name: string;
     price?: string | null;

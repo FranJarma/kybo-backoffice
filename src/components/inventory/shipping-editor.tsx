@@ -7,6 +7,7 @@ import {
   roundedDivision,
 } from "@/modules/inventory/decimal";
 import { Input } from "@/components/ui/input";
+import { FieldCaption } from "@/components/ui/field-caption";
 import { money, SearchSelect } from "./shared";
 export type ShippingDraft = {
   amount: string;
@@ -120,8 +121,9 @@ export function ShippingEditor({
           {hasCost && (
             <>
               <label className="text-sm font-medium">
-                Quién cobra el envío
+                <FieldCaption required>Quién cobra el envío</FieldCaption>
                 <select
+                  required
                   className="form-control mt-2"
                   value={draft.recipient}
                   onChange={(e) =>
@@ -153,8 +155,9 @@ export function ShippingEditor({
                 />
               )}
               <label className="text-sm font-medium">
-                Reparto del envío
+                <FieldCaption required>Reparto del envío</FieldCaption>
                 <select
+                  required
                   className="form-control mt-2"
                   value={draft.allocation}
                   onChange={(e) =>
@@ -243,7 +246,7 @@ export function ShippingEditor({
         </>
       )}
       {error && (
-        <p role="status" className="text-sm text-amber-800">
+        <p role="status" className="text-sm text-muted">
           {error}
         </p>
       )}

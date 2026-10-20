@@ -1,6 +1,8 @@
 "use client";
 import { useState, useRef } from "react";
 import { Input } from "@/components/ui/input";
+import { OperationAlert } from "@/components/ui/operation-alert";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
 import { money, quantity } from "@/components/inventory/shared";
 import { writeJson } from "@/components/modifiers/manager";
 import {
@@ -15,7 +17,7 @@ export function CostSimulator({ recipe }: { recipe: RecipeDetail }) {
     defaultSelections(config),
   );
   const [cost, setCost] = useState<CompositionCost | null>(null),
-    [error, setError] = useState(""),
+    [error, setError, errorAttempt] = useErrorFeedback(),
     [busy, setBusy] = useState(false);
   const seq = useRef(0);
   let composition;
@@ -76,11 +78,12 @@ export function CostSimulator({ recipe }: { recipe: RecipeDetail }) {
             ))}
         </fieldset>
       ))}
-      {error && (
-        <p role="alert" className="text-sm text-red-700">
-          {error}
-        </p>
-      )}
+      <OperationAlert
+        message={error}
+        eventKey={errorAttempt}
+        title="No pudimos comparar los costos"
+        tone="error"
+      />
       <div className="border-t border-blue-100 pt-3">
         <p className="text-sm">
           Costo estimado:{" "}

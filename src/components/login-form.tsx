@@ -5,6 +5,7 @@ import { ArrowRight, LoaderCircle, LockKeyhole, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { OperationAlert } from "@/components/ui/operation-alert";
 const subscribe = () => () => {};
 export function LoginForm() {
   const router = useRouter();
@@ -55,7 +56,9 @@ export function LoginForm() {
     <form onSubmit={submit}>
       <fieldset disabled={!hydrated || busy} className="space-y-6">
         <div>
-          <Label htmlFor="email">Usuario o correo</Label>
+          <Label htmlFor="email" required>
+            Usuario o correo
+          </Label>
           <div className="relative">
             <Mail
               size={18}
@@ -77,7 +80,9 @@ export function LoginForm() {
           </div>
         </div>
         <div>
-          <Label htmlFor="password">Contraseña</Label>
+          <Label htmlFor="password" required>
+            Contraseña
+          </Label>
           <div className="relative">
             <LockKeyhole
               size={18}
@@ -96,14 +101,11 @@ export function LoginForm() {
             />
           </div>
         </div>
-        {error && (
-          <p
-            role="alert"
-            className="rounded-xl border border-red-100 bg-red-50 p-3 text-sm leading-relaxed text-red-700"
-          >
-            {error}
-          </p>
-        )}
+        <OperationAlert
+          title="No pudimos iniciar sesión"
+          message={error}
+          tone="error"
+        />
         <Button type="submit" disabled={busy} className="h-12 w-full">
           {busy ? "Ingresando…" : "Ingresar"}
           {busy ? (

@@ -41,6 +41,11 @@ import {
 } from "@/modules/inventory/service";
 import { cents, integer } from "@/modules/inventory/decimal";
 import {
+  catalogFinalPrice,
+  vatBreakdown,
+  paymentFee,
+} from "@/modules/pricing/amounts";
+import {
   salesAccess,
   parse,
   uuid,
@@ -104,7 +109,13 @@ async function prepareIndividualLines(
     .for("update");
   const catalog = new Map<
     string,
-    { name: string; price: string | null; recipeVersionId: string | null }
+    {
+      name: string;
+      price: string | null;
+      recipeVersionId: string | null;
+      vatRate: string | null;
+      pricingRevision: number;
+    }
   >();
   for (const id of [...new Set(lines.map((l) => l.productId))].sort()) {
     // Catalog updates also lock product before editing prices. SHARE prevents stale acceptance.
@@ -150,6 +161,8 @@ async function prepareIndividualLines(
       name: product.name,
       price: price?.amount ?? null,
       recipeVersionId: version?.recipeVersionId ?? null,
+      vatRate: product.vatRate,
+      pricingRevision: product.revision,
     });
   }
   let total = 0n;
@@ -157,6 +170,16 @@ async function prepareIndividualLines(
   const values = [];
   for (const [position, line] of lines.entries()) {
     const product = catalog.get(line.productId)!;
+    if (!included && product.vatRate === null)
+      invalid(`Configurá el IVA de ${product.name} antes de venderlo.`);
+    if (
+      !included &&
+      line.expectedPricingRevision !== undefined &&
+      line.expectedPricingRevision !== product.pricingRevision
+    )
+      conflict(
+        `Cambió el precio o IVA de ${product.name}. Actualizá la carta.`,
+      );
     if (
       !line.expectedFulfillmentVersionId ||
       line.comboChoices ||
@@ -214,7 +237,10 @@ async function prepareIndividualLines(
     const configuredPrice =
       product.price === null
         ? null
-        : moneyBound(integer(product.price) + integer(composition.surcharge));
+        : catalogFinalPrice(
+            moneyBound(integer(product.price) + integer(composition.surcharge)),
+            product.vatRate,
+          );
     if (!included && configuredPrice !== line.expectedPrice)
       conflict(
         `Cambió el precio de ${product.name}. Actualizá la carta y revisá el pedido.`,
@@ -241,6 +267,15 @@ async function prepareIndividualLines(
       listPrice: configuredPrice,
       unitPrice: line.price,
       lineTotal: moneyBound(lineTotal),
+      ...(!included && product.vatRate !== null
+        ? {
+            vatRate: product.vatRate,
+            ...vatBreakdown(
+              line.price === "0.00" ? "0.00" : moneyBound(lineTotal),
+              product.vatRate,
+            ),
+          }
+        : { vatRate: null, netTotal: null, vatTotal: null }),
       priceReason: line.priceReason || null,
       notes: line.notes || null,
       recipeVersionId: product.recipeVersionId,
@@ -300,6 +335,13 @@ async function prepareLines(
       .for("share");
     if (!p || p.kind !== "combo" || !canSellProduct(p, local, channel))
       invalid("El combo no está disponible en esta sucursal y canal.");
+    const comboVatRate =
+      p.vatRate ?? invalid("Configurá el IVA del combo antes de venderlo.");
+    if (
+      line.expectedPricingRevision !== undefined &&
+      line.expectedPricingRevision !== p.revision
+    )
+      conflict("Cambió el precio o IVA del combo. Actualizá la carta.");
     const definition = await loadCombo(tx, p.id);
     if (!definition || definition.id !== line.expectedComboVersionId)
       return conflict("Cambió el combo. Revisá las elecciones.");
@@ -381,7 +423,7 @@ async function prepareLines(
       });
       snapshots.push(child.snapshots[0]);
     }
-    const configured = moneyBound(unitPrice);
+    const configured = catalogFinalPrice(moneyBound(unitPrice), comboVatRate)!;
     if (configured !== line.expectedPrice)
       conflict(
         "Cambió el precio del combo o sus adicionales. Revisá el pedido.",
@@ -401,6 +443,8 @@ async function prepareLines(
       listPrice: configured,
       lineTotal,
       priceReason: line.priceReason || null,
+      vatRate: comboVatRate,
+      ...vatBreakdown(lineTotal, comboVatRate),
     });
     total += integer(lineTotal);
   }
@@ -447,6 +491,8 @@ async function preparePayments(
       methodName: method?.name ?? null,
       methodKind: method?.kind ?? null,
       amount: p.amount,
+      commissionPercent: method?.commissionPercent ?? null,
+      ...paymentFee(p.amount, method?.commissionPercent ?? null),
       reference: p.reference || null,
     };
   });
@@ -917,7 +963,14 @@ export function createSalesService(db: AppDb) {
             .from(table)
             .where(filter);
           const rows = await tx
-            .select({ id: table.id, name: table.name })
+            .select({
+              id: table.id,
+              name: table.name,
+              kind:
+                kind === "payment-methods"
+                  ? paymentMethods.kind
+                  : sql<string>`'customer'`,
+            })
             .from(table)
             .where(filter)
             .orderBy(asc(table.name), asc(table.id))

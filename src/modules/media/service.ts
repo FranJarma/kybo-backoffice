@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, isNull, lt, or } from "drizzle-orm";
+import { and, eq, isNull, isNotNull, lt, or } from "drizzle-orm";
 import { mediaAssets } from "@/db/media-schema";
 import { products } from "@/db/business-schema";
 import type { AppDb } from "@/db/client";
@@ -8,6 +8,9 @@ import { requireCatalogManagement } from "@/modules/branches/context";
 import { AppError } from "@/lib/errors";
 import { normalizePhoto } from "./image";
 import type { PhotoStorage } from "./storage";
+import { productPhotoCache, type PhotoCache } from "./photo-cache";
+import type { PhotoVariant } from "./photo-variants";
+import { readSizedPhoto } from "./read-sized-photo";
 export async function uploadPhoto(
   db: AppDb,
   actor: Actor,
@@ -20,18 +23,16 @@ export async function uploadPhoto(
     key = `products/${id}.webp`;
   await storage.put(key, image.data);
   try {
-    await db
-      .insert(mediaAssets)
-      .values({
-        id,
-        provider: "vercel-blob",
-        storageKey: key,
-        creatorId: actor.id,
-        contentType: "image/webp",
-        width: image.width,
-        height: image.height,
-        bytes: image.data.length,
-      });
+    await db.insert(mediaAssets).values({
+      id,
+      provider: "vercel-blob",
+      storageKey: key,
+      creatorId: actor.id,
+      contentType: "image/webp",
+      width: image.width,
+      height: image.height,
+      bytes: image.data.length,
+    });
   } catch (e) {
     try {
       await storage.delete(key);
@@ -47,20 +48,32 @@ export async function readPhoto(
   actor: Actor,
   id: string,
   storage: PhotoStorage,
+  variant: PhotoVariant = "original",
+  cache: PhotoCache = productPhotoCache,
 ) {
   const [asset] = await db
-    .select()
+    .select({ storageKey: mediaAssets.storageKey })
     .from(mediaAssets)
-    .where(and(eq(mediaAssets.id, id), isNull(mediaAssets.deletingAt)));
-  if (!asset) throw new AppError("NOT_FOUND", "Foto no disponible.", 404);
-  const [product] = await db
-    .select({ id: products.id })
-    .from(products)
-    .where(eq(products.imageAssetId, id))
+    .leftJoin(products, eq(products.imageAssetId, mediaAssets.id))
+    .where(
+      and(
+        eq(mediaAssets.id, id),
+        isNull(mediaAssets.deletingAt),
+        or(eq(mediaAssets.creatorId, actor.id), isNotNull(products.id)),
+      ),
+    )
     .limit(1);
-  if (!product && asset.creatorId !== actor.id)
-    throw new AppError("NOT_FOUND", "Foto no disponible.", 404);
-  return storage.get(asset.storageKey);
+  if (!asset) throw new AppError("NOT_FOUND", "Foto no disponible.", 404);
+  // The cache holds bytes, never permission decisions or authenticated responses.
+  const data = await readSizedPhoto(storage, asset.storageKey, variant, cache);
+  return data
+    ? new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array(data));
+          controller.close();
+        },
+      })
+    : null;
 }
 export async function cleanPhotos(
   db: AppDb,

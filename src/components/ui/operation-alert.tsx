@@ -2,21 +2,35 @@
 import { useState } from "react";
 import { Portal, Toast } from "radix-ui";
 import { CircleCheck, CircleAlert, X } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-type Props = { message: string; title: string; tone?: "success" | "error" };
+type Props = {
+  message: string;
+  title: string;
+  tone?: "success" | "error";
+  eventKey?: string | number;
+  viewportClassName?: string;
+};
 
-export function OperationAlert({ message, title, tone = "success" }: Props) {
+export function OperationAlert({
+  message,
+  title,
+  tone = "success",
+  eventKey = "",
+  viewportClassName,
+}: Props) {
   return message ? (
     <Notification
-      key={tone + ":" + message}
+      key={eventKey + ":" + tone + ":" + message}
       message={message}
       title={title}
       tone={tone}
+      viewportClassName={viewportClassName}
     />
   ) : null;
 }
 
-function Notification({ message, title, tone }: Props) {
+function Notification({ message, title, tone, viewportClassName }: Props) {
   const [open, setOpen] = useState(true);
   const [anchor, setAnchor] = useState<HTMLSpanElement | null>(null);
   const Icon = tone === "success" ? CircleCheck : CircleAlert;
@@ -27,7 +41,12 @@ function Notification({ message, title, tone }: Props) {
         label="Notificación"
         duration={tone === "success" ? 5000 : 8000}
         swipeDirection="right"
-        announcerContainer={anchor?.closest('[role="dialog"]') ?? undefined}
+        announcerContainer={
+          anchor?.closest('[role="dialog"]') ??
+          (typeof document !== "undefined"
+            ? (document.activeElement?.closest('[role="dialog"]') ?? undefined)
+            : undefined)
+        }
       >
         <Toast.Root
           open={open}
@@ -59,7 +78,10 @@ function Notification({ message, title, tone }: Props) {
         <Portal.Root>
           <Toast.Viewport
             label="Notificaciones ({hotkey})"
-            className="pointer-events-none fixed bottom-4 right-4 z-[110] m-0 flex w-[calc(100vw-2rem)] max-w-sm list-none flex-col gap-2 outline-none sm:bottom-6 sm:right-6"
+            className={cn(
+              "pointer-events-none fixed bottom-4 right-4 z-[110] m-0 flex w-[calc(100vw-2rem)] max-w-sm list-none flex-col gap-2 outline-none sm:bottom-6 sm:right-6",
+              viewportClassName,
+            )}
           />
         </Portal.Root>
       </Toast.Provider>

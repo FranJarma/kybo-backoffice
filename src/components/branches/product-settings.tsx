@@ -1,4 +1,7 @@
 "use client";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
+import { FieldCaption } from "@/components/ui/field-caption";
+import { OperationAlert } from "@/components/ui/operation-alert";
 import { useEffect, useState, type FormEvent } from "react";
 import { SearchSelect, getJson } from "@/components/inventory/shared";
 import { Button } from "@/components/ui/button";
@@ -30,7 +33,7 @@ export function BranchProductSettings({
     [item, setItem] = useState(""),
     [amount, setAmount] = useState("1"),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState(""),
+    [error, setError, errorAttempt] = useErrorFeedback(),
     [notice, setNotice] = useState("");
   useEffect(() => {
     if (!product) return;
@@ -68,7 +71,7 @@ export function BranchProductSettings({
     return () => {
       live = false;
     };
-  }, [branchId, product, canEditCatalog]);
+  }, [branchId, product, canEditCatalog, setError]);
   async function save(e: FormEvent, direct: boolean) {
     e.preventDefault();
     if (
@@ -136,9 +139,12 @@ export function BranchProductSettings({
         disabled={busy}
       />
       {error && (
-        <p role="alert" className="text-red-700">
-          {error}
-        </p>
+        <OperationAlert
+          eventKey={errorAttempt}
+          tone="error"
+          title="No pudimos completar la operación"
+          message={error}
+        />
       )}
       {notice && <p role="status">{notice}</p>}
       {product && (
@@ -207,7 +213,9 @@ export function BranchProductSettings({
                   required
                 />
                 <label className="block text-sm font-semibold">
-                  Cantidad base por unidad vendida
+                  <FieldCaption required>
+                    Cantidad base por unidad vendida
+                  </FieldCaption>
                   <Input
                     required
                     inputMode="decimal"

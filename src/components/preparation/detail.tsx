@@ -1,4 +1,6 @@
 "use client";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
+import { OperationAlert } from "@/components/ui/operation-alert";
 import { PreparationInstructions } from "./instructions";
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -53,7 +55,7 @@ export function PrepDetailDialog({
   const detail = usePreparationDetail(id, refresh);
   const data = detail.data,
     locked = boardLocked || !detail.fresh;
-  const [error, setError] = useState(""),
+  const [error, setError, errorAttempt] = useErrorFeedback(),
     [people, setPeople] = useState<{ id: string; name: string }[]>([]),
     [person, setPerson] = useState(""),
     [reason, setReason] = useState("");
@@ -70,7 +72,7 @@ export function PrepDetailDialog({
     return () => {
       live = false;
     };
-  }, [manager]);
+  }, [manager, setError]);
   return (
     <Dialog
       open
@@ -91,9 +93,12 @@ export function PrepDetailDialog({
           </DialogDescription>
         </DialogHeader>
         {(detail.error || error) && (
-          <p role="alert" className="text-sm text-rose-700">
-            {detail.error || error}
-          </p>
+          <OperationAlert
+            eventKey={errorAttempt}
+            tone="error"
+            title="No pudimos completar la operación"
+            message={detail.error || error}
+          />
         )}
         <p role="status" className="text-xs text-muted">
           {detail.fresh
@@ -209,7 +214,7 @@ export function PrepDetailDialog({
                 }}
               >
                 <h3 className="text-sm font-bold">Transferir preparación</h3>
-                <Control label="Nuevo responsable">
+                <Control label="Nuevo responsable" required>
                   <select
                     required
                     className={selectClass}
@@ -227,7 +232,7 @@ export function PrepDetailDialog({
                       ))}
                   </select>
                 </Control>
-                <Control label="Motivo de transferencia">
+                <Control label="Motivo de transferencia" required>
                   <Input
                     required
                     maxLength={500}

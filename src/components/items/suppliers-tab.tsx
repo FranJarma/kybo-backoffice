@@ -4,6 +4,9 @@ import Link from "next/link";
 import { Plus, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FieldCaption } from "@/components/ui/field-caption";
+import { OperationAlert } from "@/components/ui/operation-alert";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
 import {
   date,
   getJson,
@@ -31,7 +34,7 @@ export function ItemSuppliersTab({
   onBusy: (busy: boolean) => void;
 }) {
   const [data, setData] = useState<ItemSourcing | null>(null);
-  const [error, setError] = useState("");
+  const [error, setError, errorAttempt] = useErrorFeedback();
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<Mode>(null);
   const [supplierId, setSupplierId] = useState("");
@@ -68,7 +71,7 @@ export function ItemSuppliersTab({
     } finally {
       setLoading(false);
     }
-  }, [url]);
+  }, [url, setError]);
   useEffect(() => {
     let live = true;
     getJson<ItemSourcing>(url)
@@ -92,7 +95,7 @@ export function ItemSuppliersTab({
     return () => {
       live = false;
     };
-  }, [url, revision]);
+  }, [url, revision, setError]);
   const success = useCallback(() => {
     setMode(null);
     setNotice("Guardado. El stock y su costo no cambiaron.");
@@ -289,10 +292,7 @@ export function ItemSuppliersTab({
     hint?: string,
   ) => (
     <label className="block min-w-0 space-y-2 text-sm font-medium text-brand">
-      <span>
-        {label}
-        {required ? " *" : ""}
-      </span>
+      <FieldCaption required={required}>{label}</FieldCaption>
       <Input
         type={type}
         value={value}
@@ -353,23 +353,21 @@ export function ItemSuppliersTab({
           {notice}
         </p>
       )}
-      {(error || operation.error) && (
-        <div
-          role="alert"
-          className="space-y-2 rounded-xl bg-red-50 p-3 text-sm text-red-700"
+      <OperationAlert
+        title="No pudimos completar la operación con proveedores"
+        message={error || operation.error}
+        eventKey={error ? errorAttempt : operation.errorAttempt}
+        tone="error"
+      />
+      {(error || operation.error) && !operation.uncertain && (
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => void load()}
+          disabled={locked}
         >
-          <p>{error || operation.error}</p>
-          {!operation.uncertain && (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void load()}
-              disabled={locked}
-            >
-              Recargar datos
-            </Button>
-          )}
-        </div>
+          Recargar datos
+        </Button>
       )}
       {operation.uncertain && (
         <Button
@@ -465,8 +463,9 @@ export function ItemSuppliersTab({
                   </p>
                 )}
                 <label className="space-y-2 text-sm font-medium text-brand">
-                  <span>Unidad del contenido *</span>
+                  <FieldCaption required>Unidad del contenido</FieldCaption>
                   <select
+                    required
                     className="form-control"
                     value={unit}
                     onChange={(e) => setUnit(e.target.value as typeof unit)}

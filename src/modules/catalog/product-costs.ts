@@ -1,10 +1,19 @@
 import { loadCombo } from "../combos/service";
+import { budgetBasis, expenseMonth } from "../overheads/service";
+import { businessDate } from "../operations/business-date";
 import { comboCostRange } from "../combos/costs";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
 import type { AppDb } from "@/db/client";
 import type { Actor } from "@/lib/access";
-import { products } from "@/db/business-schema";
+import { products, productPrices, paymentMethods } from "@/db/business-schema";
+import { AppError } from "@/lib/errors";
+import {
+  profitabilityChannels,
+  referenceBasis,
+  type ProfitabilityBasis,
+  type ProfitabilityData,
+} from "@/modules/pricing/product-profitability";
 import {
   productFulfillments,
   productFulfillmentVersions,
@@ -15,8 +24,8 @@ import {
   requireCatalogRead,
   requireOperationalContext,
 } from "@/modules/branches/context";
-import { costContext, recipeDefinition } from "@/modules/recipes/service";
-import { loadConfiguration } from "@/modules/recipes/configuration";
+import { costContext } from "@/modules/recipes/service";
+import { costConfigurations } from "./cost-configurations";
 import { consumptionQuantity } from "@/modules/recipes/waste";
 import {
   integer,
@@ -24,6 +33,7 @@ import {
   roundedDivision,
   six,
   safeScaled,
+  cents,
 } from "@/modules/inventory/decimal";
 import type { Component, Configuration } from "@/modules/modifiers/types";
 import {
@@ -41,13 +51,30 @@ export async function catalogProductCosts(
 ) {
   const input = z
     .object({
-      ids: z.array(z.uuid()).min(1).max(10),
+      ids: z.array(z.uuid()).min(1).max(50),
       detail: z.boolean().optional(),
+      profitability: z.boolean().optional(),
+      month: expenseMonth.optional(),
     })
     .strict()
+    .refine(
+      (input) =>
+        input.ids.length <= 10 || (!input.detail && !input.profitability),
+      {
+        message:
+          "Consultá hasta diez productos para el detalle o la rentabilidad.",
+        path: ["ids"],
+      },
+    )
     .parse(raw);
   await requireCatalogRead(db, actor);
   const ctx = await requireOperationalContext(db, actor, actor.branchId ?? "");
+  if (input.profitability && ctx.role === "staff")
+    throw new AppError(
+      "FORBIDDEN",
+      "Se requiere permiso de encargado para consultar la rentabilidad.",
+      403,
+    );
   return db.transaction(
     async (tx) => {
       const [branch] = await tx
@@ -75,9 +102,15 @@ export async function catalogProductCosts(
       const rows = await tx
         .select({
           id: products.id,
+          kind: products.kind,
           fulfillment: productFulfillmentVersions,
           recipeId: recipes.id,
-          versionId: recipeVersions.id,
+          version: {
+            id: recipeVersions.id,
+            version: recipeVersions.version,
+            compositionModel: recipeVersions.compositionModel,
+            yieldQuantity: recipeVersions.yieldQuantity,
+          },
         })
         .from(products)
         .leftJoin(
@@ -100,12 +133,23 @@ export async function catalogProductCosts(
       // Empty/unconfigured batches do not need inventory or preparation graphs.
       const estimate = rows.some(
         (row) =>
-          row.fulfillment?.mode === "direct" || (row.recipeId && row.versionId),
+          row.fulfillment?.mode === "direct" || (row.recipeId && row.version),
       )
         ? await costContext(tx, ctx.branchId)
         : undefined;
+      const configurations = await costConfigurations(
+        tx,
+        rows.flatMap((row) =>
+          row.version && row.fulfillment?.mode !== "direct"
+            ? [row.version]
+            : [],
+        ),
+        !!input.profitability,
+      );
       const results: ProductCost[] = [];
+      const bases = new Map<string, ProfitabilityBasis>();
       for (const row of rows) {
+        let profitConfig: Configuration | undefined;
         const refs = new Set<string>();
         const cost = (
           components: Component[],
@@ -133,6 +177,10 @@ export async function catalogProductCosts(
         let model: ProductCost = {
           productId: row.id,
           status: "unconfigured",
+          pendingReasons:
+            row.kind === "combo"
+              ? ["Publicá los componentes del combo para calcular su costo."]
+              : [],
           fixed: null,
           min: null,
           max: null,
@@ -163,54 +211,8 @@ export async function catalogProductCosts(
             max: amount,
             defaultCost: amount,
           };
-        } else if (row.recipeId && row.versionId) {
-          const def = await recipeDefinition(tx, row.recipeId, row.versionId);
-          let config: Configuration;
-          if (def.compositionModel === "configurable")
-            config = await loadConfiguration(tx, row.versionId, def);
-          else
-            config = {
-              recipeVersionId: def.versionId,
-              revision: def.revision,
-              model: "legacy",
-              yieldQuantity: def.yieldQuantity,
-              fixed: def.lines
-                .filter((l) => !l.optional && l.options.length === 1)
-                .map((l) => l.options[0]),
-              groups: def.lines
-                .filter((l) => l.optional || l.options.length > 1)
-                .map((l, i) => ({
-                  id: l.id,
-                  name: "Alternativas " + (i + 1),
-                  groupVersionId: l.id,
-                  min: l.optional ? 0 : 1,
-                  max: 1,
-                  factor: "1.000000",
-                  options: l.options.map((o, j) => ({
-                    ...o,
-                    key: o.id,
-                    kind: "composition",
-                    instruction: null,
-                    enabled: true,
-                    defaultCount: j === 0 ? 1 : 0,
-                    maxCount: 1,
-                    mode: "override",
-                    components: [
-                      {
-                        ...o,
-                        quantity: consumptionQuantity(
-                          o.quantity,
-                          o.wastePercent,
-                          SCALE,
-                          integer(def.yieldQuantity),
-                        ),
-                        wastePercent: "0.00",
-                      },
-                    ],
-                    prices: {},
-                  })),
-                })),
-            };
+        } else if (row.version) {
+          const config = configurations.get(row.version.id)!;
           const fixed = cost(
             config.fixed,
             SCALE,
@@ -249,6 +251,7 @@ export async function catalogProductCosts(
           const min = sumCosts([fixed, ...ranges.map((r) => r.min)]);
           const max = sumCosts([fixed, ...ranges.map((r) => r.max)]);
           const defaults = selectedCost({ fixed, groups }, {});
+          profitConfig = config;
           model = {
             ...model,
             fixed,
@@ -264,6 +267,8 @@ export async function catalogProductCosts(
           referenceItems: [...refs],
           groups: input.detail ? model.groups : [],
         });
+        if (input.profitability)
+          bases.set(row.id, referenceBasis(model.defaultCost, profitConfig));
       }
       const available = definitions.length
         ? new Set(
@@ -289,12 +294,100 @@ export async function catalogProductCosts(
             definition.productId,
             comboCostRange(definition, byId, available),
           );
+      let profitability: ProfitabilityData[] | undefined;
+      if (input.profitability) {
+        const overhead = await budgetBasis(
+          tx,
+          ctx.branchId,
+          input.month ?? businessDate(new Date(), ctx.timeZone).slice(0, 7),
+        );
+        const [commercial, prices, methods] = await Promise.all([
+          tx.select().from(products).where(inArray(products.id, input.ids)),
+          tx
+            .select()
+            .from(productPrices)
+            .where(inArray(productPrices.productId, input.ids)),
+          tx
+            .select({
+              id: paymentMethods.id,
+              name: paymentMethods.name,
+              percent: paymentMethods.commissionPercent,
+            })
+            .from(paymentMethods)
+            .where(isNull(paymentMethods.archivedAt))
+            .orderBy(asc(paymentMethods.name)),
+        ]);
+        profitability = commercial.map((product) => {
+          const definition = definitions.find(
+            (d) => d?.productId === product.id,
+          );
+          return {
+            productId: product.id,
+            overhead,
+            finalUnits:
+              product.kind === "combo"
+                ? definition
+                  ? definition.groups.reduce((sum, g) => sum + g.quantity, 0)
+                  : null
+                : 1,
+            vatRate: product.vatRate,
+            channels: profitabilityChannels.map((channel) => ({
+              id: channel,
+              enabled:
+                channel === "counter"
+                  ? product.enabledCounter
+                  : channel === "pedidosya"
+                    ? product.enabledPedidosYa
+                    : product.enabledUberEats,
+              finalBase:
+                prices.find(
+                  (p) => p.productId === product.id && p.channel === channel,
+                )?.amount ?? null,
+            })),
+            basis: definition
+              ? referenceBasis("0.000000")
+              : bases.get(product.id)!,
+            groups:
+              definition?.groups.map((group) => ({
+                id: group.id,
+                name: group.name,
+                quantity: group.quantity,
+                options: group.options
+                  .filter((o) => !o.archived && available?.has(o.productId))
+                  .map((option) => {
+                    const basis =
+                      bases.get(option.productId) ?? referenceBasis(null);
+                    return {
+                      id: option.id,
+                      name: option.name,
+                      basis: {
+                        ...basis,
+                        extras: Object.fromEntries(
+                          profitabilityChannels.map((channel) => [
+                            channel,
+                            basis.extras[channel] == null
+                              ? null
+                              : cents(
+                                  integer(basis.extras[channel]!) +
+                                    integer(option[channel]),
+                                ),
+                          ]),
+                        ),
+                      },
+                    };
+                  }),
+              })) ?? [],
+            methods,
+          };
+        });
+      }
       return {
         branchId: ctx.branchId,
         branchName: branch.name,
         products: input.ids.flatMap((id) =>
           byId.has(id) ? [byId.get(id)!] : [],
         ),
+        ...(profitability ? { profitability } : {}),
       };
     },
     { isolationLevel: "repeatable read", accessMode: "read only" },
