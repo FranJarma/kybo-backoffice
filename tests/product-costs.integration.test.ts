@@ -211,7 +211,7 @@ it("compares profitability using branch costs, published defaults and explicit m
     .where(eq(products.id, productId));
   await ctx.db
     .insert(productPrices)
-    .values({ productId, channel: "counter", amount: "100.00" });
+    .values({ productId, channel: "counter", amount: "121.00" });
   const [card] = await ctx.db
     .insert(paymentMethods)
     .values({
@@ -279,8 +279,8 @@ it("uses included product costs and combo extras instead of individual retail pr
     {},
   );
   expect(estimate).toMatchObject({
-    netPrice: "5200.00",
-    finalPrice: "6292.00",
+    netPrice: "4297.52",
+    finalPrice: "5200.00",
     cost: "12.000000",
   });
 });

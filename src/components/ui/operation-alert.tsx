@@ -8,6 +8,7 @@ type Props = {
   message: string;
   title: string;
   tone?: "success" | "error";
+  eventKey?: string | number;
   viewportClassName?: string;
 };
 
@@ -15,11 +16,12 @@ export function OperationAlert({
   message,
   title,
   tone = "success",
+  eventKey = "",
   viewportClassName,
 }: Props) {
   return message ? (
     <Notification
-      key={tone + ":" + message}
+      key={eventKey + ":" + tone + ":" + message}
       message={message}
       title={title}
       tone={tone}
@@ -39,7 +41,12 @@ function Notification({ message, title, tone, viewportClassName }: Props) {
         label="Notificación"
         duration={tone === "success" ? 5000 : 8000}
         swipeDirection="right"
-        announcerContainer={anchor?.closest('[role="dialog"]') ?? undefined}
+        announcerContainer={
+          anchor?.closest('[role="dialog"]') ??
+          (typeof document !== "undefined"
+            ? (document.activeElement?.closest('[role="dialog"]') ?? undefined)
+            : undefined)
+        }
       >
         <Toast.Root
           open={open}

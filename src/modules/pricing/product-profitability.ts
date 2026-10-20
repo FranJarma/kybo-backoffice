@@ -10,7 +10,9 @@ import {
 } from "@/modules/recipes/composition";
 import type { Configuration } from "@/modules/modifiers/types";
 import type { SaleChannel } from "@/modules/sales/types";
-import { paymentFee, priceWithVat } from "./amounts";
+import { paymentFee, catalogFinalPrice, vatBreakdown } from "./amounts";
+import { allocateOverhead } from "@/modules/overheads/calculation";
+import type { OverheadBasis } from "@/modules/overheads/types";
 
 export const profitabilityChannels = [
   "counter",
@@ -23,9 +25,11 @@ export type ProfitabilityBasis = {
   labels: string[];
 };
 export type ProfitabilityData = {
+  overhead?: OverheadBasis;
+  finalUnits?: number | null;
   productId: string;
   vatRate: string | null;
-  channels: { id: SaleChannel; enabled: boolean; netBase: string | null }[];
+  channels: { id: SaleChannel; enabled: boolean; finalBase: string | null }[];
   basis: ProfitabilityBasis;
   groups: {
     id: string;
@@ -92,22 +96,28 @@ export function estimateProfitability(
   const price = data.channels.find((c) => c.id === channel);
   let netPrice: string | null = null;
   let finalPrice: string | null = null;
+  let vatAmount: string | null = null;
   let priceError = "";
   if (
     complete &&
     price?.enabled &&
-    price.netBase !== null &&
+    price.finalBase !== null &&
     selected.every((s) => s.basis.extras[channel] != null)
   ) {
     try {
-      netPrice = cents(
+      const catalogAmount = cents(
         selected.reduce(
           (total, s) =>
             total + integer(s.basis.extras[channel]!) * BigInt(s.quantity),
-          integer(price.netBase),
+          integer(price.finalBase),
         ),
       );
-      finalPrice = priceWithVat(netPrice, data.vatRate);
+      finalPrice = catalogFinalPrice(catalogAmount, data.vatRate);
+      if (finalPrice !== null && data.vatRate !== null) {
+        const tax = vatBreakdown(finalPrice, data.vatRate);
+        netPrice = tax.netTotal;
+        vatAmount = tax.vatTotal;
+      }
     } catch {
       netPrice = null;
       priceError = "El precio configurado excede el límite permitido.";
@@ -122,12 +132,27 @@ export function estimateProfitability(
           ),
         )
       : null;
+  const overheadAmount =
+    data.overhead && data.finalUnits !== null
+      ? allocateOverhead(
+          data.overhead.budgetTotal,
+          data.overhead.expectedUnits,
+          data.finalUnits ?? 1,
+        )
+      : null;
+  const iibbAmount =
+    netPrice === null
+      ? null
+      : paymentFee(netPrice, data.overhead?.iibbRate ?? null).commissionAmount;
   return {
     netPrice,
     finalPrice,
+    vatAmount,
+    iibbAmount,
     cost,
     labels,
     priceError,
+    overheadAmount,
     methods: data.methods.map((method) => {
       const commission =
         finalPrice === null
@@ -142,7 +167,48 @@ export function estimateProfitability(
             roundedDivision(amount < 0n ? -amount : amount, 10000n),
         );
       }
-      return { ...method, commission, margin };
+      let marginAfterOverhead: string | null = null;
+      const marginAfterTaxes =
+        netPrice !== null &&
+        cost !== null &&
+        commission !== null &&
+        iibbAmount !== null
+          ? signedMargin(
+              (integer(netPrice) - integer(commission) - integer(iibbAmount)) *
+                10000n -
+                integer(cost),
+            )
+          : null;
+      if (
+        netPrice !== null &&
+        cost !== null &&
+        commission !== null &&
+        overheadAmount !== null &&
+        iibbAmount !== null
+      ) {
+        const amount =
+          (integer(netPrice) - integer(commission) - integer(iibbAmount)) *
+            10000n -
+          integer(cost) -
+          integer(overheadAmount);
+        marginAfterOverhead = cents(
+          (amount < 0n ? -1n : 1n) *
+            roundedDivision(amount < 0n ? -amount : amount, 10000n),
+        );
+      }
+      return {
+        ...method,
+        commission,
+        margin,
+        marginAfterTaxes,
+        marginAfterOverhead,
+      };
     }),
   };
+}
+function signedMargin(amount: bigint) {
+  return cents(
+    (amount < 0n ? -1n : 1n) *
+      roundedDivision(amount < 0n ? -amount : amount, 10000n),
+  );
 }

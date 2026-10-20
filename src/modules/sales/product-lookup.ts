@@ -63,7 +63,7 @@ export async function lookupProducts(
       categoryId: effectiveCategory,
       price: sql<
         string | null
-      >`round(${productPrices.amount} * (1 + ${products.vatRate} / 100), 2)::numeric(14,2)`,
+      >`case when ${products.vatRate} is null then null else ${productPrices.amount} end`,
       temporarilySoldOut: branchProducts.temporarilySoldOut,
       fulfillmentVersionId: productFulfillments.versionId,
     })

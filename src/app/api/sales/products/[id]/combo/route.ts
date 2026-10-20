@@ -7,7 +7,7 @@ import { salesResponse } from "@/modules/sales/http";
 import { canSellProduct } from "@/modules/products/availability";
 import { channelSchema } from "@/modules/sales/validation";
 import { invalid } from "@/modules/inventory/service";
-import { priceWithVat } from "@/modules/pricing/amounts";
+import { catalogFinalPrice } from "@/modules/pricing/amounts";
 export async function GET(
   request: Request,
   context: { params: Promise<{ id: string }> },
@@ -66,8 +66,8 @@ export async function GET(
       .map((c) => c.product.id);
     return {
       definition,
-      basePrice: priceWithVat(price.amount, p.vatRate),
-      netBasePrice: price.amount,
+      basePrice: catalogFinalPrice(price.amount, p.vatRate),
+      catalogBasePrice: price.amount,
       vatRate: p.vatRate,
       pricingRevision: p.revision,
       unavailableProductIds,

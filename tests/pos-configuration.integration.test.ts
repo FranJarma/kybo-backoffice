@@ -216,7 +216,7 @@ it("preserves direct sale products without a recipe or channel price", async () 
     model: "unavailable",
     groups: [],
     basePrice: null,
-    netBasePrice: null,
+    catalogBasePrice: null,
     vatRate: "0.00",
     pricingRevision: 1,
   });

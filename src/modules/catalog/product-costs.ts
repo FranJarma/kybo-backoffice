@@ -1,4 +1,6 @@
 import { loadCombo } from "../combos/service";
+import { budgetBasis, expenseMonth } from "../overheads/service";
+import { businessDate } from "../operations/business-date";
 import { comboCostRange } from "../combos/costs";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
@@ -52,6 +54,7 @@ export async function catalogProductCosts(
       ids: z.array(z.uuid()).min(1).max(10),
       detail: z.boolean().optional(),
       profitability: z.boolean().optional(),
+      month: expenseMonth.optional(),
     })
     .strict()
     .parse(raw);
@@ -316,6 +319,11 @@ export async function catalogProductCosts(
           );
       let profitability: ProfitabilityData[] | undefined;
       if (input.profitability) {
+        const overhead = await budgetBasis(
+          tx,
+          ctx.branchId,
+          input.month ?? businessDate(new Date(), ctx.timeZone).slice(0, 7),
+        );
         const [commercial, prices, methods] = await Promise.all([
           tx.select().from(products).where(inArray(products.id, input.ids)),
           tx
@@ -338,6 +346,13 @@ export async function catalogProductCosts(
           );
           return {
             productId: product.id,
+            overhead,
+            finalUnits:
+              product.kind === "combo"
+                ? definition
+                  ? definition.groups.reduce((sum, g) => sum + g.quantity, 0)
+                  : null
+                : 1,
             vatRate: product.vatRate,
             channels: profitabilityChannels.map((channel) => ({
               id: channel,
@@ -347,7 +362,7 @@ export async function catalogProductCosts(
                   : channel === "pedidosya"
                     ? product.enabledPedidosYa
                     : product.enabledUberEats,
-              netBase:
+              finalBase:
                 prices.find(
                   (p) => p.productId === product.id && p.channel === channel,
                 )?.amount ?? null,

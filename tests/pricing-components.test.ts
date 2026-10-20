@@ -4,7 +4,7 @@ import { expect, it, vi } from "vitest";
 import { ProductConfigurator } from "../src/components/sales/product-configurator";
 import { ProductPricePreview } from "../src/components/products/price-preview";
 vi.stubGlobal("React", React);
-it("rounds VAT once on net base plus all modifiers", () => {
+it("adds final modifiers without applying another VAT surcharge", () => {
   const html = renderToStaticMarkup(
     React.createElement(ProductConfigurator, {
       config: {
@@ -12,7 +12,7 @@ it("rounds VAT once on net base plus all modifiers", () => {
         fulfillmentVersionId: "f",
         recipeVersionId: "r",
         basePrice: "0.01",
-        netBasePrice: "0.01",
+        catalogBasePrice: "0.01",
         vatRate: "21.00",
         groups: [
           {
@@ -37,27 +37,27 @@ it("rounds VAT once on net base plus all modifiers", () => {
       onCancel: () => {},
     }),
   );
-  expect(html).toMatch(/text-xl[^>]*>[^<]*0,04/);
+  expect(html).toMatch(/text-xl[^>]*>[^<]*0,03/);
 });
 it("previews the final amount and never substitutes zero for pending VAT", () => {
   expect(
     renderToStaticMarkup(
       React.createElement(ProductPricePreview, {
-        net: "10000",
+        price: "10000",
         rate: "10,5",
         label: "Mostrador",
       }),
     ),
-  ).toContain("11.050,00");
+  ).toContain("10.000,00");
   expect(
     renderToStaticMarkup(
       React.createElement(ProductPricePreview, {
-        net: "10000",
+        price: "10000",
         rate: "",
         label: "Mostrador",
       }),
     ),
-  ).toContain("Pendiente");
+  ).toContain("Falta configurar");
 });
 it("keeps an excessive configured price readable instead of crashing the modal", () => {
   expect(() =>
@@ -68,7 +68,7 @@ it("keeps an excessive configured price readable instead of crashing the modal",
           fulfillmentVersionId: "f",
           recipeVersionId: "r",
           basePrice: "968000000000.00",
-          netBasePrice: "800000000000.00",
+          catalogBasePrice: "800000000000.00",
           vatRate: "21.00",
           groups: [
             {

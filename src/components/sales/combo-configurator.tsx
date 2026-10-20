@@ -9,11 +9,11 @@ import type { ComboDefinition } from "@/modules/combos/service";
 import type { PublicConfiguration } from "@/modules/recipes/configuration";
 import type { LineInput } from "@/modules/sales/validation";
 import type { SaleChannel } from "@/modules/sales/types";
-import { priceWithVat } from "@/modules/pricing/amounts";
+import { catalogFinalPrice } from "@/modules/pricing/amounts";
 export type ComboSaleConfiguration = {
   definition: ComboDefinition;
   basePrice: string;
-  netBasePrice?: string;
+  catalogBasePrice?: string;
   vatRate?: string;
   pricingRevision?: number;
   unavailableProductIds?: string[];
@@ -141,7 +141,7 @@ export function ComboConfigurator({
             config: {
               ...c,
               basePrice: "0.00",
-              netBasePrice: "0.00",
+              catalogBasePrice: "0.00",
               vatRate: config.vatRate,
             },
           });
@@ -159,7 +159,7 @@ export function ComboConfigurator({
     };
   }, [pending, loadConfiguration, config.vatRate]);
   const netTotal =
-    integer(config.netBasePrice ?? config.basePrice) +
+    integer(config.catalogBasePrice ?? config.basePrice) +
     config.definition.groups.reduce((sum, g) => {
       const s = selected[g.id];
       if (!s) return sum;
@@ -171,7 +171,7 @@ export function ComboConfigurator({
   let total: bigint | null = netTotal;
   try {
     if (config.vatRate !== undefined)
-      total = integer(priceWithVat(cents(netTotal), config.vatRate)!);
+      total = integer(catalogFinalPrice(cents(netTotal), config.vatRate)!);
   } catch {
     total = null;
   }
@@ -194,7 +194,7 @@ export function ComboConfigurator({
               let optionPrice: string | null = o[channel];
               try {
                 if (config.vatRate)
-                  optionPrice = priceWithVat(optionPrice, config.vatRate);
+                  optionPrice = catalogFinalPrice(optionPrice, config.vatRate);
               } catch {
                 optionPrice = null;
               }
@@ -266,7 +266,7 @@ export function ComboConfigurator({
                       expectedRecipeVersionId: data.expectedRecipeVersionId,
                       modifiers: data.modifiers,
                     },
-                    extra: data.netSurcharge ?? data.expectedPrice,
+                    extra: data.selectionSurcharge ?? data.expectedPrice,
                     labels: data.modifierLabels,
                   },
                 }));

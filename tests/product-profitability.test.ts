@@ -14,7 +14,7 @@ const basis = {
 const data: ProfitabilityData = {
   productId: "tea",
   vatRate: "21.00",
-  channels: [{ id: "counter", enabled: true, netBase: "10000.00" }],
+  channels: [{ id: "counter", enabled: true, finalBase: "12100.00" }],
   basis,
   groups: [],
   methods: [
@@ -23,6 +23,65 @@ const data: ProfitabilityData = {
     { id: "unknown", name: "Sin definir", percent: null },
   ],
 };
+
+it("allocates monthly overhead without losing the contribution margin", () => {
+  const result = estimateProfitability(
+    {
+      ...data,
+      overhead: {
+        month: "2026-10",
+        budgetTotal: "2000000.00",
+        expectedUnits: 4000,
+        iibbRate: "0.00",
+      },
+      finalUnits: 1,
+    },
+    "counter",
+    {},
+  );
+  expect(result.overheadAmount).toBe("500.000000");
+  expect(result.methods[0]).toMatchObject({
+    margin: "6000.00",
+    marginAfterOverhead: "5500.00",
+  });
+  expect(result.methods[1]).toMatchObject({
+    margin: "5637.00",
+    marginAfterOverhead: "5137.00",
+  });
+  const combo = estimateProfitability(
+    {
+      ...data,
+      overhead: {
+        month: "2026-10",
+        budgetTotal: "1.00",
+        expectedUnits: 3,
+        iibbRate: "0.00",
+      },
+      finalUnits: 3,
+    },
+    "counter",
+    {},
+  );
+  expect(combo.overheadAmount).toBe("1.000000");
+  expect(
+    estimateProfitability(data, "counter", {}).methods[0].marginAfterOverhead,
+  ).toBeNull();
+  expect(
+    estimateProfitability(
+      {
+        ...data,
+        overhead: {
+          month: "2026-10",
+          budgetTotal: "30000000.00",
+          expectedUnits: 4000,
+          iibbRate: "0.00",
+        },
+      },
+      "counter",
+      {},
+    ).methods[0].marginAfterOverhead,
+  ).toBe("-1500.00");
+});
 
 it("deducts the fee on gross payment from net revenue, separately from recipe cost", () => {
   const result = estimateProfitability(data, "counter", {});
@@ -43,7 +102,7 @@ it("keeps missing VAT and cost pending, distinct from explicit zero", () => {
     "counter",
     {},
   );
-  expect(pendingVat.netPrice).toBe("10000.00");
+  expect(pendingVat.netPrice).toBeNull();
   expect(pendingVat.finalPrice).toBeNull();
   expect(pendingVat.methods.every((m) => m.margin === null)).toBe(true);
   const pendingCost = estimateProfitability(
@@ -61,8 +120,8 @@ it("keeps missing VAT and cost pending, distinct from explicit zero", () => {
     {},
   );
   expect(zero.methods[1]).toMatchObject({
-    commission: "300.00",
-    margin: "9700.00",
+    commission: "363.00",
+    margin: "11737.00",
   });
 });
 it("retains six-decimal costs until the final rounding and allows losses", () => {
@@ -74,10 +133,10 @@ it("retains six-decimal costs until the final rounding and allows losses", () =>
   expect(loss.methods[0].margin).toBe("-0.01");
   expect(loss.methods[1].margin).toBe("-363.01");
 });
-it("combines only included costs and net extras, with combo quantities and VAT applied once", () => {
+it("combines included costs and final extras, extracting combo VAT once", () => {
   const combo: ProfitabilityData = {
     ...data,
-    channels: [{ id: "counter", enabled: true, netBase: "5000.00" }],
+    channels: [{ id: "counter", enabled: true, finalBase: "5000.00" }],
     basis: { ...basis, cost: "0.000000" },
     groups: [
       {
@@ -119,13 +178,13 @@ it("combines only included costs and net extras, with combo quantities and VAT a
     drink: "pepsi",
   });
   expect(result).toMatchObject({
-    netPrice: "5600.00",
-    finalPrice: "6776.00",
+    netPrice: "4628.10",
+    finalPrice: "5600.00",
     cost: "3200.000000",
   });
   expect(result.methods[1]).toMatchObject({
-    commission: "203.28",
-    margin: "2196.72",
+    commission: "168.00",
+    margin: "1260.10",
   });
   expect(
     estimateProfitability(combo, "counter", { food: "missing" }).netPrice,
@@ -135,7 +194,7 @@ it("does not calculate a margin for an unavailable sales channel", () => {
   const disabled = estimateProfitability(
     {
       ...data,
-      channels: [{ id: "counter", enabled: false, netBase: "10000.00" }],
+      channels: [{ id: "counter", enabled: false, finalBase: "10000.00" }],
     },
     "counter",
     {},
@@ -185,11 +244,11 @@ it("includes published default modifier surcharges and never assumes an unknown 
     {},
   );
   expect(withExtra).toMatchObject({
-    netPrice: "10200.00",
-    finalPrice: "12342.00",
+    netPrice: "10165.29",
+    finalPrice: "12300.00",
   });
   expect(withExtra.methods[1]).toMatchObject({
-    commission: "370.26",
-    margin: "5829.74",
+    commission: "369.00",
+    margin: "5796.29",
   });
 });

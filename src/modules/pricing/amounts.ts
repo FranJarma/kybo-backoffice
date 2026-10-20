@@ -33,6 +33,16 @@ export function priceWithVat(net: string, rate: string | null): string | null {
     ? null
     : bounded(roundedDivision(value * (10000n + vat(rate)), 10000n));
 }
+/** Catalog and modifier amounts are already final; VAT is extracted in costing. */
+export function catalogFinalPrice(
+  final: string,
+  rate: string | null,
+): string | null {
+  const value = money(final);
+  if (rate === null) return null;
+  vat(rate);
+  return bounded(value);
+}
 export function vatBreakdown(gross: string, rate: string) {
   const total = money(gross);
   const net = roundedDivision(total * 10000n, 10000n + vat(rate));

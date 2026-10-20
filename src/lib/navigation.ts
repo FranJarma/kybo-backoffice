@@ -169,6 +169,14 @@ export const navigation = [
     parent: "inventory",
   },
   {
+    id: "expenses",
+    area: "Finanzas",
+    label: "Gastos del negocio",
+    href: "/finance/expenses",
+    icon: "WalletCards",
+    access: "manager",
+  },
+  {
     id: "payment-methods",
     area: "Configuración",
     label: "Medios de pago",

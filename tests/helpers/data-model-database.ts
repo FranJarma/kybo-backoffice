@@ -74,6 +74,8 @@ export async function createDataModelTestContext(
         "alter table products alter column vat_rate set default 0",
       );
     }
+    await client.exec(await readFile("drizzle/0022_business_overheads.sql", "utf8"));
+    await client.exec(await readFile("drizzle/0023_costing_iibb.sql", "utf8"));
     return {
       ...fixture,
       client,

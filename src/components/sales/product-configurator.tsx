@@ -6,7 +6,7 @@ import { money } from "@/components/inventory/shared";
 import { cents, integer } from "@/modules/inventory/decimal";
 import type { PublicConfiguration } from "@/modules/recipes/configuration";
 import type { Selection } from "@/modules/modifiers/types";
-import { priceWithVat } from "@/modules/pricing/amounts";
+import { catalogFinalPrice } from "@/modules/pricing/amounts";
 export function ProductConfigurator({
   config,
   initialSelection,
@@ -22,7 +22,7 @@ export function ProductConfigurator({
     modifiers: Selection[];
     expectedPrice: string;
     modifierLabels: string[];
-    netSurcharge?: string;
+    selectionSurcharge?: string;
   }) => void;
   onCancel: () => void;
 }) {
@@ -39,9 +39,11 @@ export function ProductConfigurator({
       ),
     ),
   );
-  const netBase =
-    config.netBasePrice === undefined ? config.basePrice : config.netBasePrice;
-  let amount = netBase == null ? null : integer(netBase);
+  const finalBase =
+    config.catalogBasePrice === undefined
+      ? config.basePrice
+      : config.catalogBasePrice;
+  let amount = finalBase == null ? null : integer(finalBase);
   let surcharge = 0n;
   const problems: string[] = [];
   for (const g of config.groups) {
@@ -71,7 +73,7 @@ export function ProductConfigurator({
   }
   if (amount !== null && config.vatRate !== undefined) {
     try {
-      const final = priceWithVat(cents(amount), config.vatRate);
+      const final = catalogFinalPrice(cents(amount), config.vatRate);
       amount = final === null ? null : integer(final);
     } catch {
       amount = null;
@@ -97,7 +99,7 @@ export function ProductConfigurator({
             let displayPrice = o.price;
             try {
               if (displayPrice !== null && config.vatRate)
-                displayPrice = priceWithVat(displayPrice, config.vatRate);
+                displayPrice = catalogFinalPrice(displayPrice, config.vatRate);
             } catch {
               displayPrice = null;
             }
@@ -257,7 +259,7 @@ export function ProductConfigurator({
               onConfirm({
                 expectedRecipeVersionId: config.recipeVersionId,
                 expectedPrice: cents(amount!),
-                netSurcharge: cents(surcharge),
+                selectionSurcharge: cents(surcharge),
                 modifiers: Object.entries(choices)
                   .filter(([, count]) => count > 0)
                   .map(([recipeModifierOptionId, count]) => ({

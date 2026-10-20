@@ -52,7 +52,7 @@ import { inventoryMovements } from "@/db/inventory-schema";
 import { stockMovements } from "@/db/stock-movement-schema";
 import { inventoryValuations } from "@/db/stock-schema";
 import { productFulfillmentVersions } from "@/db/product-fulfillment-schema";
-import { priceWithVat } from "@/modules/pricing/amounts";
+import { catalogFinalPrice } from "@/modules/pricing/amounts";
 
 const tables = {
   suppliers,
@@ -168,7 +168,7 @@ async function writePrices(
   for (const [key, channel] of channels) {
     const amount = input[key] as string | null;
     if (amount !== null) {
-      priceWithVat(amount, rate);
+      catalogFinalPrice(amount, rate);
       await db.insert(productPrices).values({ productId: id, channel, amount });
     }
   }

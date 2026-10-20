@@ -41,7 +41,7 @@ import {
 } from "@/modules/inventory/service";
 import { cents, integer } from "@/modules/inventory/decimal";
 import {
-  priceWithVat,
+  catalogFinalPrice,
   vatBreakdown,
   paymentFee,
 } from "@/modules/pricing/amounts";
@@ -237,7 +237,7 @@ async function prepareIndividualLines(
     const configuredPrice =
       product.price === null
         ? null
-        : priceWithVat(
+        : catalogFinalPrice(
             moneyBound(integer(product.price) + integer(composition.surcharge)),
             product.vatRate,
           );
@@ -423,7 +423,7 @@ async function prepareLines(
       });
       snapshots.push(child.snapshots[0]);
     }
-    const configured = priceWithVat(moneyBound(unitPrice), comboVatRate)!;
+    const configured = catalogFinalPrice(moneyBound(unitPrice), comboVatRate)!;
     if (configured !== line.expectedPrice)
       conflict(
         "Cambió el precio del combo o sus adicionales. Revisá el pedido.",

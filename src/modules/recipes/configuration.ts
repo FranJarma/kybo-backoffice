@@ -33,7 +33,7 @@ import type { SaleChannel } from "@/modules/sales/types";
 import type { Actor } from "@/lib/access";
 import { salesAccess } from "@/modules/sales/validation";
 import { defaultSelections, resolveComposition } from "./composition";
-import { priceWithVat } from "@/modules/pricing/amounts";
+import { catalogFinalPrice } from "@/modules/pricing/amounts";
 export async function loadConfiguration(
   db: AppDb | Tx,
   recipeVersionId: string,
@@ -399,8 +399,8 @@ export async function getProductConfiguration(
           basePrice:
             row.basePrice === null
               ? null
-              : priceWithVat(row.basePrice, row.product.vatRate),
-          netBasePrice: row.basePrice,
+              : catalogFinalPrice(row.basePrice, row.product.vatRate),
+          catalogBasePrice: row.basePrice,
           vatRate: row.product.vatRate,
           pricingRevision: row.product.revision,
         };
@@ -505,8 +505,8 @@ export async function getProductConfiguration(
         basePrice:
           row.basePrice === null
             ? null
-            : priceWithVat(row.basePrice, row.product.vatRate),
-        netBasePrice: row.basePrice,
+            : catalogFinalPrice(row.basePrice, row.product.vatRate),
+        catalogBasePrice: row.basePrice,
         vatRate: row.product.vatRate,
         pricingRevision: row.product.revision,
         groups: [...groups.values()],
@@ -520,8 +520,8 @@ export type PublicConfiguration = {
   recipeVersionId: string | null;
   model: string;
   basePrice: string | null;
-  /** Option prices and netBasePrice are NET. VAT applies once to their sum. */
-  netBasePrice?: string | null;
+  /** Option prices and catalogBasePrice are final amounts including VAT. */
+  catalogBasePrice?: string | null;
   vatRate?: string | null;
   pricingRevision?: number;
   groups: {

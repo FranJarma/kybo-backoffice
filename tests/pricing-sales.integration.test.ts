@@ -50,7 +50,7 @@ it("charges a final price, snapshots VAT and each fee, and keeps history unchang
     commissionPercent: "3",
   });
   const config = await getProductConfiguration(c.db, actor, p.id, "counter");
-  expect(config.basePrice).toBe("12100.00");
+  expect(config.basePrice).toBe("10000.00");
   const saleService = createSalesService(c.db);
   const input = {
     requestId: crypto.randomUUID(),
@@ -61,23 +61,24 @@ it("charges a final price, snapshots VAT and each fee, and keeps history unchang
       {
         productId: p.id,
         quantity: 1,
-        price: "12100",
-        expectedPrice: "12100.00",
+        price: "10000",
+        expectedPrice: "10000.00",
+        expectedPricingRevision: config.pricingRevision,
         expectedFulfillmentVersionId: config.fulfillmentVersionId,
       },
     ],
     payments: [
       { collector: "local", methodId: cash.id, amount: "5000" },
-      { collector: "local", methodId: card.id, amount: "7100" },
+      { collector: "local", methodId: card.id, amount: "5000" },
     ],
   };
   const sale = await saleService.create(actor, input);
-  expect(sale.totalAmount).toBe("12100.00");
-  expect(sale.paidAmount).toBe("12100.00");
+  expect(sale.totalAmount).toBe("10000.00");
+  expect(sale.paidAmount).toBe("10000.00");
   expect(sale.orders[0].lines[0]).toMatchObject({
     vatRate: "21.00",
-    netTotal: "10000.00",
-    vatTotal: "2100.00",
+    netTotal: "8264.46",
+    vatTotal: "1735.54",
   });
   expect(sale.payments.find((p) => p.methodName === "Cash")).toMatchObject({
     commissionPercent: "0.00",
@@ -86,8 +87,8 @@ it("charges a final price, snapshots VAT and each fee, and keeps history unchang
   });
   expect(sale.payments.find((p) => p.methodName === "Card")).toMatchObject({
     commissionPercent: "3.00",
-    commissionAmount: "213.00",
-    settlementNet: "6887.00",
+    commissionAmount: "150.00",
+    settlementNet: "4850.00",
   });
   await catalog.updateRecord(actor, "products", p.id, {
     revision: p.revision,
@@ -106,10 +107,10 @@ it("charges a final price, snapshots VAT and each fee, and keeps history unchang
   );
   expect(
     (await getProductConfiguration(c.db, actor, p.id, "counter")).basePrice,
-  ).toBe("11050.00");
+  ).toBe("10000.00");
   await expect(
     saleService.create(actor, { ...input, requestId: crypto.randomUUID() }),
-  ).rejects.toThrow(/precio|cambió/i);
+  ).rejects.toThrow(/precio|cambió|IVA/i);
   const [stored] = await c.db
     .select()
     .from(s.saleLines)
@@ -218,7 +219,7 @@ it("validates rates and never compounds the tax when editing", async () => {
   expect(edited.priceCounter).toBe("10000.00");
   expect(
     (await getProductConfiguration(c.db, actor, p.id, "counter")).basePrice,
-  ).toBe("12100.00");
+  ).toBe("10000.00");
 });
 it("rejects stale tax revisions even when rounding leaves the same final price", async () => {
   const p = await catalog.createRecord(actor, "products", {
@@ -258,7 +259,7 @@ it("rejects stale tax revisions even when rounding leaves the same final price",
     }),
   ).rejects.toThrow(/IVA|cambió/i);
 });
-it("rounds the combo and net extras together, without taxing included products twice", async () => {
+it("sums final combo extras and extracts VAT without another surcharge", async () => {
   const child = await catalog.createRecord(actor, "products", {
     name: "Included",
     ...prices,
@@ -304,8 +305,8 @@ it("rounds the combo and net extras together, without taxing included products t
       {
         productId: parent.id,
         quantity: 1,
-        price: "0,04",
-        expectedPrice: "0.04",
+        price: "0,03",
+        expectedPrice: "0.03",
         expectedComboVersionId: definition.id,
         comboChoices: [
           {
@@ -318,12 +319,12 @@ it("rounds the combo and net extras together, without taxing included products t
         ],
       },
     ],
-    payments: [{ collector: "local", methodId: method.id, amount: "0,04" }],
+    payments: [{ collector: "local", methodId: method.id, amount: "0,03" }],
   });
-  expect(sale.totalAmount).toBe("0.04");
+  expect(sale.totalAmount).toBe("0.03");
   expect(sale.orders[0].lines[0]).toMatchObject({
     lineKind: "combo",
-    netTotal: "0.03",
+    netTotal: "0.02",
     vatTotal: "0.01",
     vatRate: "21.00",
   });

@@ -1,6 +1,24 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Locator } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 test.use({ hasTouch: true });
+
+async function expectReadablePrices(product: Locator) {
+  for (const channel of ["Mostrador:", "Pedidos Ya:", "Uber Eats:"]) {
+    const gap = await product
+      .getByText(channel, { exact: true })
+      .evaluate((label) => {
+        const value = label.nextElementSibling!;
+        return (
+          value.getBoundingClientRect().left -
+          label.getBoundingClientRect().right
+        );
+      });
+    expect(
+      gap,
+      `${channel} must not overlap its amount`,
+    ).toBeGreaterThanOrEqual(8);
+  }
+}
 test("configures VAT and fees, charges final prices and preserves the historical snapshots", async ({
   page,
   playwright,
@@ -32,7 +50,7 @@ test("configures VAT and fees, charges final prices and preserves the historical
       name,
       vatRate: "21",
       priceCounter: "10000",
-      pricePedidosYa: "",
+      pricePedidosYa: "12000",
       priceUberEats: "",
       setup: {
         mode: "direct",
@@ -65,10 +83,24 @@ test("configures VAT and fees, charges final prices and preserves the historical
   ).row;
   await page.goto("/products");
   const row = page.getByRole("row").filter({ hasText: name });
-  await expect(row.getByText("Sin IVA", { exact: true })).toBeVisible();
-  await expect(row.getByText("Con IVA", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("columnheader", { name: "Precios", exact: true }),
+  ).toBeVisible();
+  await expect(row.getByText("Sin IVA", { exact: true })).toHaveCount(0);
+  await expect(row.getByText("Con IVA", { exact: true })).toHaveCount(0);
+  await expect(
+    page.getByRole("columnheader", { name: "PedidosYa", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("columnheader", { name: "Uber Eats", exact: true }),
+  ).toHaveCount(0);
   await expect(row).toContainText("10.000,00");
-  await expect(row).toContainText("12.100,00");
+  await expect(row).toContainText("12.000,00");
+  await expect(row.getByText("Mostrador:", { exact: true })).toBeVisible();
+  await expect(row.getByText("Pedidos Ya:", { exact: true })).toBeVisible();
+  await expect(row.getByText("Uber Eats:", { exact: true })).toBeVisible();
+  await expect(row).not.toContainText("8.264,46");
+  await expectReadablePrices(row);
   await row.scrollIntoViewIfNeeded();
   await page.screenshot({
     path: "docs/previews/product-prices-vat-desktop.png",
@@ -77,14 +109,19 @@ test("configures VAT and fees, charges final prices and preserves the historical
   const mobileProduct = page
     .locator("article[data-catalog-row]")
     .filter({ hasText: name });
-  await expect(
-    mobileProduct.getByText("Sin IVA", { exact: true }),
-  ).toBeVisible();
-  await expect(
-    mobileProduct.getByText("Con IVA", { exact: true }),
-  ).toBeVisible();
+  await expect(mobileProduct.getByText("Sin IVA", { exact: true })).toHaveCount(
+    0,
+  );
+  await expect(mobileProduct.getByText("Con IVA", { exact: true })).toHaveCount(
+    0,
+  );
   await expect(mobileProduct).toContainText("10.000,00");
-  await expect(mobileProduct).toContainText("12.100,00");
+  await expect(mobileProduct).toContainText("12.000,00");
+  await expect(
+    mobileProduct.getByText("Sin precio", { exact: true }),
+  ).toBeVisible();
+  await expect(mobileProduct).not.toContainText("8.264,46");
+  await expectReadablePrices(mobileProduct);
   await mobileProduct.scrollIntoViewIfNeeded();
   await page.screenshot({
     path: "docs/previews/product-prices-vat-mobile.png",
@@ -95,18 +132,19 @@ test("configures VAT and fees, charges final prices and preserves the historical
   await expect(
     dialog.getByLabel("IVA del producto", { exact: true }),
   ).toHaveValue("21");
-  await expect(dialog.getByLabel(/Precio neto mostrador/)).toHaveValue("10000");
+  await expect(dialog.getByLabel(/Precio final mostrador/)).toHaveValue(
+    "10000",
+  );
   await dialog
     .getByLabel("IVA del producto", { exact: true })
     .selectOption("10,5");
-  await expect(dialog).toContainText("11.050,00");
+  await expect(dialog).toContainText("10.000,00");
   await dialog
-    .getByText("Precio final con IVA · Mostrador", { exact: true })
+    .getByText("Precio final al cliente · Mostrador", { exact: true })
     .scrollIntoViewIfNeeded();
   await page.screenshot({ path: "docs/previews/product-vat.png" });
   await dialog.getByRole("button", { name: "Guardar", exact: true }).tap();
   await expect(dialog).toBeHidden();
-  await expect(row).toContainText("11.050,00");
   await expect(row).toContainText("10.000,00");
   await page.goto("/settings/payment-methods");
   await page
@@ -139,27 +177,55 @@ test("configures VAT and fees, charges final prices and preserves the historical
     name: "Rentabilidad por medio de pago",
     exact: true,
   });
-  const methodEstimate = profitability
-    .getByRole("row")
-    .filter({ hasText: methodName });
-  await expect(methodEstimate).toContainText("10.000,00");
-  await expect(methodEstimate).toContainText("1.200,00");
-  await expect(methodEstimate).toContainText("331,50");
-  await expect(methodEstimate).toContainText("8.468,50");
+  // Other finance flows may have budgeted the current month in this shared fixture.
+  await profitability.getByLabel("Mes del presupuesto").fill("2099-01");
+  await profitability
+    .getByRole("combobox", { name: "Medio de pago", exact: true })
+    .selectOption(method.id);
+  await expect(profitability.getByTestId("costing-price")).toContainText(
+    "10.000,00",
+  );
+  await expect(profitability.getByTestId("costing-direct")).toContainText(
+    "1.200,00",
+  );
+  await expect(profitability.getByTestId("costing-vat")).toContainText(
+    "950,23",
+  );
+  await expect(profitability.getByTestId("costing-commission")).toContainText(
+    "300,00",
+  );
+  await expect(profitability).toContainText("7.549,77");
+  await expect(profitability.getByTestId("costing-margin")).toHaveText(
+    "Pendiente",
+  );
   await profitability.screenshot({
     path: "docs/previews/product-profitability.png",
   });
   await profitability
     .getByRole("combobox", { name: "Canal de venta", exact: true })
-    .selectOption("pedidosya", { timeout: 15000 });
-  await expect(methodEstimate).toContainText("Pendiente");
+    .selectOption("ubereats", { timeout: 15000 });
+  await expect(profitability.getByTestId("costing-price")).toHaveText(
+    "Pendiente",
+  );
   await profitability
     .getByRole("combobox", { name: "Canal de venta", exact: true })
     .selectOption("counter", { timeout: 15000 });
   await dialog.getByRole("tab", { name: "Producto", exact: true }).tap();
   await dialog.getByRole("tab", { name: "Costeo", exact: true }).tap();
-  await expect(methodEstimate).toContainText("8.468,50");
-  expect(profitabilityRequests).toBe(1);
+  await expect(
+    profitability.getByRole("combobox", { name: "Medio de pago", exact: true }),
+  ).toHaveValue(method.id);
+  await profitability
+    .getByRole("combobox", { name: "Medio de pago", exact: true })
+    .selectOption(method.id);
+  await expect(profitability).toContainText("7.549,77");
+  await profitability.getByText(/Comparar medios de pago/).tap();
+  const methodEstimate = profitability
+    .getByRole("row")
+    .filter({ hasText: methodName });
+  await expect(methodEstimate).toContainText("300,00");
+  await profitability.getByText(/Comparar medios de pago/).tap();
+  expect(profitabilityRequests).toBe(2); // Initial snapshot and the explicit month change.
   const anonymous = await playwright.request.newContext();
   const forbidden = await anonymous.post(
     `${new URL(page.url()).origin}/api/products/costs`,
@@ -174,9 +240,9 @@ test("configures VAT and fees, charges final prices and preserves the historical
     name: `Agregar ${name}`,
     exact: true,
   });
-  await expect(add).toContainText("11.050,00");
+  await expect(add).toContainText("10.000,00");
   await add.tap();
-  await expect(page.getByTestId("cart-total")).toHaveText(/11\.050,00/);
+  await expect(page.getByTestId("cart-total")).toHaveText(/10\.000,00/);
   await page.getByRole("button", { name: "Cobrar", exact: true }).tap();
   dialog = page.getByRole("dialog");
   await expect(dialog.getByText(/Comisión/i)).toHaveCount(0);
@@ -190,17 +256,17 @@ test("configures VAT and fees, charges final prices and preserves the historical
   const saved = await response;
   expect(saved.ok(), await saved.text()).toBe(true);
   const sale = await saved.json();
-  expect(sale.totalAmount).toBe("11050.00");
-  expect(sale.paidAmount).toBe("11050.00");
+  expect(sale.totalAmount).toBe("10000.00");
+  expect(sale.paidAmount).toBe("10000.00");
   expect(sale.orders[0].lines[0]).toMatchObject({
     vatRate: "10.50",
-    netTotal: "10000.00",
-    vatTotal: "1050.00",
+    netTotal: "9049.77",
+    vatTotal: "950.23",
   });
   expect(sale.payments[0]).toMatchObject({
     commissionPercent: "3.00",
-    commissionAmount: "331.50",
-    settlementNet: "10718.50",
+    commissionAmount: "300.00",
+    settlementNet: "9700.00",
   });
   await page
     .getByRole("button", { name: `Última venta #${sale.number}`, exact: true })

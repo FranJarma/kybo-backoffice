@@ -1,6 +1,6 @@
 # Gastos del negocio y prorrateo mensual
 
-Estado: diseño para revisión, 19/10/2026. Todavía no se implementó este módulo ni se aplicaron migraciones para gastos generales.
+Estado: implementado y verificado, 19/10/2026; migración 0022 aplicada en desarrollo. Trabajo nuevo pendiente de commit. Ver `docs/verification-business-overheads.md`.
 
 ## Necesidad y decisiones confirmadas
 

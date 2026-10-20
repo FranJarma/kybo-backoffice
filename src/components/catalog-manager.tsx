@@ -27,7 +27,8 @@ import {
 } from "@/components/products/setup-fields";
 import { ProductDirectCost } from "@/components/products/direct-cost";
 import { ProductPricePreview } from "@/components/products/price-preview";
-import { ProductPrice } from "@/components/catalog/product-price";
+import { ProductPrices } from "@/components/catalog/product-price";
+import { ProductCostDetails } from "@/components/products/cost-details";
 import {
   ProductProfitability,
   useProductProfitability,
@@ -168,6 +169,7 @@ const columnNames: Record<string, string> = {
   baseUnit: "Unidad base",
   unitCost: "Costo / unidad",
   priceCounter: "Mostrador",
+  prices: "Precios",
   pricePedidosYa: "PedidosYa",
   priceUberEats: "Uber Eats",
   commissionPercent: "Comisión",
@@ -201,18 +203,17 @@ function RecordStatus({ row }: { row: CatalogRow }) {
 }
 
 function RecordValue({ row, column }: { row: CatalogRow; column: string }) {
-  if (
-    ["priceCounter", "pricePedidosYa", "priceUberEats"].includes(column) &&
-    "vatRate" in row
-  )
+  if (column === "prices") {
+    const price = (key: string) =>
+      row[key] == null || row[key] === "" ? null : String(row[key]);
     return (
-      <ProductPrice
-        net={
-          row[column] == null || row[column] === "" ? null : String(row[column])
-        }
-        vatRate={row.vatRate == null ? null : String(row.vatRate)}
+      <ProductPrices
+        counter={price("priceCounter")}
+        pedidosya={price("pricePedidosYa")}
+        ubereats={price("priceUberEats")}
       />
     );
+  }
   if (column === "unitCost" && row[column] === null)
     return (
       <span className="rounded-lg bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
@@ -1162,12 +1163,18 @@ export function CatalogManager({
                       .map((column) => (
                         <div
                           key={column}
-                          className="flex justify-between gap-4 text-sm"
+                          className={
+                            column === "prices"
+                              ? "space-y-2.5 text-sm"
+                              : "flex justify-between gap-4 text-sm"
+                          }
                         >
                           <dt className="shrink-0 text-muted">
                             {columnNames[column] ?? column}
                           </dt>
-                          <dd className="min-w-0 break-words text-right text-brand tabular-nums">
+                          <dd
+                            className={`min-w-0 break-words text-brand tabular-nums ${column === "prices" ? "text-left" : "text-right"}`}
+                          >
                             <RecordValue row={row} column={column} />
                           </dd>
                         </div>
@@ -1228,11 +1235,13 @@ export function CatalogManager({
               <DialogDescription className="mt-2 text-sm leading-relaxed text-muted">
                 {copiedFrom
                   ? `Basado en ${copiedFrom}. Completá otro nombre y código, y revisá el costo. El nuevo ingrediente tendrá stock e historial independientes.`
-                  : entity === "items"
-                    ? ingredientsOnly
-                      ? "Una sola ficha para tus recetas y tu inventario. No necesitás crear otro artículo."
-                      : "Definí qué es, cómo lo medís y dónde lo usás."
-                    : "Completá los datos del registro. Los campos con * son obligatorios."}
+                  : entity === "products" && productTab === "cost"
+                    ? "Analizá una venta con sus impuestos, comisiones y gastos asignados."
+                    : entity === "items"
+                      ? ingredientsOnly
+                        ? "Una sola ficha para tus recetas y tu inventario. No necesitás crear otro artículo."
+                        : "Definí qué es, cómo lo medís y dónde lo usás."
+                      : "Completá los datos del registro. Los campos con * son obligatorios."}
               </DialogDescription>
             </div>
             {entity === "items" && (
@@ -1436,52 +1445,66 @@ export function CatalogManager({
                     id={`${formId}-panel-recipe`}
                     aria-labelledby={`${formId}-tab-${productTab === "cost" ? "cost" : productTab === "preparation" ? "preparation" : "recipe"}`}
                   >
-                    {productSetup?.mode === "direct" ? (
-                      <ProductDirectCost
-                        model={profitability.result?.products.find(
-                          (p) => p.productId === editing.id,
-                        )}
-                        error={profitability.error}
-                      />
-                    ) : draft.kind === "combo" ? (
-                      <ComboTab
-                        productId={editing.id}
-                        view={productTab === "cost" ? "cost" : "recipe"}
-                        onBusy={setRecipeBusy}
-                        onSaved={() => setCostRevision((n) => n + 1)}
-                        cost={profitability.result?.products.find(
-                          (p) => p.productId === editing.id,
-                        )}
-                      />
-                    ) : (
-                      <ProductRecipeTab
-                        view={
-                          productTab === "cost"
-                            ? "cost"
-                            : productTab === "preparation"
-                              ? "preparation"
-                              : "recipe"
-                        }
-                        key={editing.id}
-                        productId={editing.id}
-                        actorId={actorId}
-                        onBusy={setRecipeBusy}
-                        onSaved={() => {
-                          setCostRevision((n) => n + 1);
-                          setProductSetup(null);
-                          setSetupGeneration((n) => n + 1);
-                        }}
-                        onBack={() => setProductTab("product")}
-                      />
-                    )}
-                    {productTab === "cost" && (
+                    <div hidden={productTab !== "cost"}>
                       <ProductProfitability
-                        key={editing.id}
+                        key={`profitability:${editing.id}`}
                         result={profitability.result}
                         error={profitability.error}
                         onRefresh={profitability.reload}
+                        month={profitability.month}
+                        onMonthChange={profitability.setMonth}
                       />
-                    )}
+                    </div>
+                    <ProductCostDetails
+                      key={`cost-details:${editing.id}`}
+                      active={productTab === "cost"}
+                      title={
+                        productSetup?.mode === "direct"
+                          ? "Origen del costo del producto"
+                          : draft.kind === "combo"
+                            ? "Costos y disponibilidad de los componentes"
+                            : "Ingredientes y variantes"
+                      }
+                    >
+                      {productSetup?.mode === "direct" ? (
+                        <ProductDirectCost
+                          model={profitability.result?.products.find(
+                            (p) => p.productId === editing.id,
+                          )}
+                          error={profitability.error}
+                        />
+                      ) : draft.kind === "combo" ? (
+                        <ComboTab
+                          productId={editing.id}
+                          view={productTab === "cost" ? "cost" : "recipe"}
+                          onBusy={setRecipeBusy}
+                          onSaved={() => setCostRevision((n) => n + 1)}
+                          cost={profitability.result?.products.find(
+                            (p) => p.productId === editing.id,
+                          )}
+                        />
+                      ) : (
+                        <ProductRecipeTab
+                          view={
+                            productTab === "cost"
+                              ? "cost"
+                              : productTab === "preparation"
+                                ? "preparation"
+                                : "recipe"
+                          }
+                          key={`recipe:${editing.id}`}
+                          productId={editing.id}
+                          actorId={actorId}
+                          onBusy={setRecipeBusy}
+                          onSaved={() => {
+                            setCostRevision((n) => n + 1);
+                            setProductSetup(null);
+                            setSetupGeneration((n) => n + 1);
+                          }}
+                          onBack={() => setProductTab("product")}
+                        />
+                      )}
+                    </ProductCostDetails>
                   </div>
                 )}
               </>
@@ -1694,11 +1717,11 @@ export function CatalogManager({
                         .map(renderField)}
                     </div>
                     <p className="mb-4 text-xs leading-5 text-muted">
-                      Cargá los precios netos. El listado permite comparar el
-                      precio sin IVA y con IVA; la carta y el cobro muestran el
-                      precio final con IVA incluido.
+                      Cargá el precio final que paga el cliente. El IVA se
+                      desglosa dentro de ese importe en Costeo; no se suma otro
+                      porcentaje en caja.
                       {draft.kind === "combo"
-                        ? " El IVA del combo se aplica una vez al total del combo y sus adicionales."
+                        ? " Los adicionales del combo también son importes finales."
                         : ""}
                     </p>
                     <div className="grid gap-7 pt-3 lg:grid-cols-3">
@@ -1713,7 +1736,7 @@ export function CatalogManager({
                               )
                               .map(renderField)}
                             <ProductPricePreview
-                              net={draft[`price${channel}`] ?? ""}
+                              price={draft[`price${channel}`] ?? ""}
                               rate={draft.vatRate ?? ""}
                               label={
                                 channel === "Counter"
