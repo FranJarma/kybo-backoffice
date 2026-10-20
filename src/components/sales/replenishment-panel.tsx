@@ -1,4 +1,6 @@
 "use client";
+import { FieldCaption } from "@/components/ui/field-caption";
+import { OperationAlert } from "@/components/ui/operation-alert";
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Bell, ChefHat, RefreshCw, ShoppingCart, Truck } from "lucide-react";
@@ -215,15 +217,16 @@ export function ReplenishmentContent({
           Actualizando existencias…
         </p>
       )}
+      <OperationAlert
+        title="No pudimos actualizar las existencias"
+        message={error}
+        tone="error"
+      />
       {error && (
-        <p
-          role="alert"
-          className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"
-        >
-          {error}
+        <p role="status" className="text-sm text-muted">
           {snapshot
-            ? " Los datos anteriores pueden haber cambiado."
-            : " No se pudo comprobar la reposición."}
+            ? "La última lectura puede haber cambiado. Actualizá para comprobar la reposición."
+            : "La reposición está pendiente de comprobar. Actualizá para reintentar."}
         </p>
       )}
       {!loading &&
@@ -345,7 +348,9 @@ function PolicyEditor({
         className="grid gap-5 sm:grid-cols-2 [&_input[role=combobox]]:min-h-12 [&_[role=option]]:min-h-12"
       >
         <div className={labelClass}>
-          <label htmlFor={`${id}-item`}>Artículo</label>
+          <label htmlFor={`${id}-item`}>
+            <FieldCaption required>Artículo</FieldCaption>
+          </label>
           <SearchCombobox
             id={`${id}-item`}
             label="Artículo"
@@ -361,7 +366,7 @@ function PolicyEditor({
           />
         </div>
         <label className={labelClass}>
-          Ubicación
+          <FieldCaption required>Ubicación</FieldCaption>
           <select
             required
             disabled={!!policy}
@@ -383,11 +388,13 @@ function PolicyEditor({
           </select>
         </label>
         <label className={labelClass}>
-          Mínimo (
-          {item?.baseUnit === "unit"
-            ? "unid."
-            : item?.baseUnit || policy?.baseUnit || "unidad base"}
-          )
+          <FieldCaption required>
+            Mínimo (
+            {item?.baseUnit === "unit"
+              ? "unid."
+              : item?.baseUnit || policy?.baseUnit || "unidad base"}
+            )
+          </FieldCaption>
           <Input
             className={touch}
             required
@@ -403,11 +410,13 @@ function PolicyEditor({
           />
         </label>
         <label className={labelClass}>
-          Objetivo (
-          {item?.baseUnit === "unit"
-            ? "unid."
-            : item?.baseUnit || policy?.baseUnit || "unidad base"}
-          )
+          <FieldCaption required>
+            Objetivo (
+            {item?.baseUnit === "unit"
+              ? "unid."
+              : item?.baseUnit || policy?.baseUnit || "unidad base"}
+            )
+          </FieldCaption>
           <Input
             className={touch}
             required
@@ -457,9 +466,11 @@ function PolicyEditor({
         todavía no pronostica consumo.
       </p>
       {formError && (
-        <p role="alert" className="text-sm text-red-700">
-          {formError}
-        </p>
+        <OperationAlert
+          tone="error"
+          title="No pudimos completar la operación"
+          message={formError}
+        />
       )}
       <div className="flex flex-wrap justify-end gap-3">
         <Button
@@ -647,6 +658,7 @@ export function ReplenishmentPanel({
                 </Button>
                 <OperationNotice
                   error={operation.error}
+                  eventKey={operation.errorAttempt}
                   uncertain={operation.uncertain}
                   busy={operation.busy}
                   retry={operation.retry}

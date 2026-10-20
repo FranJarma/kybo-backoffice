@@ -1,4 +1,6 @@
 "use client";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
+import { OperationAlert } from "@/components/ui/operation-alert";
 import { useEffect, useState } from "react";
 import { ArrowLeft, Clock3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,7 +13,7 @@ import { duration } from "./card";
 export function PrepMetricsPanel({ onClose }: { onClose: () => void }) {
   const [date, setDate] = useState(today),
     [data, setData] = useState<PrepMetrics | null>(null),
-    [error, setError] = useState(""),
+    [error, setError, errorAttempt] = useErrorFeedback(),
     [loading, setLoading] = useState(true);
   useEffect(() => {
     let live = true;
@@ -37,7 +39,7 @@ export function PrepMetricsPanel({ onClose }: { onClose: () => void }) {
       live = false;
       clearTimeout(timer);
     };
-  }, [date]);
+  }, [date, setError]);
   return (
     <section className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -53,7 +55,7 @@ export function PrepMetricsPanel({ onClose }: { onClose: () => void }) {
         </Button>
       </div>
       <div className="max-w-xs">
-        <Control label="Fecha del resumen">
+        <Control label="Fecha del resumen" required>
           <Input
             type="date"
             required
@@ -63,9 +65,12 @@ export function PrepMetricsPanel({ onClose }: { onClose: () => void }) {
         </Control>
       </div>
       {error && (
-        <p role="alert" className="text-sm text-rose-700">
-          {error}
-        </p>
+        <OperationAlert
+          eventKey={errorAttempt}
+          tone="error"
+          title="No pudimos completar la operación"
+          message={error}
+        />
       )}
       {loading ? (
         <p className="text-sm text-muted">Consultando tiempos…</p>

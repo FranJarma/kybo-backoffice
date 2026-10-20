@@ -1,4 +1,6 @@
 "use client";
+import { OperationAlert } from "@/components/ui/operation-alert";
+import { FieldCaption } from "@/components/ui/field-caption";
 import { useState } from "react";
 import {
   MessageSquare,
@@ -53,13 +55,12 @@ export function Cart({
     onChange(lines.filter((_, j) => i !== j));
   };
   let editorError = "";
+  let priceChanged = false;
   if (editor && allowPrice) {
     try {
       const price = decimal(editor.draft.price, 2);
-      if (
-        price !== editor.source.expectedPrice &&
-        !editor.draft.priceReason.trim()
-      )
+      priceChanged = price !== editor.source.expectedPrice;
+      if (priceChanged && !editor.draft.priceReason.trim())
         editorError = "Indicá el motivo del cambio de precio.";
     } catch {
       editorError = "Revisá el precio. Usá coma para decimales.";
@@ -328,8 +329,9 @@ export function Cart({
                 {allowPrice && (
                   <>
                     <label className="grid gap-2 text-sm font-semibold text-brand">
-                      Precio unitario
+                      <FieldCaption required>Precio unitario</FieldCaption>
                       <Input
+                        required
                         autoFocus={editor.focus === "price"}
                         className="min-h-12"
                         aria-label={`Precio de ${editor.source.name}`}
@@ -344,8 +346,11 @@ export function Cart({
                       />
                     </label>
                     <label className="grid gap-2 text-sm font-semibold text-brand">
-                      Motivo del cambio de precio
+                      <FieldCaption required={priceChanged}>
+                        Motivo del cambio de precio
+                      </FieldCaption>
                       <Input
+                        required={priceChanged}
                         className="min-h-12"
                         maxLength={240}
                         value={editor.draft.priceReason}
@@ -382,9 +387,11 @@ export function Cart({
                 </label>
               </fieldset>
               {editorError && (
-                <p role="alert" className="text-sm text-amber-800">
-                  {editorError}
-                </p>
+                <OperationAlert
+                  tone="error"
+                  title="No pudimos completar la operación"
+                  message={editorError}
+                />
               )}
               <div className="flex justify-end gap-3">
                 <Button

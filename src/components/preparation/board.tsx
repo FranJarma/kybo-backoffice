@@ -216,12 +216,15 @@ export function PreparationBoard({
           Actualizar
         </Button>
       </div>
-      <OperationNotice
-        error={operation.error}
-        uncertain={operation.uncertain}
-        busy={operation.busy}
-        retry={operation.retry}
-      />
+      {!detail && (
+        <OperationNotice
+          eventKey={operation.errorAttempt}
+          error={operation.error}
+          uncertain={operation.uncertain}
+          busy={operation.busy}
+          retry={operation.retry}
+        />
+      )}
       {notice && (
         <p role="status" className="text-xs font-semibold text-emerald-800">
           {notice}
@@ -341,7 +344,7 @@ export function PreparationBoard({
             </select>
           </Control>
           {scope === "history" && (
-            <Control label="Fecha comercial">
+            <Control label="Fecha comercial" required>
               <Input
                 type="date"
                 required
@@ -493,6 +496,7 @@ export function PreparationBoard({
           }
           operationNotice={
             <OperationNotice
+              eventKey={operation.errorAttempt}
               error={operation.error}
               uncertain={operation.uncertain}
               busy={operation.busy}

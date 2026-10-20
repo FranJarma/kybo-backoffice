@@ -1,4 +1,7 @@
 "use client";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
+import { FieldCaption } from "@/components/ui/field-caption";
+import { OperationAlert } from "@/components/ui/operation-alert";
 import { useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { getJson } from "@/components/inventory/shared";
@@ -12,7 +15,7 @@ type Member = {
 export function BranchMembers({ branchId }: { branchId: string }) {
   const [rows, setRows] = useState<Member[]>([]),
     [version, setVersion] = useState(0),
-    [error, setError] = useState("");
+    [error, setError, errorAttempt] = useErrorFeedback();
   useEffect(() => {
     let live = true;
     getJson<{ rows: Member[] }>(`/api/branches/${branchId}/members`)
@@ -25,7 +28,7 @@ export function BranchMembers({ branchId }: { branchId: string }) {
     return () => {
       live = false;
     };
-  }, [branchId, version]);
+  }, [branchId, version, setError]);
   return (
     <section className="surface-panel space-y-4 p-5">
       <h2 className="text-xl font-bold">Accesos a esta sucursal</h2>
@@ -33,7 +36,14 @@ export function BranchMembers({ branchId }: { branchId: string }) {
         El permiso de catálogo es compartido por todas las sucursales. El rol
         operativo corresponde únicamente a esta sucursal.
       </p>
-      {error && <p role="alert">{error}</p>}
+      {error && (
+        <OperationAlert
+          eventKey={errorAttempt}
+          tone="error"
+          title="No pudimos completar la operación"
+          message={error}
+        />
+      )}
       {rows.map((row) => (
         <MemberForm
           key={`${row.id}:${version}`}
@@ -58,7 +68,7 @@ function MemberForm({
     [enabled, setEnabled] = useState(!!row.role && !row.revokedAt),
     [catalog, setCatalog] = useState(row.catalogManager),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState("");
+    [error, setError, errorAttempt] = useErrorFeedback();
   async function save(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -96,8 +106,9 @@ function MemberForm({
           Acceso habilitado
         </label>
         <label>
-          Rol{" "}
+          <FieldCaption required>Rol</FieldCaption>
           <select
+            required
             value={role}
             onChange={(e) => setRole(e.target.value as "staff" | "manager")}
             className="rounded border p-2"
@@ -117,9 +128,12 @@ function MemberForm({
         <Button type="submit">Guardar accesos</Button>
       </fieldset>
       {error && (
-        <p role="alert" className="text-red-700">
-          {error}
-        </p>
+        <OperationAlert
+          eventKey={errorAttempt}
+          tone="error"
+          title="No pudimos completar la operación"
+          message={error}
+        />
       )}
     </form>
   );

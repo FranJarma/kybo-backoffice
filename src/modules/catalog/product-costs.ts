@@ -24,8 +24,8 @@ import {
   requireCatalogRead,
   requireOperationalContext,
 } from "@/modules/branches/context";
-import { costContext, recipeDefinition } from "@/modules/recipes/service";
-import { loadConfiguration } from "@/modules/recipes/configuration";
+import { costContext } from "@/modules/recipes/service";
+import { costConfigurations } from "./cost-configurations";
 import { consumptionQuantity } from "@/modules/recipes/waste";
 import {
   integer,
@@ -51,12 +51,21 @@ export async function catalogProductCosts(
 ) {
   const input = z
     .object({
-      ids: z.array(z.uuid()).min(1).max(10),
+      ids: z.array(z.uuid()).min(1).max(50),
       detail: z.boolean().optional(),
       profitability: z.boolean().optional(),
       month: expenseMonth.optional(),
     })
     .strict()
+    .refine(
+      (input) =>
+        input.ids.length <= 10 || (!input.detail && !input.profitability),
+      {
+        message:
+          "Consultá hasta diez productos para el detalle o la rentabilidad.",
+        path: ["ids"],
+      },
+    )
     .parse(raw);
   await requireCatalogRead(db, actor);
   const ctx = await requireOperationalContext(db, actor, actor.branchId ?? "");
@@ -96,7 +105,12 @@ export async function catalogProductCosts(
           kind: products.kind,
           fulfillment: productFulfillmentVersions,
           recipeId: recipes.id,
-          versionId: recipeVersions.id,
+          version: {
+            id: recipeVersions.id,
+            version: recipeVersions.version,
+            compositionModel: recipeVersions.compositionModel,
+            yieldQuantity: recipeVersions.yieldQuantity,
+          },
         })
         .from(products)
         .leftJoin(
@@ -119,10 +133,19 @@ export async function catalogProductCosts(
       // Empty/unconfigured batches do not need inventory or preparation graphs.
       const estimate = rows.some(
         (row) =>
-          row.fulfillment?.mode === "direct" || (row.recipeId && row.versionId),
+          row.fulfillment?.mode === "direct" || (row.recipeId && row.version),
       )
         ? await costContext(tx, ctx.branchId)
         : undefined;
+      const configurations = await costConfigurations(
+        tx,
+        rows.flatMap((row) =>
+          row.version && row.fulfillment?.mode !== "direct"
+            ? [row.version]
+            : [],
+        ),
+        !!input.profitability,
+      );
       const results: ProductCost[] = [];
       const bases = new Map<string, ProfitabilityBasis>();
       for (const row of rows) {
@@ -188,54 +211,8 @@ export async function catalogProductCosts(
             max: amount,
             defaultCost: amount,
           };
-        } else if (row.recipeId && row.versionId) {
-          const def = await recipeDefinition(tx, row.recipeId, row.versionId);
-          let config: Configuration;
-          if (def.compositionModel === "configurable")
-            config = await loadConfiguration(tx, row.versionId, def);
-          else
-            config = {
-              recipeVersionId: def.versionId,
-              revision: def.revision,
-              model: "legacy",
-              yieldQuantity: def.yieldQuantity,
-              fixed: def.lines
-                .filter((l) => !l.optional && l.options.length === 1)
-                .map((l) => l.options[0]),
-              groups: def.lines
-                .filter((l) => l.optional || l.options.length > 1)
-                .map((l, i) => ({
-                  id: l.id,
-                  name: "Alternativas " + (i + 1),
-                  groupVersionId: l.id,
-                  min: l.optional ? 0 : 1,
-                  max: 1,
-                  factor: "1.000000",
-                  options: l.options.map((o, j) => ({
-                    ...o,
-                    key: o.id,
-                    kind: "composition",
-                    instruction: null,
-                    enabled: true,
-                    defaultCount: j === 0 ? 1 : 0,
-                    maxCount: 1,
-                    mode: "override",
-                    components: [
-                      {
-                        ...o,
-                        quantity: consumptionQuantity(
-                          o.quantity,
-                          o.wastePercent,
-                          SCALE,
-                          integer(def.yieldQuantity),
-                        ),
-                        wastePercent: "0.00",
-                      },
-                    ],
-                    prices: {},
-                  })),
-                })),
-            };
+        } else if (row.version) {
+          const config = configurations.get(row.version.id)!;
           const fixed = cost(
             config.fixed,
             SCALE,

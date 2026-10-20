@@ -100,6 +100,10 @@ a {
   background: #f1f4f8;
   color: var(--muted);
 }
+.form-control[aria-invalid="true"],
+[data-slot="input"][aria-invalid="true"] {
+  border-color: #ef4444;
+}
 .page-container {
   width: 100%;
   max-width: 1680px;

@@ -75,6 +75,7 @@ export function SearchCombobox({
         role="combobox"
         aria-label={label}
         aria-autocomplete="list"
+        aria-required={required || undefined}
         aria-expanded={open && !disabled}
         aria-busy={loading || undefined}
         aria-controls={open ? listId : undefined}

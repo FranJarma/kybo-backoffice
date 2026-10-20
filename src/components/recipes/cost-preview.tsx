@@ -1,4 +1,5 @@
 "use client";
+import { OperationAlert } from "@/components/ui/operation-alert";
 import { Fragment, useEffect, useState } from "react";
 import { recipeSection } from "@/modules/catalog/item-classes";
 import { money, quantity } from "@/components/inventory/shared";
@@ -205,7 +206,14 @@ export function CostPreview({
         {!current ? (
           <span>Calculando…</span>
         ) : current.error ? (
-          <p role="alert">{current.error}</p>
+          <>
+            <OperationAlert
+              message={current.error}
+              title="No pudimos calcular el costo"
+              tone="error"
+            />
+            <span>Sin calcular</span>
+          </>
         ) : (
           <>
             <strong>

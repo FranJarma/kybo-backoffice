@@ -3,11 +3,14 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { Label as LabelPrimitive } from "radix-ui";
+import { FieldCaption } from "./field-caption";
 
 function Label({
   className,
+  required = false,
+  children,
   ...props
-}: React.ComponentProps<typeof LabelPrimitive.Root>) {
+}: React.ComponentProps<typeof LabelPrimitive.Root> & { required?: boolean }) {
   return (
     <LabelPrimitive.Root
       data-slot="label"
@@ -16,7 +19,9 @@ function Label({
         className,
       )}
       {...props}
-    />
+    >
+      {required ? <FieldCaption required>{children}</FieldCaption> : children}
+    </LabelPrimitive.Root>
   );
 }
 

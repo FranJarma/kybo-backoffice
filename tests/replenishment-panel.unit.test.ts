@@ -74,7 +74,7 @@ describe("consulta operativa de reposición", () => {
       "Dentro de los mínimos",
     );
     expect(render({ snapshot: healthy, error: "Sin conexión" })).toContain(
-      "Sin conexión",
+      "La última lectura puede haber cambiado",
     );
     expect(render({ snapshot: healthy, error: "Sin conexión" })).not.toContain(
       "Dentro de los mínimos",

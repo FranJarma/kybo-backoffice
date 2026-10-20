@@ -18,6 +18,12 @@ import { paymentMethods, productPrices } from "../src/db/business-schema";
 import { branchMemberships, branchProducts } from "../src/db/branch-schema";
 import { publishCombo } from "../src/modules/combos/service";
 import { estimateProfitability } from "../src/modules/pricing/product-profitability";
+import { drizzle } from "drizzle-orm/pglite";
+import * as schema from "../src/db/schema";
+import type { AppDb } from "../src/db/client";
+import { loadConfiguration } from "../src/modules/recipes/configuration";
+import { recipeDefinition } from "../src/modules/recipes/service";
+import { costConfigurations } from "../src/modules/catalog/cost-configurations";
 let ctx: Awaited<ReturnType<typeof createDataModelTestContext>>;
 const actor: Actor = { id: "product-cost-test", role: "admin" };
 let otherBranch: string,
@@ -140,6 +146,85 @@ beforeAll(async () => {
 });
 afterAll(async () => {
   await ctx?.close();
+});
+it("costea varias recetas con modificadores con un número acotado de lecturas", async () => {
+  const [recipe] = await ctx.db
+    .select()
+    .from(schema.recipes)
+    .where(eq(schema.recipes.productId, productId));
+  const [version] = await ctx.db
+    .select()
+    .from(schema.recipeVersions)
+    .where(eq(schema.recipeVersions.recipeId, recipe.id));
+  const original = await loadConfiguration(ctx.db, version.id);
+  const group = original.groups[0];
+  const copies = await ctx.db
+    .insert(products)
+    .values(
+      Array.from({ length: 5 }, (_, i) => ({ name: `Bebida en lote ${i}` })),
+    )
+    .returning();
+  for (const copy of copies) {
+    await createRecipeService(ctx.db).save(actor, {
+      requestId: randomUUID(),
+      kind: "product",
+      targetId: copy.id,
+      yieldQuantity: "1",
+      compositionModel: "configurable",
+      lines: [
+        {
+          options: [
+            { itemId: original.fixed[0].itemId, quantity: "10", baseUnit: "g" },
+          ],
+        },
+      ],
+      groups: [
+        {
+          groupVersionId: group.groupVersionId,
+          name: group.name,
+          min: 1,
+          max: 1,
+          factor: "2",
+          options: group.options.map((option) => ({
+            optionKey: option.key,
+            enabled: true,
+            defaultCount: option.defaultCount,
+            maxCount: 1,
+            mode: "inherit",
+            components: [],
+            prices: {},
+          })),
+        },
+      ],
+    });
+  }
+  const reads: string[] = [];
+  const measured = drizzle({
+    client: ctx.client,
+    schema,
+    logger: {
+      logQuery(query) {
+        if (/^select\b/i.test(query)) reads.push(query);
+      },
+    },
+  }) as unknown as AppDb;
+  const result = await catalogProductCosts(measured, actor, {
+    ids: [productId, ...copies.map((p) => p.id)],
+    detail: true,
+  });
+  expect(result.products).toHaveLength(6);
+  for (const product of result.products) {
+    expect(product).toMatchObject({
+      fixed: "20.000000",
+      min: "20.000000",
+      max: "60.000000",
+      defaultCost: "20.000000",
+    });
+    expect(
+      product.groups[0].options.find((o) => o.name === "Sin extra")?.costs[1],
+    ).toBe("0.000000");
+  }
+  expect(reads.length).toBeLessThanOrEqual(20);
 });
 it("usa el costo de cada sucursal, incorpora merma y factor, y no cobra instrucciones", async () => {
   const a = await catalogProductCosts(ctx.db, actor, {
@@ -308,6 +393,205 @@ it("does not expose fees to staff even when they have shared catalog access", as
     }),
   ).rejects.toMatchObject({ status: 403 });
 });
+it("conserva reemplazos, merma, recargos y la configuración del lector anterior", async () => {
+  const [source] = await ctx.db
+    .select()
+    .from(schema.recipes)
+    .where(eq(schema.recipes.productId, productId));
+  const [sourceVersion] = await ctx.db
+    .select()
+    .from(schema.recipeVersions)
+    .where(eq(schema.recipeVersions.recipeId, source.id));
+  const config = await loadConfiguration(ctx.db, sourceVersion.id);
+  const group = config.groups[0];
+  const [product] = await ctx.db
+    .insert(products)
+    .values({ name: "Reemplazos para costeo", vatRate: "21" })
+    .returning();
+  await ctx.db
+    .insert(productPrices)
+    .values({ productId: product.id, channel: "counter", amount: "1000" });
+  const saved = await createRecipeService(ctx.db).save(actor, {
+    requestId: randomUUID(),
+    kind: "product",
+    targetId: product.id,
+    yieldQuantity: "1",
+    compositionModel: "configurable",
+    lines: [
+      {
+        options: [
+          { itemId: config.fixed[0].itemId, quantity: "10", baseUnit: "g" },
+        ],
+      },
+    ],
+    groups: [
+      {
+        groupVersionId: group.groupVersionId,
+        name: group.name,
+        min: 1,
+        max: 1,
+        factor: "2",
+        options: group.options.map((o) => ({
+          optionKey: o.key,
+          enabled: true,
+          defaultCount: o.key === "extra" ? 1 : 0,
+          maxCount: 1,
+          mode: o.kind === "instruction" ? "inherit" : "override",
+          components:
+            o.kind === "instruction"
+              ? []
+              : [
+                  {
+                    itemId: config.fixed[0].itemId,
+                    quantity: "3",
+                    baseUnit: "g",
+                    wastePercent: "50",
+                  },
+                ],
+          prices: { counter: o.key === "extra" ? "25" : "0" },
+        })),
+      },
+    ],
+  });
+  const definition = await recipeDefinition(ctx.db, saved.id, saved.versionId);
+  const previous = await loadConfiguration(ctx.db, saved.versionId, definition);
+  const [version] = await ctx.db
+    .select()
+    .from(schema.recipeVersions)
+    .where(eq(schema.recipeVersions.id, saved.versionId));
+  const bulk = (await costConfigurations(ctx.db, [version], true)).get(
+    version.id,
+  );
+  const normalize = (value: unknown) =>
+    JSON.parse(
+      JSON.stringify(value, (key, v) => (key === "unitCost" ? undefined : v)),
+    );
+  expect(normalize(bulk)).toEqual(normalize(previous));
+  const result = await catalogProductCosts(ctx.db, actor, {
+    ids: [product.id],
+    profitability: true,
+  });
+  expect(result.products[0]).toMatchObject({
+    min: "20.000000",
+    max: "32.000000",
+    defaultCost: "32.000000",
+  });
+  expect(
+    estimateProfitability(result.profitability![0], "counter", {}),
+  ).toMatchObject({ finalPrice: "1025.00", cost: "32.000000" });
+});
+
+it("mantiene rendimiento y alternativas de las recetas anteriores", async () => {
+  const [source] = await ctx.db
+    .select()
+    .from(schema.recipes)
+    .where(eq(schema.recipes.productId, productId));
+  const [version] = await ctx.db
+    .select()
+    .from(schema.recipeVersions)
+    .where(eq(schema.recipeVersions.recipeId, source.id));
+  const config = await loadConfiguration(ctx.db, version.id);
+  const itemId = config.fixed[0].itemId;
+  const [product] = await ctx.db
+    .insert(products)
+    .values({ name: "Receta anterior" })
+    .returning();
+  // Historical imports may have non-unit yields; the current editor publishes one sale unit.
+  const [recipe] = await ctx.db
+    .insert(schema.recipes)
+    .values({ kind: "product", productId: product.id })
+    .returning();
+  const [legacy] = await ctx.db
+    .insert(schema.recipeVersions)
+    .values({
+      recipeId: recipe.id,
+      version: 1,
+      compositionModel: "legacy",
+      outputName: product.name,
+      outputUnit: "unit",
+      yieldQuantity: "2",
+      actorId: actor.id,
+    })
+    .returning();
+  const lines = await ctx.db
+    .insert(schema.recipeLines)
+    .values([
+      { versionId: legacy.id, position: 0, optional: false },
+      { versionId: legacy.id, position: 1, optional: false },
+      { versionId: legacy.id, position: 2, optional: true },
+    ])
+    .returning();
+  await ctx.db.insert(schema.recipeOptions).values([
+    {
+      lineId: lines[0].id,
+      position: 0,
+      itemId,
+      itemName: "Ingrediente",
+      baseUnit: "g",
+      quantity: "10",
+    },
+    {
+      lineId: lines[1].id,
+      position: 0,
+      itemId,
+      itemName: "Ingrediente",
+      baseUnit: "g",
+      quantity: "4",
+    },
+    {
+      lineId: lines[1].id,
+      position: 1,
+      itemId,
+      itemName: "Ingrediente",
+      baseUnit: "g",
+      quantity: "8",
+    },
+    {
+      lineId: lines[2].id,
+      position: 0,
+      itemId,
+      itemName: "Ingrediente",
+      baseUnit: "g",
+      quantity: "2",
+    },
+  ]);
+  const result = await catalogProductCosts(ctx.db, actor, {
+    ids: [product.id],
+  });
+  expect(result.products[0]).toMatchObject({
+    fixed: "10.000000",
+    min: "14.000000",
+    max: "20.000000",
+    defaultCost: "16.000000",
+  });
+});
+
+it("permite cincuenta resúmenes y mantiene límites menores para detalle y rentabilidad", async () => {
+  const batch = await ctx.db
+    .insert(products)
+    .values(
+      Array.from({ length: 51 }, (_, i) => ({ name: `Sin configurar ${i}` })),
+    )
+    .returning();
+  const ids = batch.map((p) => p.id);
+  expect(
+    (await catalogProductCosts(ctx.db, actor, { ids: ids.slice(0, 50) }))
+      .products,
+  ).toHaveLength(50);
+  await expect(
+    catalogProductCosts(ctx.db, actor, { ids }),
+  ).rejects.toHaveProperty("issues");
+  await expect(
+    catalogProductCosts(ctx.db, actor, { ids: ids.slice(0, 11), detail: true }),
+  ).rejects.toHaveProperty("issues");
+  await expect(
+    catalogProductCosts(ctx.db, actor, {
+      ids: ids.slice(0, 11),
+      profitability: true,
+    }),
+  ).rejects.toHaveProperty("issues");
+});
+
 it("usa referencias sin stock y muestra pendiente si falta la valuación", async () => {
   const empty = (
     await ctx.db

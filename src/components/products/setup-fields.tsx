@@ -3,6 +3,9 @@ import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { SearchCombobox } from "@/components/ui/search-combobox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FieldCaption } from "@/components/ui/field-caption";
+import { OperationAlert } from "@/components/ui/operation-alert";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
 import { getJson } from "@/components/inventory/shared";
 import { money } from "@/lib/number-format";
 import type { productSetupOptions } from "@/modules/products/onboarding";
@@ -77,7 +80,7 @@ export function ProductSetupFields({
   disabled: boolean;
 }) {
   const [data, setData] = useState<Options>();
-  const [error, setError] = useState("");
+  const [error, setError, errorAttempt] = useErrorFeedback();
   const [refresh, setRefresh] = useState(0);
   const [query, setQuery] = useState("");
   const [articles, setArticles] = useState<
@@ -126,7 +129,7 @@ export function ProductSetupFields({
     return () => {
       live = false;
     };
-  }, [productId, initialKind, onChange, refresh]);
+  }, [productId, initialKind, onChange, refresh, setError]);
   const sourceMode = value?.sourceMode,
     mode = value?.mode;
   useEffect(() => {
@@ -168,7 +171,7 @@ export function ProductSetupFields({
       live = false;
       clearTimeout(timer);
     };
-  }, [query, mode, sourceMode]);
+  }, [query, mode, sourceMode, setError]);
   function update(patch: Partial<ProductSetupDraft>) {
     onChange((current) => (current ? { ...current, ...patch } : current));
   }
@@ -185,9 +188,14 @@ export function ProductSetupFields({
             : "Cargando la sucursal seleccionada…"}
         </p>
       </div>
+      <OperationAlert
+        title="No pudimos cargar la configuración"
+        message={error}
+        eventKey={errorAttempt}
+        tone="error"
+      />
       {error && (
-        <div role="alert" className="space-y-2 text-sm text-red-700">
-          <p>{error}</p>
+        <div className="space-y-2">
           {!value && (
             <Button
               type="button"
@@ -202,10 +210,11 @@ export function ProductSetupFields({
       {value && data && (
         <fieldset disabled={disabled} className="space-y-5">
           <label className="block text-sm font-medium">
-            Tipo de producto
+            <FieldCaption required>Tipo de producto</FieldCaption>
             <select
               className="form-control mt-2"
               value={value.mode}
+              required
               onChange={(e) => {
                 const next = e.target.value as ProductMode;
                 update({ mode: next });
@@ -241,10 +250,11 @@ export function ProductSetupFields({
           {value.mode === "direct" && (
             <>
               <label className="block text-sm font-medium">
-                Artículo de inventario
+                <FieldCaption required>Artículo de inventario</FieldCaption>
                 <select
                   className="form-control mt-2"
                   value={value.sourceMode}
+                  required
                   onChange={(e) =>
                     update({ sourceMode: e.target.value as "existing" | "new" })
                   }
@@ -259,7 +269,7 @@ export function ProductSetupFields({
                     className="block text-sm font-medium"
                     htmlFor={`resale-${productId ?? "new"}`}
                   >
-                    Buscar artículo
+                    <FieldCaption required>Buscar artículo</FieldCaption>
                   </label>
                   <SearchCombobox
                     id={`resale-${productId ?? "new"}`}
@@ -287,7 +297,7 @@ export function ProductSetupFields({
               ) : (
                 <div className="grid gap-5 sm:grid-cols-2">
                   <label className="block text-sm font-medium">
-                    Nombre del artículo
+                    <FieldCaption required>Nombre del artículo</FieldCaption>
                     <Input
                       className="mt-2"
                       required
@@ -296,10 +306,11 @@ export function ProductSetupFields({
                     />
                   </label>
                   <label className="block text-sm font-medium">
-                    Clase del artículo
+                    <FieldCaption required>Clase del artículo</FieldCaption>
                     <select
                       className="form-control mt-2"
                       value={value.newItemClass}
+                      required
                       onChange={(e) => update({ newItemClass: e.target.value })}
                     >
                       <option value="beverage">Bebida</option>
@@ -326,7 +337,9 @@ export function ProductSetupFields({
               )}
               <div className="grid gap-5 sm:grid-cols-2">
                 <label className="block text-sm font-medium">
-                  Unidades de inventario por venta
+                  <FieldCaption required>
+                    Unidades de inventario por venta
+                  </FieldCaption>
                   <Input
                     className="mt-2"
                     inputMode="decimal"
@@ -339,7 +352,7 @@ export function ProductSetupFields({
                   </span>
                 </label>
                 <label className="block text-sm font-medium">
-                  Dónde está el stock
+                  <FieldCaption required>Dónde está el stock</FieldCaption>
                   <select
                     className="form-control mt-2"
                     required
@@ -366,7 +379,7 @@ export function ProductSetupFields({
           {value.mode === "recipe" && (
             <>
               <label className="block text-sm font-medium">
-                Dónde se prepara
+                <FieldCaption required>Dónde se prepara</FieldCaption>
                 <select
                   className="form-control mt-2"
                   required

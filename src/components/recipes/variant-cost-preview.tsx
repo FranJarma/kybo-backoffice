@@ -3,6 +3,7 @@ import { useEffect, useId, useState } from "react";
 import { money } from "@/lib/number-format";
 import { variantTotals } from "@/modules/recipes/variant-costs";
 import { Input } from "@/components/ui/input";
+import { OperationAlert } from "@/components/ui/operation-alert";
 import type { PreviewRow } from "./cost-preview";
 
 export type VariantGroup = {
@@ -213,9 +214,14 @@ export function VariantCostPreview({
             : "Esta comparación muestra una elección por variante. Elegí un grupo que permita seleccionar una sola opción."}
         </p>
       ) : current?.error ? (
-        <p role="alert" className="text-sm text-red-700">
-          {current.error}
-        </p>
+        <>
+          <OperationAlert
+            message={current.error}
+            title="No pudimos comparar las variantes"
+            tone="error"
+          />
+          <p className="text-sm text-muted">Comparación sin calcular.</p>
+        </>
       ) : (
         <>
           <div className="overflow-x-auto" aria-live="polite">

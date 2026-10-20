@@ -1,4 +1,7 @@
 "use client";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
+import { OperationAlert } from "@/components/ui/operation-alert";
+import { FieldCaption } from "@/components/ui/field-caption";
 import { useEffect, useId, useState } from "react";
 import { Info, RotateCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -10,14 +13,16 @@ export const selectClass =
 export function Control({
   label,
   children,
+  required = false,
 }: {
   label: string;
   children: React.ReactNode;
+  required?: boolean;
 }) {
   return (
     <label className="block min-w-0">
       <span className="mb-2 block text-xs font-semibold text-brand">
-        {label}
+        <FieldCaption required={required}>{label}</FieldCaption>
       </span>
       {children}
     </label>
@@ -40,31 +45,41 @@ export function OperationNotice({
   uncertain,
   busy,
   retry,
+  eventKey,
 }: {
   error: string;
   uncertain: boolean;
   busy: boolean;
   retry: () => void;
+  eventKey?: number | string;
 }) {
   if (!error && !uncertain) return null;
   return (
-    <div
-      role="alert"
-      className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"
-    >
-      <p>{error}</p>
+    <>
+      <OperationAlert
+        eventKey={eventKey}
+        tone="error"
+        title="No pudimos completar la operación"
+        message={error}
+      />
       {uncertain && (
-        <Button
-          className="mt-3"
-          variant="outline"
-          disabled={busy}
-          onClick={retry}
+        <div
+          role="status"
+          className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"
         >
-          <RotateCw size={16} />
-          {busy ? "Confirmando…" : "Reintentar mismo envío"}
-        </Button>
+          <p>El resultado del envío está pendiente de confirmar.</p>
+          <Button
+            className="mt-3"
+            variant="outline"
+            disabled={busy}
+            onClick={retry}
+          >
+            <RotateCw size={16} />
+            {busy ? "Confirmando…" : "Reintentar mismo envío"}
+          </Button>
+        </div>
       )}
-    </div>
+    </>
   );
 }
 export function LookupSelect({
@@ -75,6 +90,7 @@ export function LookupSelect({
   disabled = false,
   empty = "Seleccionar",
   initialName,
+  required = false,
 }: {
   kind: "customers" | "payment-methods";
   label: string;
@@ -83,6 +99,7 @@ export function LookupSelect({
   disabled?: boolean;
   empty?: string;
   initialName?: string;
+  required?: boolean;
 }) {
   const id = useId(),
     [q, setQ] = useState(""),
@@ -90,7 +107,7 @@ export function LookupSelect({
     [cached, setCached] = useState<{ id: string; name: string } | null>(
       value && initialName ? { id: value, name: initialName } : null,
     ),
-    [error, setError] = useState(""),
+    [error, setError, errorAttempt] = useErrorFeedback(),
     [loading, setLoading] = useState(true);
   useEffect(() => {
     let live = true;
@@ -116,7 +133,7 @@ export function LookupSelect({
       live = false;
       clearTimeout(timer);
     };
-  }, [kind, q]);
+  }, [kind, q, setError]);
   const options = data.rows.some((r) => r.id === value)
     ? data.rows
     : cached?.id === value
@@ -128,7 +145,7 @@ export function LookupSelect({
         htmlFor={id}
         className="mb-2 block text-xs font-semibold text-brand"
       >
-        {label}
+        <FieldCaption required={required}>{label}</FieldCaption>
       </label>
       {(data.total > 30 || q) && (
         <Input
@@ -144,6 +161,7 @@ export function LookupSelect({
         id={id}
         className={selectClass}
         value={value}
+        required={required}
         disabled={disabled || loading}
         onChange={(e) => {
           setCached(options.find((r) => r.id === e.target.value) ?? null);
@@ -158,9 +176,12 @@ export function LookupSelect({
         ))}
       </select>
       {error && (
-        <p role="alert" className="mt-1 text-xs text-red-700">
-          {error}
-        </p>
+        <OperationAlert
+          eventKey={errorAttempt}
+          tone="error"
+          title="No pudimos completar la operación"
+          message={error}
+        />
       )}
     </div>
   );

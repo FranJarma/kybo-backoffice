@@ -1,4 +1,6 @@
 "use client";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
+import { OperationAlert } from "@/components/ui/operation-alert";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
@@ -43,7 +45,7 @@ export function TablesManager({
   const [tables, setTables] = useState<TableView[]>([]),
     [refresh, setRefresh] = useState(0),
     [loading, setLoading] = useState(true),
-    [error, setError] = useState(""),
+    [error, setError, errorAttempt] = useErrorFeedback(),
     [editing, setEditing] = useState(false),
     [draft, setDraft] = useState<Draft | null>(null),
     [notice, setNotice] = useState("");
@@ -77,7 +79,7 @@ export function TablesManager({
       live = false;
       clearTimeout(timer);
     };
-  }, [refresh]);
+  }, [refresh, setError]);
   const occupied = tables.filter((t) => t.saleId),
     balance = cents(
       occupied.reduce((sum, t) => sum + integer(t.balanceDue!), 0n),
@@ -187,6 +189,7 @@ export function TablesManager({
       </div>
       {!draft && (
         <OperationNotice
+          eventKey={operation.errorAttempt}
           error={operation.error}
           uncertain={operation.uncertain}
           busy={operation.busy}
@@ -194,12 +197,12 @@ export function TablesManager({
         />
       )}
       {error && (
-        <p
-          role="alert"
-          className="rounded-xl bg-red-50 p-4 text-sm text-red-700"
-        >
-          {error}
-        </p>
+        <OperationAlert
+          eventKey={errorAttempt}
+          tone="error"
+          title="No pudimos completar la operación"
+          message={error}
+        />
       )}
       {notice && (
         <p role="status" className="text-sm text-emerald-800">
@@ -392,21 +395,24 @@ export function TablesManager({
               </DialogDescription>
             </DialogHeader>
             <OperationNotice
+              eventKey={operation.errorAttempt}
               error={operation.error}
               uncertain={operation.uncertain}
               busy={operation.busy}
               retry={operation.retry}
             />
             <fieldset disabled={operation.locked} className="space-y-4">
-              <Control label="Nombre de la mesa">
+              <Control label="Nombre de la mesa" required>
                 <Input
+                  required
                   value={draft.name}
                   maxLength={40}
                   onChange={(e) => setDraft({ ...draft, name: e.target.value })}
                 />
               </Control>
-              <Control label="Capacidad">
+              <Control label="Capacidad" required>
                 <Input
+                  required
                   type="number"
                   min={1}
                   max={30}
@@ -417,8 +423,9 @@ export function TablesManager({
                 />
               </Control>
               <div className="grid grid-cols-2 gap-4">
-                <Control label="Columna">
+                <Control label="Columna" required>
                   <select
+                    required
                     className={selectClass}
                     value={draft.x}
                     onChange={(e) =>
@@ -432,8 +439,9 @@ export function TablesManager({
                     ))}
                   </select>
                 </Control>
-                <Control label="Fila">
+                <Control label="Fila" required>
                   <select
+                    required
                     className={selectClass}
                     value={draft.y}
                     onChange={(e) =>

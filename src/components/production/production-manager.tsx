@@ -1,4 +1,6 @@
 "use client";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
+import { OperationAlert } from "@/components/ui/operation-alert";
 import { decimal, integer } from "@/modules/inventory/decimal";
 import { consumptionQuantity } from "@/modules/recipes/waste";
 
@@ -69,14 +71,15 @@ export function ProductionManager({
     [refresh, setRefresh] = useState(0);
   const [loading, setLoading] = useState(true),
     [recipeLoading, setRecipeLoading] = useState(!!initialRecipe),
-    [error, setError] = useState("");
+    [error, setError, errorAttempt] = useErrorFeedback();
   const [saved, setSaved] = useState<BatchDetail | null>(null),
     [history, setHistory] = useState<{ rows: BatchSummary[]; total: number }>({
       rows: [],
       total: 0,
     }),
     [historyOffset, setHistoryOffset] = useState(0);
-  const [historyError, setHistoryError] = useState(""),
+  const [historyError, setHistoryError, historyErrorAttempt] =
+      useErrorFeedback(),
     [batch, setBatch] = useState<BatchDetail | null>(null),
     [batchLoading, setBatchLoading] = useState(false);
   const onSaved = useCallback((result: unknown) => {
@@ -118,7 +121,7 @@ export function ProductionManager({
       live = false;
       clearTimeout(timer);
     };
-  }, [search, offset, refresh]);
+  }, [search, offset, refresh, setError]);
   useEffect(() => {
     let live = true;
     const timer = setTimeout(() => {
@@ -148,7 +151,7 @@ export function ProductionManager({
       live = false;
       clearTimeout(timer);
     };
-  }, [selectedId, refresh]);
+  }, [selectedId, refresh, setError]);
   useEffect(() => {
     let live = true;
     const timer = setTimeout(() => {
@@ -169,7 +172,7 @@ export function ProductionManager({
       live = false;
       clearTimeout(timer);
     };
-  }, [refresh, historyOffset]);
+  }, [refresh, historyOffset, setHistoryError]);
   async function showBatch(id: string) {
     setBatchLoading(true);
     setBatch(null);
@@ -200,20 +203,28 @@ export function ProductionManager({
         </Button>
       </div>
       {(error || operation.error) && (
-        <div
-          role="alert"
-          className="mb-5 rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-800"
-        >
-          <p>{error || operation.error}</p>
+        <>
+          <OperationAlert
+            eventKey={error ? errorAttempt : operation.errorAttempt}
+            tone="error"
+            title="No pudimos completar la operación"
+            message={error || operation.error}
+          />
           {operation.uncertain ? (
-            <Button
-              className="mt-3"
-              variant="outline"
-              disabled={operation.busy}
-              onClick={operation.retry}
+            <div
+              role="status"
+              className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"
             >
-              Reintentar mismo envío
-            </Button>
+              <p>El resultado del envío está pendiente de confirmar.</p>
+              <Button
+                className="mt-3"
+                variant="outline"
+                disabled={operation.busy}
+                onClick={operation.retry}
+              >
+                Reintentar mismo envío
+              </Button>
+            </div>
           ) : error ? (
             <Button
               className="mt-3"
@@ -223,7 +234,7 @@ export function ProductionManager({
               Reintentar carga
             </Button>
           ) : null}
-        </div>
+        </>
       )}
       <div
         className="mb-5 flex gap-6 border-b border-line"
@@ -453,15 +464,21 @@ export function ProductionManager({
           </span>
         </div>
         {historyError && (
-          <p role="alert" className="p-4 text-sm text-red-700">
-            {historyError}{" "}
-            <button
-              className="underline"
+          <>
+            <OperationAlert
+              eventKey={historyErrorAttempt}
+              tone="error"
+              title="No pudimos cargar las producciones"
+              message={historyError}
+            />
+            <Button
+              className="m-4"
+              variant="outline"
               onClick={() => setRefresh((n) => n + 1)}
             >
               Reintentar
-            </button>
-          </p>
+            </Button>
+          </>
         )}
         {!history.rows.length ? (
           <p className="p-6 text-sm text-muted">
@@ -578,7 +595,7 @@ function ProductionForm({
       preview: ProductionPreview;
     } | null>(null),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState("");
+    [error, setError, errorAttempt] = useErrorFeedback();
   const [confirmationSent, setConfirmationSent] = useState(false);
   const disabled = locked || busy;
   const preview = review?.preview;
@@ -933,12 +950,12 @@ function ProductionForm({
           </div>
         )}
         {error && (
-          <p
-            role="alert"
-            className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"
-          >
-            {error}
-          </p>
+          <OperationAlert
+            eventKey={errorAttempt}
+            tone="error"
+            title="No pudimos completar la operación"
+            message={error}
+          />
         )}
         {confirmationSent && operationStatus === 409 && (
           <Notice>

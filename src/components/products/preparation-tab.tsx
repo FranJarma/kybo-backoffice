@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getJson, useOperation } from "@/components/inventory/shared";
 import { Button } from "@/components/ui/button";
+import { OperationAlert } from "@/components/ui/operation-alert";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
 import type { PrepSettings } from "@/modules/preparation/types";
 
 export function ProductPreparationTab({
@@ -16,7 +18,7 @@ export function ProductPreparationTab({
 }) {
   const [data, setData] = useState<PrepSettings>();
   const [stationId, setStationId] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError, errorAttempt] = useErrorFeedback();
   const [refresh, setRefresh] = useState(0);
   const [notice, setNotice] = useState("");
   const operation = useOperation(actorId, "preparation-settings", () => {
@@ -42,7 +44,7 @@ export function ProductPreparationTab({
     return () => {
       live = false;
     };
-  }, [productId, refresh]);
+  }, [productId, refresh, setError]);
   const product = data?.products.find((p) => p.id === productId);
   const station = data?.stations.find((s) => s.id === stationId);
   const location = data?.locations.find(
@@ -58,8 +60,13 @@ export function ProductPreparationTab({
         </p>
       </div>
       {error ? (
-        <div role="alert">
-          <p>{error}</p>
+        <div>
+          <OperationAlert
+            message={error}
+            eventKey={errorAttempt}
+            title="No pudimos cargar las estaciones"
+            tone="error"
+          />
           <Button variant="outline" onClick={() => setRefresh((n) => n + 1)}>
             Reintentar
           </Button>
@@ -114,11 +121,12 @@ export function ProductPreparationTab({
           </Button>
         </>
       )}
-      {operation.error && (
-        <p role="alert" className="text-sm text-red-700">
-          {operation.error}
-        </p>
-      )}
+      <OperationAlert
+        message={operation.error}
+        eventKey={operation.errorAttempt}
+        title="No pudimos guardar la estación"
+        tone="error"
+      />
       {operation.status === 409 && !operation.uncertain && (
         <Button
           variant="outline"

@@ -1,4 +1,5 @@
 "use client";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
 import {
   ComboConfigurator,
   type ComboSaleConfiguration,
@@ -22,6 +23,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { OperationAlert } from "@/components/ui/operation-alert";
+import { FieldCaption } from "@/components/ui/field-caption";
 import { ReplenishmentPanel } from "./replenishment-panel";
 import { PosRequestCache } from "./request-cache";
 import {
@@ -93,7 +95,7 @@ export function SalesManager({
     [detail, setDetail] = useState<SaleDetail | null>(null),
     [loading, setLoading] = useState(!!initialAccount),
     [refresh, setRefresh] = useState(0),
-    [error, setError] = useState(""),
+    [error, setError, errorAttempt] = useErrorFeedback(),
     [notice, setNotice] = useState("");
   const [paymentOpen, setPaymentOpen] = useState(false),
     [cancelOpen, setCancelOpen] = useState(false),
@@ -157,7 +159,7 @@ export function SalesManager({
       setError("");
       setRefresh((n) => n + 1);
     },
-    [view],
+    [view, setError],
   );
   const operation = useOperation<Record<string, unknown>>(
     actorId,
@@ -201,7 +203,7 @@ export function SalesManager({
     return () => {
       live = false;
     };
-  }, [origin, fulfillment, refresh]);
+  }, [origin, fulfillment, refresh, setError]);
   useEffect(() => {
     if (!initialAccount) return;
     let live = true;
@@ -218,7 +220,7 @@ export function SalesManager({
     return () => {
       live = false;
     };
-  }, [initialAccount]);
+  }, [initialAccount, setError]);
   const total = cartTotal(lines),
     selectedTable = tables.find((t) => t.id === tableId),
     isAppend = view === "append";
@@ -676,6 +678,7 @@ export function SalesManager({
       </div>
       {!paymentOpen && !cancelOpen && (
         <OperationNotice
+          eventKey={operation.errorAttempt}
           error={operation.error}
           uncertain={operation.uncertain}
           busy={operation.busy}
@@ -683,12 +686,12 @@ export function SalesManager({
         />
       )}
       {error && (
-        <p
-          role="alert"
-          className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800"
-        >
-          {error}
-        </p>
+        <OperationAlert
+          eventKey={errorAttempt}
+          tone="error"
+          title="No pudimos completar la operación"
+          message={error}
+        />
       )}
       <OperationAlert
         title="Punto de venta"
@@ -831,8 +834,9 @@ export function SalesManager({
                     )}
                     {origin === "delivery" ? (
                       <>
-                        <Control label="Plataforma">
+                        <Control label="Plataforma" required>
                           <select
+                            required
                             value={channel}
                             disabled={locked || lines.length > 0}
                             className={selectClass}
@@ -844,8 +848,9 @@ export function SalesManager({
                             <option value="ubereats">Uber Eats</option>
                           </select>
                         </Control>
-                        <Control label="Número del pedido externo">
+                        <Control label="Número del pedido externo" required>
                           <Input
+                            required
                             value={externalId}
                             disabled={locked}
                             maxLength={80}
@@ -853,8 +858,9 @@ export function SalesManager({
                             onChange={(e) => setExternalId(e.target.value)}
                           />
                         </Control>
-                        <Control label="Entrega">
+                        <Control label="Entrega" required>
                           <select
+                            required
                             value={fulfillment}
                             disabled={locked}
                             className={selectClass}
@@ -868,8 +874,9 @@ export function SalesManager({
                         </Control>
                       </>
                     ) : origin === "table" ? (
-                      <Control label="Mesa">
+                      <Control label="Mesa" required>
                         <select
+                          required
                           className={selectClass}
                           disabled={locked || lines.length > 0}
                           value={tableId}
@@ -1185,6 +1192,7 @@ export function SalesManager({
         ))}
       {paymentOpen && (
         <PaymentDialog
+          eventKey={operation.errorAttempt}
           methods={paymentMethods}
           methodsError={methodsError}
           methodsLoading={methodsLoading}
@@ -1234,13 +1242,15 @@ export function SalesManager({
               </DialogDescription>
             </DialogHeader>
             <OperationNotice
+              eventKey={operation.errorAttempt}
               error={operation.error}
               uncertain={operation.uncertain}
               busy={operation.busy}
               retry={operation.retry}
             />
-            <Control label="Motivo de anulación">
+            <Control label="Motivo de anulación" required>
               <Input
+                required
                 value={cancelReason}
                 disabled={operation.locked}
                 maxLength={500}
@@ -1254,12 +1264,15 @@ export function SalesManager({
                   type="checkbox"
                   disabled={operation.locked}
                   checked={refundConfirmed}
+                  required
                   onChange={(e) => setRefundConfirmed(e.target.checked)}
                 />
                 <span>
-                  Confirmo que ya se devolvieron {money(detail.paidAmount)} por
-                  los medios originales o que la plataforma confirmó su
-                  devolución.
+                  <FieldCaption required>
+                    Confirmo que ya se devolvieron {money(detail.paidAmount)}{" "}
+                    por los medios originales o que la plataforma confirmó su
+                    devolución.
+                  </FieldCaption>
                 </span>
               </label>
             )}

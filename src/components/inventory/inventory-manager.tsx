@@ -24,6 +24,9 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { FieldCaption } from "@/components/ui/field-caption";
+import { OperationAlert } from "@/components/ui/operation-alert";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
 import {
   baseUnit,
   entryUnits,
@@ -106,8 +109,7 @@ function TextField({
 }) {
   return (
     <label className="block min-w-0 text-sm font-semibold">
-      {label}
-      {required ? " *" : ""}
+      <FieldCaption required={required}>{label}</FieldCaption>
       <Input
         className="mt-1"
         value={value}
@@ -162,8 +164,8 @@ export function InventoryManager({
 }) {
   const [stock, setStock] = useState<StockResult | null>(null),
     [search, setSearch] = useState(""),
-    [error, setError] = useState(""),
-    [detailError, setDetailError] = useState("");
+    [error, setError, errorAttempt] = useErrorFeedback(),
+    [detailError, setDetailError, detailErrorAttempt] = useErrorFeedback();
   const [selected, setSelected] = useState<StockRow | null>(null),
     [detail, setDetail] = useState<Detail | null>(null),
     [lotOffset, setLotOffset] = useState(0),
@@ -185,7 +187,8 @@ export function InventoryManager({
     null,
   );
   const [entryChoice, setEntryChoice] = useState("");
-  const [optionsError, setOptionsError] = useState("");
+  const [optionsError, setOptionsError, optionsErrorAttempt] =
+    useErrorFeedback();
   const [optionsVersion, setOptionsVersion] = useState(0);
   useEffect(() => {
     if (action !== "opening" || !itemId) return;
@@ -212,7 +215,7 @@ export function InventoryManager({
     return () => {
       live = false;
     };
-  }, [action, itemId, optionsVersion]);
+  }, [action, itemId, optionsVersion, setOptionsError]);
   const openingReady = openingOptions?.item.id === itemId && !!entryChoice;
   const chosenPack = openingOptions?.presentations.find(
     (p) => `pack:${p.id}` === entryChoice,
@@ -259,7 +262,7 @@ export function InventoryManager({
         setError("No pudimos cargar el inventario. Probá de nuevo.");
       return false;
     }
-  }, [search]);
+  }, [search, setError]);
   useEffect(() => {
     const timer = setTimeout(() => void loadStock(), search ? 250 : 0);
     return () => clearTimeout(timer);
@@ -285,7 +288,7 @@ export function InventoryManager({
         return false;
       }
     },
-    [lotOffset, movementOffset],
+    [lotOffset, movementOffset, setDetailError],
   );
   useEffect(() => {
     if (!selected) return;
@@ -420,8 +423,16 @@ export function InventoryManager({
           Ingreso manual
         </Button>
       </header>
+      {!action && (
+        <OperationAlert
+          title="No pudimos completar el ajuste de inventario"
+          message={operation.error}
+          eventKey={operation.errorAttempt}
+          tone="error"
+        />
+      )}
       {operation.uncertain && (
-        <Card className="gap-3 border-amber-200 bg-amber-50 p-5" role="alert">
+        <Card className="gap-3 border-amber-200 bg-amber-50 p-5" role="status">
           <div className="flex items-start gap-3">
             <AlertTriangle
               className="mt-0.5 size-5 shrink-0 text-amber-600"
@@ -432,8 +443,8 @@ export function InventoryManager({
                 Ajuste pendiente de confirmar
               </strong>
               <p className="mt-1 text-sm text-amber-900">
-                {operation.error} Reintentá el mismo envío antes de otra
-                operación.
+                Reintentá el mismo envío para confirmar el resultado antes de
+                registrar otra operación.
               </p>
             </div>
           </div>
@@ -531,14 +542,12 @@ export function InventoryManager({
             Las cantidades se expresan en la unidad base.
           </p>
         </div>
-        {error && (
-          <p
-            role="alert"
-            className="rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-700"
-          >
-            {error}
-          </p>
-        )}
+        <OperationAlert
+          title="No pudimos cargar el inventario"
+          message={error}
+          eventKey={errorAttempt}
+          tone="error"
+        />
         <Card className="gap-0 overflow-hidden p-0">
           {!stock ? (
             <p role="status" className="p-8 text-center text-sm text-muted">
@@ -702,11 +711,13 @@ export function InventoryManager({
               </Button>
             </div>
             {detailError && (
-              <div
-                role="alert"
-                className="m-5 rounded-lg bg-red-50 p-3 text-sm text-red-700"
-              >
-                <p>{detailError}</p>
+              <div className="m-5">
+                <OperationAlert
+                  title="No pudimos cargar el detalle del inventario"
+                  message={detailError}
+                  eventKey={detailErrorAttempt}
+                  tone="error"
+                />
                 <Button
                   type="button"
                   variant="outline"
@@ -1035,7 +1046,7 @@ export function InventoryManager({
                     />
                     <div className="min-w-0 text-sm font-semibold">
                       <label htmlFor="opening-entry-unit">
-                        Cargar cantidad en *
+                        <FieldCaption required>Cargar cantidad en</FieldCaption>
                       </label>
                       <select
                         id="opening-entry-unit"
@@ -1151,8 +1162,9 @@ export function InventoryManager({
                 )}
                 {action === "block" && (
                   <label className="block text-sm font-semibold">
-                    Estado
+                    <FieldCaption required>Estado</FieldCaption>
                     <select
+                      required
                       className="form-control mt-1"
                       value={blocked ? "1" : "0"}
                       onChange={(event) =>
@@ -1174,8 +1186,13 @@ export function InventoryManager({
                 />
               </fieldset>
               {action === "opening" && optionsError && (
-                <div role="alert" className="text-sm text-red-700">
-                  {optionsError}
+                <div>
+                  <OperationAlert
+                    title="No pudimos cargar las unidades y presentaciones"
+                    message={optionsError}
+                    eventKey={optionsErrorAttempt}
+                    tone="error"
+                  />
                   <Button
                     type="button"
                     variant="outline"
@@ -1201,14 +1218,12 @@ export function InventoryManager({
                 Se registrará la diferencia y la persona responsable. Los lotes
                 vencidos o bloqueados siguen en el físico hasta registrar merma.
               </p>
-              {operation.error && (
-                <p
-                  role="alert"
-                  className="rounded-lg bg-red-50 p-3 text-sm text-red-700"
-                >
-                  {operation.error}
-                </p>
-              )}
+              <OperationAlert
+                title="No pudimos completar el ajuste de inventario"
+                message={operation.error}
+                eventKey={operation.errorAttempt}
+                tone="error"
+              />
               <div className="flex flex-wrap justify-end gap-2">
                 <Button
                   type="button"

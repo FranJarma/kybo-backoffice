@@ -2,6 +2,9 @@
 import { useCallback, useEffect, useId, useState } from "react";
 import type { CatalogRow, Entity, ListResult } from "@/modules/catalog/types";
 import { SearchCombobox } from "@/components/ui/search-combobox";
+import { FieldCaption } from "@/components/ui/field-caption";
+import { OperationAlert } from "@/components/ui/operation-alert";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
 
 export const today = (timeZone = "America/Argentina/Buenos_Aires") =>
   new Intl.DateTimeFormat("en-CA", {
@@ -139,7 +142,7 @@ export function useOperation<T>(
   const [uncertain, setUncertain] = useState(false);
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError, errorAttempt] = useErrorFeedback();
   const [status, setStatus] = useState<number | null>(null);
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -169,7 +172,7 @@ export function useOperation<T>(
       }
     }, 0);
     return () => clearTimeout(timer);
-  }, [storageKey, kind]);
+  }, [storageKey, kind, setError]);
   const send = useCallback(
     async (operation: Pending<T>) => {
       if (!validPending<T>(kind, operation)) {
@@ -246,7 +249,7 @@ export function useOperation<T>(
       setBusy(false);
       onSuccess(result);
     },
-    [kind, onSuccess, storageKey, branchId],
+    [kind, onSuccess, storageKey, branchId, setError],
   );
   const submit = (url: string, payload: T) => {
     if (!ready || pending || busy || !urlFor(kind, url)) return;
@@ -268,6 +271,7 @@ export function useOperation<T>(
     busy,
     ready,
     error,
+    errorAttempt,
     status,
     uncertain,
     locked: !ready || uncertain || busy,
@@ -300,7 +304,7 @@ export function SearchSelect({
   const [search, setSearch] = useState("");
   const [items, setItems] = useState<CatalogRow[]>([]);
   const [total, setTotal] = useState(0);
-  const [error, setError] = useState("");
+  const [error, setError, errorAttempt] = useErrorFeedback();
   const [cached, setCached] = useState<CatalogRow | undefined>(initial);
   const [loading, setLoading] = useState(true);
   // The catalog API exposes the first 100 matches and the full count. Search narrows beyond that page.
@@ -332,7 +336,7 @@ export function SearchSelect({
       live = false;
       clearTimeout(timer);
     };
-  }, [entity, search, label, itemScope]);
+  }, [entity, search, label, itemScope, setError]);
   const options = [
     ...(initial?.id === value ? [initial] : []),
     ...(cached && cached.id !== initial?.id ? [cached] : []),
@@ -347,8 +351,7 @@ export function SearchSelect({
         htmlFor={selectId}
         className="mb-2 block text-xs font-semibold text-brand"
       >
-        {label}
-        {required ? " *" : ""}
+        <FieldCaption required={required}>{label}</FieldCaption>
       </label>
       <SearchCombobox
         id={selectId}
@@ -378,11 +381,12 @@ export function SearchSelect({
           Hay {total} coincidencias. Escribí para encontrar más opciones.
         </p>
       )}
-      {error && (
-        <p role="alert" className="mt-1 text-xs text-red-700">
-          {error}
-        </p>
-      )}
+      <OperationAlert
+        title="No pudimos cargar las opciones"
+        message={error}
+        eventKey={errorAttempt}
+        tone="error"
+      />
     </div>
   );
 }

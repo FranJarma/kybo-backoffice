@@ -1,4 +1,6 @@
 "use client";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
+import { OperationAlert } from "@/components/ui/operation-alert";
 import { ProductPhoto } from "@/components/products/photo";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { filterCatalogue } from "./touch-selection";
@@ -58,7 +60,7 @@ export function ProductPicker({
   const [retry, setRetry] = useState(0);
   const [data, setData] = useState<SaleLookup>({ rows: [], total: 0 });
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError, errorAttempt] = useErrorFeedback();
   const loaded = useRef(onCatalogueLoaded);
   useEffect(() => {
     loaded.current = onCatalogueLoaded;
@@ -99,7 +101,7 @@ export function ProductPicker({
     return () => {
       live = false;
     };
-  }, [channel, refresh, retry]);
+  }, [channel, refresh, retry, setError]);
   const rows = useMemo(
     () => filterCatalogue(data.rows, q, category),
     [data.rows, q, category],
@@ -150,8 +152,13 @@ export function ProductPicker({
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4">
         {error ? (
-          <div role="alert" className="space-y-3 py-8 text-sm text-red-700">
-            <p>{error}</p>
+          <div className="space-y-3 py-8 text-sm">
+            <OperationAlert
+              eventKey={errorAttempt}
+              tone="error"
+              title="No pudimos cargar la carta"
+              message={error}
+            />
             <Button
               type="button"
               variant="outline"

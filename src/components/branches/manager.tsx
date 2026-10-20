@@ -1,4 +1,7 @@
 "use client";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
+import { FieldCaption } from "@/components/ui/field-caption";
+import { OperationAlert } from "@/components/ui/operation-alert";
 import { useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,7 +32,7 @@ export function BranchManager({
   const [locations, setLocations] = useState<
     { id: string; name: string; code: string; revision: number }[]
   >([]);
-  const [error, setError] = useState(""),
+  const [error, setError, errorAttempt] = useErrorFeedback(),
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false),
     [revision, setRevision] = useState(0);
@@ -45,7 +48,7 @@ export function BranchManager({
     return () => {
       live = false;
     };
-  }, [revision]);
+  }, [revision, setError]);
   useEffect(() => {
     if (!selected) return;
     let live = true;
@@ -59,7 +62,7 @@ export function BranchManager({
     return () => {
       live = false;
     };
-  }, [selected, revision]);
+  }, [selected, revision, setError]);
   async function save(event: FormEvent, create: boolean) {
     event.preventDefault();
     setBusy(true);
@@ -143,7 +146,7 @@ export function BranchManager({
   const locationFields = (
     <>
       <label className="space-y-2 text-sm font-semibold">
-        Nombre de ubicación
+        <FieldCaption required>Nombre de ubicación</FieldCaption>
         <Input
           value={locationName}
           onChange={(e) => setLocationName(e.target.value)}
@@ -166,9 +169,12 @@ export function BranchManager({
         </p>
       </div>
       {error && (
-        <p role="alert" className="rounded-lg bg-red-50 p-3 text-red-800">
-          {error}
-        </p>
+        <OperationAlert
+          eventKey={errorAttempt}
+          tone="error"
+          title="No pudimos completar la operación"
+          message={error}
+        />
       )}
       {notice && (
         <p role="status" className="rounded-lg bg-green-50 p-3 text-green-900">
@@ -246,7 +252,7 @@ export function BranchManager({
             <form onSubmit={(e) => void save(e, true)}>
               <fieldset disabled={busy} className="grid gap-4">
                 <label className="space-y-2 text-sm font-semibold">
-                  Nombre
+                  <FieldCaption required>Nombre</FieldCaption>
                   <Input
                     value={name}
                     onChange={(e) => setName(e.target.value)}
@@ -255,7 +261,7 @@ export function BranchManager({
                   />
                 </label>
                 <label className="space-y-2 text-sm font-semibold">
-                  Código
+                  <FieldCaption required>Código</FieldCaption>
                   <Input
                     value={code}
                     onChange={(e) => setCode(e.target.value)}
@@ -264,7 +270,7 @@ export function BranchManager({
                   />
                 </label>
                 <label className="space-y-2 text-sm font-semibold">
-                  Zona horaria
+                  <FieldCaption required>Zona horaria</FieldCaption>
                   <Input
                     value={timeZone}
                     onChange={(e) => setTimeZone(e.target.value)}

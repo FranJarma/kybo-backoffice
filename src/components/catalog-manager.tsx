@@ -54,6 +54,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { OperationAlert } from "@/components/ui/operation-alert";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
 import { Card } from "@/components/ui/card";
 import {
   Dialog,
@@ -237,7 +239,7 @@ export function CatalogManager({
   const [rows, setRows] = useState<CatalogRow[]>([]),
     [total, setTotal] = useState(0),
     [loading, setLoading] = useState(true),
-    [loadError, setLoadError] = useState("");
+    [loadError, setLoadError, loadErrorAttempt] = useErrorFeedback();
   const [search, setSearch] = useState(""),
     [copiedFrom, setCopiedFrom] = useState(""),
     [itemClass, setItemClass] = useState(""),
@@ -262,7 +264,7 @@ export function CatalogManager({
       undefined,
     ),
     [draft, setDraft] = useState<Draft>({}),
-    [formError, setFormError] = useState(""),
+    [formError, setFormError, formErrorAttempt] = useErrorFeedback(),
     [saving, setSaving] = useState(false),
     [uploading, setUploading] = useState(false),
     [actionId, setActionId] = useState<string | null>(null),
@@ -344,7 +346,15 @@ export function CatalogManager({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [entity, search, archived, refresh, ingredientsOnly, itemClass]);
+  }, [
+    entity,
+    search,
+    archived,
+    refresh,
+    ingredientsOnly,
+    itemClass,
+    setLoadError,
+  ]);
   useEffect(() => {
     const references = [
       ...new Set(
@@ -758,14 +768,8 @@ export function CatalogManager({
             : "min-w-0 space-y-2.5"
         }
       >
-        <Label htmlFor={`${formId}-${field.key}`}>
+        <Label htmlFor={`${formId}-${field.key}`} required={field.required}>
           {field.label}
-          {field.required && (
-            <span aria-hidden="true" className="text-accent">
-              {" "}
-              *
-            </span>
-          )}
         </Label>
         {fieldControl(field)}
         {entity === "items" &&
@@ -998,14 +1002,12 @@ export function CatalogManager({
         </p>
       </div>
 
-      {loadError && (
-        <p
-          role="alert"
-          className="mb-5 rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-700"
-        >
-          {loadError}
-        </p>
-      )}
+      <OperationAlert
+        title="No pudimos completar la operación"
+        message={loadError}
+        eventKey={loadErrorAttempt}
+        tone="error"
+      />
       <Card
         className="surface-panel gap-0 overflow-hidden py-0 shadow-none"
         aria-busy={loading}
@@ -1762,14 +1764,12 @@ export function CatalogManager({
                     Agregar un cliente no autoriza el envío de promociones.
                   </p>
                 )}
-                {formError && (
-                  <p
-                    role="alert"
-                    className="rounded-xl bg-red-50 p-3 text-sm leading-relaxed text-red-700"
-                  >
-                    {formError}
-                  </p>
-                )}
+                <OperationAlert
+                  title="No pudimos guardar la ficha"
+                  message={formError}
+                  eventKey={formErrorAttempt}
+                  tone="error"
+                />
               </div>
               <div
                 className={`flex shrink-0 flex-wrap justify-end gap-3 border-t border-line bg-white pt-5 ${entity === "items" ? "mt-0" : ""}`}

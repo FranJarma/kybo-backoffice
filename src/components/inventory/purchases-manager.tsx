@@ -21,6 +21,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { FieldCaption } from "@/components/ui/field-caption";
+import { OperationAlert } from "@/components/ui/operation-alert";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
 import {
   decimal,
   exactDivision,
@@ -96,10 +99,7 @@ function Field({
 }) {
   return (
     <label className="block min-w-0 text-sm font-medium text-brand">
-      <span>
-        {label}
-        {required ? " *" : ""}
-      </span>
+      <FieldCaption required={required}>{label}</FieldCaption>
       <span className="relative mt-2 flex">
         <Input
           className={unit ? "pr-20 tabular-nums" : ""}
@@ -159,7 +159,7 @@ export function PurchasesManager({
   const [rows, setRows] = useState<ReceiptSummary[]>([]),
     [total, setTotal] = useState(0),
     [search, setSearch] = useState("");
-  const [loadError, setLoadError] = useState(""),
+  const [loadError, setLoadError, loadErrorAttempt] = useErrorFeedback(),
     [detail, setDetail] = useState<ReceiptDetail | null>(null),
     [view, setView] = useState<"list" | "draft" | "review" | "detail">("list");
   const [supplierId, setSupplierId] = useState(""),
@@ -175,7 +175,7 @@ export function PurchasesManager({
     [amount, setAmount] = useState(""),
     [reference, setReference] = useState("");
   const [refreshWarning, setRefreshWarning] = useState("");
-  const [reviewError, setReviewError] = useState("");
+  const [reviewError, setReviewError, reviewErrorAttempt] = useErrorFeedback();
   const [shipping, setShipping] = useState(blankShipping);
   const [paymentTarget, setPaymentTarget] = useState<"supplier" | "shipping">(
     "supplier",
@@ -193,7 +193,7 @@ export function PurchasesManager({
       setLoadError("No pudimos actualizar las recepciones. Probá de nuevo.");
       return false;
     }
-  }, [search]);
+  }, [search, setLoadError]);
   useEffect(() => {
     const timer = setTimeout(() => void refreshList(), search ? 250 : 0);
     return () => clearTimeout(timer);
@@ -216,7 +216,7 @@ export function PurchasesManager({
         setLoadError("No pudimos cargar el detalle de la recepción.");
       }
     },
-    [timeZone],
+    [timeZone, setLoadError],
   );
   const onReceived = useCallback(
     (result: unknown) => {
@@ -387,17 +387,41 @@ export function PurchasesManager({
           </Button>
         )}
       </header>
+      <OperationAlert
+        title="No pudimos cargar las recepciones"
+        message={loadError}
+        eventKey={loadErrorAttempt}
+        tone="error"
+      />
+      <OperationAlert
+        title="No pudimos confirmar la recepción"
+        eventKey={receiptOperation.errorAttempt}
+        message={
+          !receiptOperation.error
+            ? ""
+            : receiptOperation.error +
+              (receiptOperation.status === 409
+                ? " El catálogo o la recepción cambió. Volvé a editar y seleccioná de nuevo los artículos y presentaciones antes de revisar."
+                : "")
+        }
+        tone="error"
+      />
+      <OperationAlert
+        title="No pudimos registrar el pago"
+        message={paymentOperation.error}
+        eventKey={paymentOperation.errorAttempt}
+        tone="error"
+      />
       {(receiptOperation.uncertain || paymentOperation.uncertain) && (
-        <Card className="gap-3 border-amber-200 bg-amber-50 p-5" role="alert">
+        <Card className="gap-3 border-amber-200 bg-amber-50 p-5" role="status">
           <strong className="text-amber-900">
             Operación pendiente de confirmar
           </strong>
           <p className="text-sm leading-6 text-amber-900">
-            {receiptOperation.uncertain ? "Recepción" : "Pago"}:{" "}
             {receiptOperation.uncertain
-              ? receiptOperation.error
-              : paymentOperation.error}{" "}
-            Volvé a enviar exactamente la misma operación.
+              ? "La recepción está pendiente de confirmar."
+              : "El pago está pendiente de confirmar."}{" "}
+            Reintentá el mismo envío para confirmar el resultado.
           </p>
           <Button
             className="self-start"
@@ -435,14 +459,6 @@ export function PurchasesManager({
               {total === 1 ? "recepción registrada" : "recepciones registradas"}
             </p>
           </div>
-          {loadError && (
-            <p
-              role="alert"
-              className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
-            >
-              {loadError}
-            </p>
-          )}
           <Card className="gap-0 overflow-hidden p-0">
             {rows.length ? (
               <>
@@ -897,14 +913,12 @@ export function PurchasesManager({
                   </p>
                 </Card>
                 <Card className="gap-3 p-5">
-                  {reviewError && (
-                    <p
-                      role="alert"
-                      className="rounded-lg bg-red-50 p-3 text-sm text-red-700"
-                    >
-                      {reviewError}
-                    </p>
-                  )}
+                  <OperationAlert
+                    title="Revisá los datos de la recepción"
+                    message={reviewError}
+                    eventKey={reviewErrorAttempt}
+                    tone="error"
+                  />
                   <Button type="submit" className="w-full" disabled={locked}>
                     Revisar recepción <ArrowRight aria-hidden="true" />
                   </Button>
@@ -1073,16 +1087,6 @@ export function PurchasesManager({
                       editar después.
                     </span>
                   </p>
-                  {receiptOperation.error && (
-                    <p
-                      role="alert"
-                      className="rounded-lg bg-red-50 p-3 text-sm text-red-700"
-                    >
-                      {receiptOperation.error}
-                      {receiptOperation.status === 409 &&
-                        " El catálogo o la recepción cambió. Volvé a editar y seleccioná de nuevo los artículos y presentaciones antes de revisar."}
-                    </p>
-                  )}
                   {receiptOperation.uncertain ? (
                     <Button
                       type="button"
@@ -1423,14 +1427,6 @@ export function PurchasesManager({
                         placeholder="Opcional"
                       />
                     </fieldset>
-                    {paymentOperation.error && (
-                      <p
-                        role="alert"
-                        className="rounded-lg bg-red-50 p-3 text-sm text-red-700"
-                      >
-                        {paymentOperation.error}
-                      </p>
-                    )}
                     <div className="flex flex-col gap-2">
                       {paymentOperation.uncertain ? (
                         <Button

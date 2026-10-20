@@ -1,4 +1,7 @@
 "use client";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
+import { OperationAlert } from "@/components/ui/operation-alert";
+import { FieldCaption } from "@/components/ui/field-caption";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { getJson, money } from "@/components/inventory/shared";
@@ -38,7 +41,7 @@ export function ComboConfigurator({
   }) => void;
   onCancel: () => void;
 }) {
-  const [error, setError] = useState("");
+  const [error, setError, errorAttempt] = useErrorFeedback();
   const cache = useRef(new Map<string, Promise<PublicConfiguration>>());
   const loadConfiguration = useCallback(
     (productId: string) => {
@@ -106,7 +109,7 @@ export function ComboConfigurator({
     return () => {
       live = false;
     };
-  }, [initialChoices, config.definition, loadConfiguration]);
+  }, [initialChoices, config.definition, loadConfiguration, setError]);
   const [editing, setEditing] = useState<{
     groupId: string;
     optionId: string;
@@ -157,7 +160,7 @@ export function ComboConfigurator({
     return () => {
       live = false;
     };
-  }, [pending, loadConfiguration, config.vatRate]);
+  }, [pending, loadConfiguration, config.vatRate, setError]);
   const netTotal =
     integer(config.catalogBasePrice ?? config.basePrice) +
     config.definition.groups.reduce((sum, g) => {
@@ -187,7 +190,9 @@ export function ComboConfigurator({
           key={g.id}
         >
           <h3 className="font-semibold">
-            {g.name} · {g.quantity} {g.quantity === 1 ? "unidad" : "unidades"}
+            <FieldCaption required>
+              {g.name} · {g.quantity} {g.quantity === 1 ? "unidad" : "unidades"}
+            </FieldCaption>
           </h3>
           <div className="flex flex-wrap gap-2">
             {g.options.map((o) => {
@@ -278,9 +283,12 @@ export function ComboConfigurator({
       ))}
       {(pending || restoring) && <p role="status">Cargando opciones…</p>}
       {error && (
-        <p role="alert" className="text-red-700">
-          {error}
-        </p>
+        <OperationAlert
+          eventKey={errorAttempt}
+          tone="error"
+          title="No pudimos completar la operación"
+          message={error}
+        />
       )}
       <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 border-t border-line bg-white py-4">
         <strong>

@@ -1,4 +1,5 @@
 "use client";
+import { OperationAlert } from "@/components/ui/operation-alert";
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -86,11 +87,11 @@ export function SignOutButton() {
         <LogOut size={16} />
         {busy ? "Saliendo…" : "Cerrar sesión"}
       </Button>
-      {error && (
-        <p role="alert" className="px-3 py-2 text-xs text-red-700">
-          {error}
-        </p>
-      )}
+      <OperationAlert
+        title="No pudimos cerrar sesión"
+        message={error}
+        tone="error"
+      />
     </div>
   );
 }

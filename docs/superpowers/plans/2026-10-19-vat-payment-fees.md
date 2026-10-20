@@ -1,5 +1,7 @@
 # IVA configurable y comisiones — Implementation Plan
 
+Actualización posterior: el criterio de precios netos de este plan fue reemplazado por la decisión del usuario de cargar precios finales. Ver `2026-10-19-final-prices-tax-costing.md` y `docs/verification-final-prices-tax-costing.md`. Las verificaciones anteriores se conservan como historial.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Configurar IVA por producto y comisión por medio de pago, cobrar siempre precios finales y conservar las condiciones de cada venta.
@@ -74,4 +76,3 @@
 ## Resultado de ejecución
 
 Completado el 19/10/2026. Migración 0021 aplicada en desarrollo con preservación verificada de 12 tablas. Permanecen pendientes de configurar 20 productos y 4 medios de pago. Pruebas: 55/55 en 10 archivos, 4/4 recorridos de navegador, repetición visual de IVA aprobada, comprobación de tipos y lint aprobados. La configuración pública conserva dos lecturas. Revisión independiente sin defectos, con sus escenarios de redondeo y revisión incorporados a pruebas. Ver [registro de verificación](../../verification-vat-payment-fees.md). Sin commits, push ni emisión ARCA.
-

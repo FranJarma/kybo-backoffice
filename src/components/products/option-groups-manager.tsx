@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Plus, Pencil, Archive, Package, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FieldCaption } from "@/components/ui/field-caption";
 import { SearchCombobox } from "@/components/ui/search-combobox";
 import {
   Dialog,
@@ -12,6 +13,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { OperationAlert } from "@/components/ui/operation-alert";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
 import { getJson } from "@/components/inventory/shared";
 import { OptionGroupTabs } from "./option-group-tabs";
 import type {
@@ -60,7 +62,7 @@ function GroupEditor({
   >([]);
   const [busy, setBusy] = useState(false),
     [loading, setLoading] = useState(false),
-    [error, setError] = useState("");
+    [error, setError, errorAttempt] = useErrorFeedback();
   // One key for retries; a changed form receives a fresh key rather than conflicting with its own previous request.
   const [attempt, setAttempt] = useState<{ fingerprint: string; id: string }>();
   useEffect(() => {
@@ -84,7 +86,7 @@ function GroupEditor({
       live = false;
       clearTimeout(timer);
     };
-  }, [query]);
+  }, [query, setError]);
   return (
     <form
       className="space-y-7"
@@ -116,10 +118,15 @@ function GroupEditor({
         }
       }}
     >
-      <OperationAlert title="No se pudo guardar" message={error} tone="error" />
+      <OperationAlert
+        title="No se pudo guardar"
+        message={error}
+        eventKey={errorAttempt}
+        tone="error"
+      />
       <fieldset disabled={busy} className="space-y-7">
         <label className="block text-sm font-medium">
-          Nombre del grupo
+          <FieldCaption required>Nombre del grupo</FieldCaption>
           <Input
             className="mt-2"
             value={name}
@@ -131,7 +138,9 @@ function GroupEditor({
         </label>
         <section className="space-y-4">
           <div>
-            <h3 className="font-semibold text-brand">Productos incluidos</h3>
+            <h3 className="font-semibold text-brand">
+              <FieldCaption required>Productos incluidos</FieldCaption>
+            </h3>
             <p className="mt-2 text-sm text-muted">
               Elegí las fichas existentes. Sus recetas, modificadores y costos
               se conservan.
@@ -233,7 +242,7 @@ export function ProductOptionGroupsManager() {
   const [refresh, setRefresh] = useState(0),
     [loading, setLoading] = useState(true),
     [busy, setBusy] = useState(false);
-  const [error, setError] = useState(""),
+  const [error, setError, errorAttempt] = useErrorFeedback(),
     [notice, setNotice] = useState("");
   const [archiving, setArchiving] = useState<GroupRow | null>(null);
   const archiveKeys = useRef(new Map<string, string>());
@@ -255,7 +264,7 @@ export function ProductOptionGroupsManager() {
     return () => {
       live = false;
     };
-  }, [refresh]);
+  }, [refresh, setError]);
   return (
     <div>
       <div className="page-heading">
@@ -274,15 +283,15 @@ export function ProductOptionGroupsManager() {
       <OperationAlert
         title={error ? "No se pudo completar" : "Grupo guardado"}
         message={error || notice}
+        eventKey={error ? errorAttempt : undefined}
         tone={error ? "error" : "success"}
       />
       {error && (
-        <p role="alert" className="mb-4 text-sm text-red-700">
-          {error}{" "}
+        <div className="mb-4">
           <Button variant="ghost" onClick={() => setRefresh((n) => n + 1)}>
             Reintentar
           </Button>
-        </p>
+        </div>
       )}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>

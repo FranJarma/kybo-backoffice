@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { OperationAlert } from "@/components/ui/operation-alert";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -75,7 +76,7 @@ export function RecipesManager({ actorId }: { actorId: string }) {
     [refresh, setRefresh] = useState(0);
   const [loading, setLoading] = useState(true),
     [detailLoading, setDetailLoading] = useState(false),
-    [error, setError] = useState("");
+    [error, setError, errorAttempt] = useErrorFeedback();
   const [editor, setEditor] = useState<{
       recipe?: RecipeDetail;
       configurable?: boolean;
@@ -127,7 +128,7 @@ export function RecipesManager({ actorId }: { actorId: string }) {
       live = false;
       clearTimeout(timer);
     };
-  }, [kind, search, offset, refresh]);
+  }, [kind, search, offset, refresh, setError]);
   useEffect(() => {
     let live = true;
     const timer = setTimeout(() => {
@@ -154,7 +155,7 @@ export function RecipesManager({ actorId }: { actorId: string }) {
       live = false;
       clearTimeout(timer);
     };
-  }, [selectedId, version, refresh]);
+  }, [selectedId, version, refresh, setError]);
   const select = (id: string) => {
     if (id === selectedId && !version) {
       if (detail) return;
@@ -243,12 +244,18 @@ export function RecipesManager({ actorId }: { actorId: string }) {
         ))}
       </div>
       <OperationAlert message={success} title="Receta publicada" />
+      <OperationAlert
+        message={error || (!editor ? operation.error : "")}
+        eventKey={error ? errorAttempt : operation.errorAttempt}
+        title={
+          error
+            ? "No pudimos cargar las recetas"
+            : "No se pudo confirmar la publicación"
+        }
+        tone="error"
+      />
       {(error || operation.error) && (
-        <div
-          role="alert"
-          className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-800"
-        >
-          {error || operation.error}
+        <div className="mb-4">
           {operation.uncertain ? (
             <Button
               variant="outline"
@@ -516,11 +523,6 @@ export function RecipesManager({ actorId }: { actorId: string }) {
               Los cambios quedan guardados por versión.
             </DialogDescription>
           </DialogHeader>
-          <OperationAlert
-            message={operation.error}
-            title="No se pudo confirmar la publicación"
-            tone="error"
-          />
           {editor &&
             (editor.configurable ||
             editor.recipe?.compositionModel === "configurable" ? (
@@ -530,6 +532,7 @@ export function RecipesManager({ actorId }: { actorId: string }) {
                 onCancel={() => setEditor(null)}
                 disabled={operation.locked}
                 error={operation.error}
+                errorAttempt={operation.errorAttempt}
               />
             ) : (
               <RecipeEditor
@@ -538,6 +541,7 @@ export function RecipesManager({ actorId }: { actorId: string }) {
                 initial={editor.recipe}
                 disabled={operation.locked}
                 error={operation.error}
+                errorAttempt={operation.errorAttempt}
                 retry={operation.uncertain ? operation.retry : undefined}
                 onCancel={() => setEditor(null)}
                 onSave={publish}
@@ -567,7 +571,7 @@ function RecipePanel({
     })),
   );
   const [cost, setCost] = useState<CostResult | null>(recipe.cost),
-    [error, setError] = useState("");
+    [error, setError, errorAttempt] = useErrorFeedback();
   const requestNumber = useRef(0);
   const old = recipe.versionId !== recipe.versions[0].id;
   useEffect(
@@ -722,8 +726,13 @@ function RecipePanel({
         )}
       </dl>
       {error && (
-        <p role="alert" className="mb-3 text-sm text-red-700">
-          {error}{" "}
+        <div className="mb-3">
+          <OperationAlert
+            message={error}
+            eventKey={errorAttempt}
+            title="No pudimos calcular el costo"
+            tone="error"
+          />
           <button
             className="underline"
             onClick={() =>
@@ -732,7 +741,7 @@ function RecipePanel({
           >
             Reintentar cálculo
           </button>
-        </p>
+        </div>
       )}
       {cost?.missing.length ? (
         <Notice>
@@ -829,6 +838,7 @@ export function RecipeEditor({
   initial,
   disabled,
   error,
+  errorAttempt,
   retry,
   onCancel,
   onSave,
@@ -838,6 +848,7 @@ export function RecipeEditor({
   initial?: RecipeDetail;
   disabled: boolean;
   error: string;
+  errorAttempt?: number;
   retry?: () => void;
   onCancel: () => void;
   onSave: (data: RecipeInput) => void;
@@ -934,6 +945,12 @@ export function RecipeEditor({
   }
   return (
     <form onSubmit={submit} className="space-y-8">
+      <OperationAlert
+        message={error}
+        eventKey={errorAttempt}
+        title="No se pudo confirmar la publicación"
+        tone="error"
+      />
       {!view && (
         <RecipeEditorTabs
           id={tabsId}
@@ -950,11 +967,6 @@ export function RecipeEditor({
         className="min-w-0 space-y-6"
       >
         <PreparationFields value={preparation} onChange={setPreparation} />
-        {error && (
-          <p role="alert" className="text-sm text-red-700">
-            {error}
-          </p>
-        )}
         <div className="flex justify-end border-t border-line pt-4">
           <Button type="submit">Guardar receta y preparación</Button>
         </div>
@@ -1201,11 +1213,6 @@ export function RecipeEditor({
             />
           </label>
         </fieldset>
-        {error && (
-          <p role="alert" className="text-sm text-red-700">
-            {error}
-          </p>
-        )}
         {retry && (
           <Button type="button" variant="outline" onClick={retry}>
             Reintentar mismo envío

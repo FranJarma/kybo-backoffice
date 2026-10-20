@@ -1,4 +1,6 @@
 "use client";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
+import { FieldCaption } from "@/components/ui/field-caption";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -87,14 +89,14 @@ export function ProductionOrdersPanel({
     [scope, setScope] = useState("active"),
     [hasMore, setHasMore] = useState(false),
     [version, setVersion] = useState(0),
-    [error, setError] = useState("");
+    [error, setError, errorAttempt] = useErrorFeedback();
   const saved = useCallback(() => {
     setVersion((v) => v + 1);
     setError("");
     setSuccess(
       `Orden actualizada correctamente. ${new Date().toLocaleTimeString("es-AR")}`,
     );
-  }, []);
+  }, [setError]);
   const operation = useOperation<Record<string, unknown>>(
     actorId,
     "production-order",
@@ -113,7 +115,7 @@ export function ProductionOrdersPanel({
     return () => {
       live = false;
     };
-  }, [canManage]);
+  }, [canManage, setError]);
   useEffect(() => {
     let live = true;
     getJson<{ rows: Order[]; hasMore: boolean }>(
@@ -136,7 +138,7 @@ export function ProductionOrdersPanel({
     return () => {
       live = false;
     };
-  }, [version, scope, offset, mine]);
+  }, [version, scope, offset, mine, setError]);
   return (
     <section className="surface-panel mb-6 space-y-4 p-5">
       <header>
@@ -154,6 +156,7 @@ export function ProductionOrdersPanel({
       )}
       {(error || operation.error) && (
         <OperationAlert
+          eventKey={error ? errorAttempt : operation.errorAttempt}
           tone="error"
           title="No se pudo actualizar la producción"
           message={error || operation.error}
@@ -533,7 +536,7 @@ function ConfirmOrder({
           .map((l) => [l.id, l.options[0].id]),
       ),
     ),
-    [error, setError] = useState("");
+    [error, setError, errorAttempt] = useErrorFeedback();
   function save(e: FormEvent) {
     e.preventDefault();
     try {
@@ -563,7 +566,7 @@ function ConfirmOrder({
       <h3 className="font-semibold">Planificar {recipe.name}</h3>
       <fieldset disabled={locked} className="grid gap-3 md:grid-cols-2">
         <label className="text-sm">
-          Responsable
+          <FieldCaption required>Responsable</FieldCaption>
           <select
             required
             className="mt-1 block w-full rounded border p-3"
@@ -579,7 +582,7 @@ function ConfirmOrder({
           </select>
         </label>
         <label className="text-sm">
-          Debe estar listo para
+          <FieldCaption required>Debe estar listo para</FieldCaption>
           <Input
             required
             type="datetime-local"
@@ -592,7 +595,9 @@ function ConfirmOrder({
         </label>
         <LocationSelect value={location} onChange={setLocation} />
         <label className="text-sm">
-          Cantidad prevista ({recipe.baseUnit})
+          <FieldCaption required>
+            Cantidad prevista ({recipe.baseUnit})
+          </FieldCaption>
           <Input
             required
             inputMode="decimal"
@@ -602,8 +607,10 @@ function ConfirmOrder({
         </label>
         {recipe.lines.map((line, i) => (
           <label key={line.id} className="text-sm">
-            Componente {i + 1}
-            {line.optional ? " · opcional" : ""}
+            <FieldCaption required={!line.optional}>
+              Componente {i + 1}
+              {line.optional ? " · opcional" : ""}
+            </FieldCaption>
             <select
               required={!line.optional}
               value={choices[line.id] ?? ""}
@@ -636,7 +643,14 @@ function ConfirmOrder({
         </label>
         <Button type="submit">Asignar producción</Button>
       </fieldset>
-      {error && <p role="alert">{error}</p>}
+      {error && (
+        <OperationAlert
+          eventKey={errorAttempt}
+          tone="error"
+          title="No pudimos completar la operación"
+          message={error}
+        />
+      )}
     </form>
   );
 }
@@ -658,7 +672,7 @@ function FinishOrder({
     [expiry, setExpiry] = useState(""),
     [lotCode, setLotCode] = useState(""),
     [reason, setReason] = useState(""),
-    [error, setError] = useState("");
+    [error, setError, errorAttempt] = useErrorFeedback();
   function save(e: FormEvent) {
     e.preventDefault();
     try {
@@ -699,7 +713,9 @@ function FinishOrder({
       <fieldset disabled={locked} className="grid gap-3 md:grid-cols-2">
         {order.components.map((c) => (
           <label key={c.itemId} className="text-sm">
-            Consumido: {c.name} ({c.baseUnit})
+            <FieldCaption required>
+              Consumido: {c.name} ({c.baseUnit})
+            </FieldCaption>
             <Input
               inputMode="decimal"
               required
@@ -715,9 +731,11 @@ function FinishOrder({
           </label>
         ))}
         <label className="text-sm">
-          Producción obtenida ({order.baseUnit})
+          <FieldCaption required={!lost}>
+            Producción obtenida ({order.baseUnit})
+          </FieldCaption>
           <Input
-            required
+            required={!lost}
             inputMode="decimal"
             disabled={lost}
             value={actual}
@@ -741,7 +759,9 @@ function FinishOrder({
           />
         </label>
         <label className="text-sm">
-          Notas de finalización y diferencias
+          <FieldCaption required>
+            Notas de finalización y diferencias
+          </FieldCaption>
           <Input
             required
             maxLength={2000}
@@ -782,7 +802,14 @@ function FinishOrder({
           </>
         )}
       </fieldset>
-      {error && <p role="alert">{error}</p>}
+      {error && (
+        <OperationAlert
+          eventKey={errorAttempt}
+          tone="error"
+          title="No pudimos completar la operación"
+          message={error}
+        />
+      )}
     </form>
   );
 }
@@ -809,7 +836,7 @@ function EditPlanning({
   );
   const [notes, setNotes] = useState(order.notes ?? "");
   const [reason, setReason] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError, errorAttempt] = useErrorFeedback();
   function save(e: FormEvent) {
     e.preventDefault();
     try {
@@ -836,7 +863,7 @@ function EditPlanning({
       <form onSubmit={save} className="mt-4">
         <fieldset disabled={locked} className="grid gap-5 md:grid-cols-2">
           <label>
-            Responsable
+            <FieldCaption required>Responsable</FieldCaption>
             <select
               required
               className="mt-1 block w-full rounded border p-3"
@@ -852,7 +879,7 @@ function EditPlanning({
             </select>
           </label>
           <label>
-            Debe estar listo para
+            <FieldCaption required>Debe estar listo para</FieldCaption>
             <Input
               required
               type="datetime-local"
@@ -864,7 +891,9 @@ function EditPlanning({
             </span>
           </label>
           <label>
-            Cantidad prevista ({order.baseUnit})
+            <FieldCaption required>
+              Cantidad prevista ({order.baseUnit})
+            </FieldCaption>
             <Input
               required
               disabled={order.state !== "planned"}
@@ -883,7 +912,7 @@ function EditPlanning({
             />
           </label>
           <label className="md:col-span-2">
-            Motivo del cambio o anulación
+            <FieldCaption required>Motivo del cambio o anulación</FieldCaption>
             <Input
               required
               maxLength={2000}
@@ -910,7 +939,14 @@ function EditPlanning({
             </Button>
           )}
         </fieldset>
-        {error && <p role="alert">{error}</p>}
+        {error && (
+          <OperationAlert
+            eventKey={errorAttempt}
+            tone="error"
+            title="No pudimos completar la operación"
+            message={error}
+          />
+        )}
       </form>
     </details>
   );

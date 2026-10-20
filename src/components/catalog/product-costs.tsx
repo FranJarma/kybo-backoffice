@@ -34,7 +34,23 @@ export function useProductCosts(
   }>();
   useEffect(() => {
     if (!cache.current || cache.current.refresh !== refresh)
-      cache.current = { refresh, load: createProductCostLoader(fetchCosts) };
+      cache.current = {
+        refresh,
+        load: createProductCostLoader(fetchCosts, (result) => {
+          if (cache.current?.refresh !== refresh) return;
+          setState((old) => ({
+            refresh,
+            products: {
+              ...(old?.refresh === refresh ? old.products : {}),
+              ...Object.fromEntries(
+                result.products.map((p) => [p.productId, p]),
+              ),
+            },
+            branchName: result.branchName,
+            error: old?.refresh === refresh ? old.error : "",
+          }));
+        }),
+      };
     const requested = JSON.parse(key) as string[];
     if (!enabled || !requested.length) return;
     let live = true;

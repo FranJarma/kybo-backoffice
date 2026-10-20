@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FieldCaption } from "@/components/ui/field-caption";
 import { money } from "@/components/inventory/shared";
 import { inputDecimal } from "@/components/recipes/shared";
 import { cents, decimal, integer } from "@/modules/inventory/decimal";
@@ -44,6 +45,7 @@ export function PaymentDialog({
   locked,
   busy,
   error,
+  eventKey,
   uncertain,
   onRetry,
   onClose,
@@ -60,6 +62,7 @@ export function PaymentDialog({
   locked: boolean;
   busy: boolean;
   error: string;
+  eventKey?: number | string;
   uncertain: boolean;
   onRetry: () => void;
   onClose: () => void;
@@ -167,6 +170,7 @@ export function PaymentDialog({
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-7 sm:py-6">
           <OperationNotice
+            eventKey={eventKey}
             error={error}
             uncertain={uncertain}
             busy={busy}
@@ -204,8 +208,9 @@ export function PaymentDialog({
                     </div>
                   )}
                   {delivery && (
-                    <Control label={`Cobrado por ${i + 1}`}>
+                    <Control label={`Cobrado por ${i + 1}`} required>
                       <select
+                        required
                         className={selectClass}
                         value={row.collector}
                         onChange={(e) =>
@@ -227,7 +232,9 @@ export function PaymentDialog({
                       className="min-w-0 space-y-3"
                     >
                       <legend className="mb-3 text-sm font-semibold text-brand">
-                        {split ? "Medio de pago" : "¿Cómo paga?"}
+                        <FieldCaption required>
+                          {split ? "Medio de pago" : "¿Cómo paga?"}
+                        </FieldCaption>
                       </legend>
                       {methodsLoading && (
                         <div
@@ -333,8 +340,9 @@ export function PaymentDialog({
                   )}
 
                   {(split || !exact) && (
-                    <Control label={`Importe ${i + 1}`}>
+                    <Control label={`Importe ${i + 1}`} required>
                       <Input
+                        required
                         className="text-lg font-semibold tabular-nums"
                         value={row.amount}
                         inputMode="decimal"
@@ -345,8 +353,9 @@ export function PaymentDialog({
                   {cash && (
                     <div className="grid gap-4 rounded-xl bg-surface p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:p-5">
                       <div className="space-y-3">
-                        <Control label={`Efectivo recibido ${i + 1}`}>
+                        <Control label={`Efectivo recibido ${i + 1}`} required>
                           <Input
+                            required
                             className="bg-white text-lg font-semibold tabular-nums"
                             inputMode="decimal"
                             placeholder="Ingresá cuánto entrega"

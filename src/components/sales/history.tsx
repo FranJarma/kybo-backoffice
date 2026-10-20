@@ -1,4 +1,6 @@
 "use client";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
+import { OperationAlert } from "@/components/ui/operation-alert";
 import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, ReceiptText } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -26,7 +28,7 @@ export function SaleHistory({
     [offset, setOffset] = useState(0),
     [data, setData] = useState<SaleList>({ rows: [], total: 0, offset: 0 }),
     [loading, setLoading] = useState(true),
-    [error, setError] = useState("");
+    [error, setError, errorAttempt] = useErrorFeedback();
   useEffect(() => {
     let live = true;
     const timer = setTimeout(() => {
@@ -49,7 +51,7 @@ export function SaleHistory({
       live = false;
       clearTimeout(timer);
     };
-  }, [date, origin, status, q, offset]);
+  }, [date, origin, status, q, offset, setError]);
   return (
     <section className="surface-panel p-4 sm:p-6">
       <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -105,9 +107,12 @@ export function SaleHistory({
         </Control>
       </div>
       {error ? (
-        <p role="alert" className="py-10 text-sm text-red-700">
-          {error}
-        </p>
+        <OperationAlert
+          eventKey={errorAttempt}
+          tone="error"
+          title="No pudimos completar la operación"
+          message={error}
+        />
       ) : loading ? (
         <p role="status" className="py-12 text-center text-sm text-muted">
           Cargando ventas…

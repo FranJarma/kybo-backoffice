@@ -3,6 +3,9 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { FieldCaption } from "@/components/ui/field-caption";
+import { OperationAlert } from "@/components/ui/operation-alert";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
 import { getJson, SearchSelect, useOperation, quantity } from "./shared";
 import { decimal } from "@/modules/inventory/decimal";
 import type { LotRow } from "@/modules/inventory/types";
@@ -14,14 +17,15 @@ export function InternalUseManager({ actorId }: { actorId: string }) {
     [selected, setSelected] = useState(""),
     [amount, setAmount] = useState(""),
     [reason, setReason] = useState(""),
-    [error, setError] = useState(""),
+    [error, setError, errorAttempt] = useErrorFeedback(),
     [version, setVersion] = useState(0),
     [notice, setNotice] = useState("");
   const success = useCallback(() => {
     setVersion((v) => v + 1);
     setAmount("");
+    setError("");
     setNotice("Consumo registrado.");
-  }, []);
+  }, [setError]);
   const operation = useOperation<Record<string, unknown>>(
     actorId,
     "internal-use",
@@ -37,6 +41,7 @@ export function InternalUseManager({ actorId }: { actorId: string }) {
         if (live) {
           setLots(r.lots.rows);
           setTotal(r.lots.total);
+          setError("");
         }
       })
       .catch((e) => {
@@ -45,9 +50,10 @@ export function InternalUseManager({ actorId }: { actorId: string }) {
     return () => {
       live = false;
     };
-  }, [item, version, offset]);
+  }, [item, version, offset, setError]);
   function save(e: FormEvent) {
     e.preventDefault();
+    setError("");
     try {
       const lot = lots.find((l) => `${l.id}:${l.locationId}` === selected);
       if (!lot) throw new Error("Elegí el lote y su ubicación.");
@@ -77,11 +83,12 @@ export function InternalUseManager({ actorId }: { actorId: string }) {
           salida.
         </p>
       </header>
-      {(error || operation.error) && (
-        <p role="alert" className="text-red-700">
-          {error || operation.error}
-        </p>
-      )}
+      <OperationAlert
+        title="No pudimos completar el consumo interno"
+        message={error || operation.error}
+        eventKey={error ? errorAttempt : operation.errorAttempt}
+        tone="error"
+      />
       {notice && <p role="status">{notice}</p>}
       {operation.uncertain && (
         <Button onClick={operation.retry}>Reintentar el mismo envío</Button>
@@ -102,7 +109,7 @@ export function InternalUseManager({ actorId }: { actorId: string }) {
               required
             />
             <label className="block text-sm font-semibold">
-              Lote y ubicación
+              <FieldCaption required>Lote y ubicación</FieldCaption>
               <select
                 required
                 value={selected}
@@ -148,7 +155,7 @@ export function InternalUseManager({ actorId }: { actorId: string }) {
               </div>
             </label>
             <label className="block text-sm font-semibold">
-              Cantidad en unidad base
+              <FieldCaption required>Cantidad en unidad base</FieldCaption>
               <Input
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
@@ -157,7 +164,7 @@ export function InternalUseManager({ actorId }: { actorId: string }) {
               />
             </label>
             <label className="block text-sm font-semibold">
-              Motivo
+              <FieldCaption required>Motivo</FieldCaption>
               <Input
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}

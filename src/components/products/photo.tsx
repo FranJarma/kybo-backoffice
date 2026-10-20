@@ -3,12 +3,17 @@ import Image from "next/image";
 import { useState } from "react";
 import { ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { OperationAlert } from "@/components/ui/operation-alert";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
+import type { PhotoVariant } from "@/modules/media/photo-variants";
 export function ProductPhoto({
   id,
   name,
+  variant = "thumbnail",
 }: {
   id?: string | null;
   name: string;
+  variant?: Exclude<PhotoVariant, "original">;
 }) {
   const [failed, setFailed] = useState<string | null>(null);
   return (
@@ -16,10 +21,10 @@ export function ProductPhoto({
       {id && failed !== id ? (
         <Image
           unoptimized
-          src={`/api/media/${id}`}
+          src={`/api/media/${id}?size=${variant}`}
           alt={name}
           fill
-          sizes="(max-width: 640px) 40vw, 200px"
+          sizes={variant === "preview" ? "128px" : "64px"}
           className="object-cover"
           onError={() => setFailed(id)}
         />
@@ -40,7 +45,7 @@ export function PhotoEditor({
   onBusy: (busy: boolean) => void;
   disabled: boolean;
 }) {
-  const [error, setError] = useState("");
+  const [error, setError, errorAttempt] = useErrorFeedback();
   return (
     <fieldset
       className="space-y-5 rounded-xl border border-line p-5 sm:p-6"
@@ -49,7 +54,11 @@ export function PhotoEditor({
       <legend className="px-2 font-semibold text-brand">Foto principal</legend>
       <div className="flex flex-col items-start gap-6 sm:flex-row sm:items-center">
         <div className="w-28 shrink-0 sm:w-32">
-          <ProductPhoto id={value} name="Vista previa del producto" />
+          <ProductPhoto
+            id={value}
+            name="Vista previa del producto"
+            variant="preview"
+          />
         </div>
         <div className="min-w-0 w-full space-y-4">
           <label className="block text-sm font-semibold">
@@ -116,11 +125,12 @@ export function PhotoEditor({
           Procesando…
         </p>
       )}
-      {error && (
-        <p role="alert" className="text-sm text-red-700">
-          {error}
-        </p>
-      )}
+      <OperationAlert
+        title="No pudimos subir la foto"
+        message={error}
+        eventKey={errorAttempt}
+        tone="error"
+      />
     </fieldset>
   );
 }

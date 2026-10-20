@@ -1,5 +1,7 @@
 # IVA por producto y comisión por medio de pago
 
+Actualización posterior: el usuario cambió el criterio a **precios finales cargados en catálogo**. Los resultados de este documento corresponden a la implementación anterior (precios netos + IVA). Ver `docs/verification-final-prices-tax-costing.md` para el comportamiento actual; se conservan estos registros como evidencia histórica.
+
 Implementación y verificación del 19/10/2026. La emisión de comprobantes con ARCA queda para la siguiente etapa.
 
 ## Configuración y comportamiento

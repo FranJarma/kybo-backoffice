@@ -3,8 +3,10 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FieldCaption } from "@/components/ui/field-caption";
 import { SearchCombobox } from "@/components/ui/search-combobox";
 import { OperationAlert } from "@/components/ui/operation-alert";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
 import { getJson, money } from "@/components/inventory/shared";
 import type { ComboDefinition } from "@/modules/combos/service";
 import type { ProductCost } from "@/modules/catalog/product-cost-model";
@@ -31,7 +33,7 @@ export function ComboTab({
     [revision, setRevision] = useState(0),
     [ready, setReady] = useState(false),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState(""),
+    [error, setError, errorAttempt] = useErrorFeedback(),
     [notice, setNotice] = useState(""),
     [query, setQuery] = useState("");
   const [choices, setChoices] = useState<
@@ -58,7 +60,7 @@ export function ComboTab({
     return () => {
       live = false;
     };
-  }, [productId]);
+  }, [productId, setError]);
   useEffect(() => {
     let live = true;
     getJson<ComboDefinition | null>(`/api/products/${productId}/combo`)
@@ -89,7 +91,7 @@ export function ComboTab({
     return () => {
       live = false;
     };
-  }, [productId]);
+  }, [productId, setError]);
   useEffect(() => {
     let live = true;
     const timer = setTimeout(() => {
@@ -110,7 +112,7 @@ export function ComboTab({
       live = false;
       clearTimeout(timer);
     };
-  }, [query, productId]);
+  }, [query, productId, setError]);
   const update = (i: number, g: Group) =>
     setGroups((all) => all.map((x, j) => (i === j ? g : x)));
   async function save() {
@@ -217,6 +219,7 @@ export function ComboTab({
       <OperationAlert
         title={error ? "No se pudo completar" : "Combo publicado"}
         message={error || notice}
+        eventKey={error ? errorAttempt : undefined}
         tone={error ? "error" : "success"}
       />
       {view === "cost" ? (
@@ -367,17 +370,21 @@ export function ComboTab({
                 })()}
               <div className="grid gap-5 sm:grid-cols-[1fr_160px_auto]">
                 <label>
-                  Nombre del grupo
+                  <FieldCaption required={!g.source}>
+                    Nombre del grupo
+                  </FieldCaption>
                   <Input
                     value={g.name}
+                    required={!g.source}
                     readOnly={!!g.source}
                     onChange={(e) => update(i, { ...g, name: e.target.value })}
                   />
                 </label>
                 <label>
-                  Unidades por combo
+                  <FieldCaption required>Unidades por combo</FieldCaption>
                   <Input
                     type="number"
+                    required
                     min={1}
                     max={99}
                     value={g.quantity}
@@ -426,7 +433,7 @@ export function ComboTab({
                       ] as const
                     ).map(([key, label]) => (
                       <label key={key} className="text-sm">
-                        Adicional neto {label} (sin IVA)
+                        Adicional final {label} (IVA incluido)
                         <Input
                           inputMode="decimal"
                           value={o[key]}
