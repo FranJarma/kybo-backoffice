@@ -8,6 +8,23 @@ import {
   navigationIsActive,
 } from "../src/lib/navigation";
 describe("navegación por áreas", () => {
+  it("reserva la administración de usuarios exclusivamente al administrador", () => {
+    expect(
+      visibleNavigation({ role: "admin" }).some(
+        (n) => n.href === "/settings/users",
+      ),
+    ).toBe(true);
+    expect(
+      visibleNavigation({ role: "manager" }).some(
+        (n) => n.href === "/settings/users",
+      ),
+    ).toBe(false);
+    expect(
+      visibleNavigation({ role: "staff", catalogManager: true }).some(
+        (n) => n.href === "/settings/users",
+      ),
+    ).toBe(false);
+  });
   it("agrupa los dos tipos de opciones sin duplicar entradas del sidebar", () => {
     const entries = visibleNavigation({ role: "admin" });
     expect(entries.find((n) => n.id === "modifiers")?.label).toBe(

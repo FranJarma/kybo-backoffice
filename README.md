@@ -16,8 +16,8 @@ La descripción del rediseño y su verificación está en `docs/ui-redesign.md`.
 
 ## Funciona en este incremento
 
-- Inicio y cierre de sesión. Registro público desactivado; altas de usuarios por CLI administrativa.
-- Permisos en servidor: administración y encargada pueden gestionar los maestros; personal no accede al catálogo administrativo.
+- Inicio de sesión con usuario o correo y contraseña. Registro público desactivado; altas, edición y desactivación de cuentas desde **Configuración → Usuarios**, sólo para administradores. La CLI permite crear la primera cuenta administradora.
+- Permisos verificados en servidor: Administrador, Encargado y Personal, con roles por sucursal y un permiso adicional para gestionar el catálogo compartido.
 - Proveedores, clientes, medios de pago, insumos, productos y presentaciones: búsqueda, alta, edición, archivo y restauración.
 - Costos desconocidos guardados como `null`, visibles como **Pendiente**. Un cero explícito se conserva como cero.
 - Precios independientes de mostrador, PedidosYa y Uber Eats en una tabla relacionada con productos.
@@ -142,9 +142,9 @@ Eliminá `KYBO_NEW_USER_PASSWORD` tras crear el usuario y ejecutá:
 npm run dev
 ```
 
-Abrí http://localhost:3000 e ingresá con esa cuenta. También podés crear `manager` o `staff`; este último no tiene acceso administrativo. La gestión de permisos/fichajes de empleadas tendrá su propia interfaz en una entrega posterior.
+Abrí http://localhost:3000 e ingresá con esa cuenta. En **Configuración → Usuarios** podés crear empleados con nombre, usuario y contraseña inicial; el correo es opcional. Asignales el rol Administrador, Encargado o Personal y sus sucursales. Personal ingresa automáticamente a la primera sucursal habilitada que tenga asignada en la lista. El permiso de catálogo es compartido por todas las sucursales. Desde la misma ficha podés cambiar la contraseña o desactivar el acceso conservando el historial; los cambios de credenciales y accesos cierran las sesiones del usuario. No se permite desactivar ni quitarle el rol de administrador a tu propia cuenta.
 
-PGlite usa PostgreSQL embebido únicamente para desarrollo y pruebas. Su directorio es local y no está incluido en el repositorio. No abras la misma base local simultáneamente desde varios procesos. Las migraciones y la creación de usuarios se ejecutan con el servidor local detenido. Producción rechaza este modo.
+PGlite usa PostgreSQL embebido únicamente para desarrollo y pruebas. Su directorio es local y no está incluido en el repositorio. No abras la misma base local simultáneamente desde varios procesos. Las migraciones y el alta de usuarios por CLI se ejecutan con el servidor local detenido; la pantalla de Usuarios utiliza el proceso de la aplicación. Producción rechaza este modo.
 
 ## Conectar Neon
 

@@ -185,6 +185,14 @@ export const navigation = [
     access: "catalog",
   },
   {
+    id: "users",
+    area: "Configuración",
+    label: "Usuarios",
+    href: "/settings/users",
+    icon: "Users",
+    access: "admin",
+  },
+  {
     id: "branches",
     area: "Configuración",
     label: "Sucursales y ubicaciones",
@@ -198,6 +206,7 @@ export function canNavigate(
   entry: (typeof navigation)[number],
   actor: NavigationAccess,
 ) {
+  if (entry.access === "admin") return actor.role === "admin";
   return (
     entry.access === "all" ||
     actor.role === "admin" ||
