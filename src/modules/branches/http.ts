@@ -6,11 +6,12 @@ import type { Actor } from "@/lib/access";
 export async function operationalContext(request: Request | null = null) {
   const actor = await requireActor();
   const source = request?.headers ?? (await headers());
+  const explicitBranch = source.get("X-Kybo-Branch-Id");
   const branchId =
-    source.get("X-Kybo-Branch-Id") ??
-    (await cookies()).get("kybo-branch")?.value ??
-    "";
-  return resolveOperationalContext(await getDb(), actor, branchId);
+    explicitBranch ?? (await cookies()).get("kybo-branch")?.value ?? "";
+  return resolveOperationalContext(await getDb(), actor, branchId, {
+    explicit: explicitBranch !== null,
+  });
 }
 export async function operationalActor(
   request: Request | null = null,

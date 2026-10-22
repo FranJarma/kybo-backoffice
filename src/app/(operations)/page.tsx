@@ -346,7 +346,9 @@ export default async function HomePage() {
           </div>
         )}
       </section>
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div
+        className={`grid gap-3 ${actor.role === "admin" ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}
+      >
         {[
           {
             href: paths["items"],
@@ -366,23 +368,32 @@ export default async function HomePage() {
             desc: "Organizá las formas de pago",
             icon: WalletCards,
           },
-        ].map(({ href, label, desc, icon: Icon }) => (
-          <Link
-            href={href}
-            key={href}
-            className="group flex items-center gap-3 rounded-xl border border-line bg-white px-4 py-4 transition-colors hover:border-blue/30"
-          >
-            <Icon size={20} strokeWidth={1.7} className="shrink-0 text-muted" />
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-bold text-brand">{label}</p>
-              <p className="mt-1 text-[11px] text-muted">{desc}</p>
-            </div>
-            <ArrowRight
-              size={15}
-              className="text-muted group-hover:text-blue"
-            />
-          </Link>
-        ))}
+        ]
+          .filter(
+            ({ href }) =>
+              actor.role === "admin" || href !== paths["payment-methods"],
+          )
+          .map(({ href, label, desc, icon: Icon }) => (
+            <Link
+              href={href}
+              key={href}
+              className="group flex items-center gap-3 rounded-xl border border-line bg-white px-4 py-4 transition-colors hover:border-blue/30"
+            >
+              <Icon
+                size={20}
+                strokeWidth={1.7}
+                className="shrink-0 text-muted"
+              />
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold text-brand">{label}</p>
+                <p className="mt-1 text-[11px] text-muted">{desc}</p>
+              </div>
+              <ArrowRight
+                size={15}
+                className="text-muted group-hover:text-blue"
+              />
+            </Link>
+          ))}
       </div>
     </div>
   );

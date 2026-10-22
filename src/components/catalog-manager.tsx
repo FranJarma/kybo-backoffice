@@ -230,11 +230,13 @@ export function CatalogManager({
   definition,
   ingredientsOnly = false,
   actorId = "",
+  canManagePaymentMethods = false,
 }: {
   entity: Entity;
   definition: EntityDefinition;
   ingredientsOnly?: boolean;
   actorId?: string;
+  canManagePaymentMethods?: boolean;
 }) {
   const [rows, setRows] = useState<CatalogRow[]>([]),
     [total, setTotal] = useState(0),
@@ -1449,6 +1451,7 @@ export function CatalogManager({
                   >
                     <div hidden={productTab !== "cost"}>
                       <ProductProfitability
+                        canManagePaymentMethods={canManagePaymentMethods}
                         key={`profitability:${editing.id}`}
                         result={profitability.result}
                         error={profitability.error}

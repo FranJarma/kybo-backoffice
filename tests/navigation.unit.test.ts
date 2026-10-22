@@ -8,6 +8,26 @@ import {
   navigationIsActive,
 } from "../src/lib/navigation";
 describe("navegación por áreas", () => {
+  it("reserva sucursales y ubicaciones al administrador aunque el encargado gestione catálogo", () => {
+    expect(
+      visibleNavigation({ role: "admin" }).some((n) => n.id === "branches"),
+    ).toBe(true);
+    expect(
+      visibleNavigation({ role: "manager", catalogManager: true }).some(
+        (n) => n.id === "branches",
+      ),
+    ).toBe(false);
+    expect(
+      visibleNavigation({ role: "manager", catalogManager: true }).some(
+        (n) => n.href === "/settings/payment-methods",
+      ),
+    ).toBe(false);
+    expect(
+      visibleNavigation({ role: "staff", catalogManager: true }).some(
+        (n) => n.href === "/settings/payment-methods",
+      ),
+    ).toBe(false);
+  });
   it("reserva la administración de usuarios exclusivamente al administrador", () => {
     expect(
       visibleNavigation({ role: "admin" }).some(

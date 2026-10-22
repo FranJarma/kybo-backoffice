@@ -19,8 +19,12 @@ export async function archiveLocation(
 ) {
   return db.transaction(async (tx) => {
     const ctx = await requireOperationalContext(tx, actor, branchId);
-    if (ctx.role === "staff")
-      throw new AppError("FORBIDDEN", "Se requiere permiso de encargado.", 403);
+    if (ctx.role !== "admin")
+      throw new AppError(
+        "FORBIDDEN",
+        "Solo un administrador puede archivar ubicaciones.",
+        403,
+      );
     const [location] = await tx
       .select()
       .from(locations)

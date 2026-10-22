@@ -1196,7 +1196,7 @@ export function SalesManager({
           methods={paymentMethods}
           methodsError={methodsError}
           methodsLoading={methodsLoading}
-          canManageMethods={role !== "staff"}
+          canManageMethods={role === "admin"}
           onRefreshMethods={() => {
             setMethodsLoading(true);
             setMethodsError("");

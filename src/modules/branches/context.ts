@@ -8,6 +8,20 @@ import { AppError } from "@/lib/errors";
 import type { OperationalContext } from "../operations/types";
 import { authorizeBranch, authorizeCatalog } from "./authorization";
 
+export async function requireAdministrator(db: AppDb | Tx, actor: Actor) {
+  const [account] = await db
+    .select()
+    .from(operationalUsers)
+    .where(eq(operationalUsers.userId, actor.id))
+    .for("share");
+  if (!account || account.disabled || account.role !== "admin")
+    throw new AppError(
+      "FORBIDDEN",
+      "Esta configuración requiere permiso de administrador.",
+      403,
+    );
+}
+
 export async function requireOperationalContext(
   db: AppDb | Tx,
   actor: Actor,

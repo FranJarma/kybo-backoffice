@@ -182,7 +182,7 @@ export const navigation = [
     label: "Medios de pago",
     href: "/settings/payment-methods",
     icon: "WalletCards",
-    access: "catalog",
+    access: "admin",
   },
   {
     id: "users",
@@ -198,7 +198,7 @@ export const navigation = [
     label: "Sucursales y ubicaciones",
     href: "/settings/branches",
     icon: "Store",
-    access: "manager",
+    access: "admin",
   },
 ] as const;
 export type NavigationId = (typeof navigation)[number]["id"];
