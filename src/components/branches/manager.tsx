@@ -234,15 +234,17 @@ export function BranchManager({
                   </li>
                 ))}
               </ul>
-              <form
-                onSubmit={(e) => void save(e, false)}
-                className="grid gap-3"
-              >
-                <fieldset disabled={busy} className="grid gap-3">
-                  {locationFields}
-                  <Button type="submit">Agregar ubicación</Button>
-                </fieldset>
-              </form>
+              {admin && (
+                <form
+                  onSubmit={(e) => void save(e, false)}
+                  className="grid gap-3"
+                >
+                  <fieldset disabled={busy} className="grid gap-3">
+                    {locationFields}
+                    <Button type="submit">Agregar ubicación</Button>
+                  </fieldset>
+                </form>
+              )}
             </>
           )}
         </Card>

@@ -269,7 +269,7 @@ export function PaymentDialog({
                             <p className="mt-2 text-sm leading-6 text-muted">
                               {canManageMethods
                                 ? "Agregá los medios que aceptás para comenzar a cobrar."
-                                : "Pedile al encargado que configure los medios de pago del local."}
+                                : "Pedile al administrador que configure los medios de pago del local."}
                             </p>
                             {canManageMethods && (
                               <Link

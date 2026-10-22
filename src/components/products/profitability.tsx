@@ -101,12 +101,14 @@ export function ProductProfitability({
   onRefresh,
   month,
   onMonthChange,
+  canManagePaymentMethods = false,
 }: {
   result?: ProfitabilityResponse;
   error?: string;
   onRefresh: () => void;
   month: string;
   onMonthChange: (month: string) => void;
+  canManagePaymentMethods?: boolean;
 }) {
   const id = useId();
   const [channel, setChannel] = useState<SaleChannel>("counter");
@@ -466,23 +468,29 @@ export function ProductProfitability({
                     ))}
                   </tbody>
                 </table>
-                <Link
-                  className="text-xs text-blue underline underline-offset-4"
-                  href="/settings/payment-methods"
-                >
-                  Configurar comisiones
-                </Link>
+                {canManagePaymentMethods && (
+                  <Link
+                    className="text-xs text-blue underline underline-offset-4"
+                    href="/settings/payment-methods"
+                  >
+                    Configurar comisiones
+                  </Link>
+                )}
               </div>
             </details>
           ) : (
             <p className="text-sm text-muted">
               No hay medios de pago activos.{" "}
-              <Link
-                className="text-blue underline"
-                href="/settings/payment-methods"
-              >
-                Configurar medios de pago
-              </Link>
+              {canManagePaymentMethods ? (
+                <Link
+                  className="text-blue underline"
+                  href="/settings/payment-methods"
+                >
+                  Configurar medios de pago
+                </Link>
+              ) : (
+                "Solicitá su configuración al administrador."
+              )}
             </p>
           )}
         </>

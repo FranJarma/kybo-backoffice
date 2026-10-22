@@ -182,7 +182,15 @@ export const navigation = [
     label: "Medios de pago",
     href: "/settings/payment-methods",
     icon: "WalletCards",
-    access: "catalog",
+    access: "admin",
+  },
+  {
+    id: "users",
+    area: "Configuración",
+    label: "Usuarios",
+    href: "/settings/users",
+    icon: "Users",
+    access: "admin",
   },
   {
     id: "branches",
@@ -190,7 +198,7 @@ export const navigation = [
     label: "Sucursales y ubicaciones",
     href: "/settings/branches",
     icon: "Store",
-    access: "manager",
+    access: "admin",
   },
 ] as const;
 export type NavigationId = (typeof navigation)[number]["id"];
@@ -198,6 +206,7 @@ export function canNavigate(
   entry: (typeof navigation)[number],
   actor: NavigationAccess,
 ) {
+  if (entry.access === "admin") return actor.role === "admin";
   return (
     entry.access === "all" ||
     actor.role === "admin" ||

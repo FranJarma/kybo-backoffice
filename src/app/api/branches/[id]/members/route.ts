@@ -10,6 +10,7 @@ import {
   requestInput,
 } from "@/modules/catalog/http";
 import { AppError } from "@/lib/errors";
+import { lockUserAdministration } from "@/modules/users/service";
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -66,22 +67,10 @@ export async function PUT(
       .strict()
       .parse(await requestInput(request));
     await db.transaction(async (tx) => {
-      const [admin] = await tx
-        .select()
-        .from(operationalUsers)
-        .where(eq(operationalUsers.userId, actor.id))
-        .for("share");
-      if (!admin || admin.disabled || admin.role !== "admin")
-        throw new AppError(
-          "FORBIDDEN",
-          "Solo un administrador puede asignar accesos.",
-          403,
-        );
-      const [target] = await tx
-        .select()
-        .from(operationalUsers)
-        .where(eq(operationalUsers.userId, input.userId))
-        .for("update");
+      const operators = await lockUserAdministration(tx, actor);
+      const target = operators.find(
+        (operator) => operator.userId === input.userId,
+      );
       if (!target || target.disabled)
         throw new AppError(
           "VALIDATION",

@@ -4,6 +4,7 @@ import { FieldCaption } from "@/components/ui/field-caption";
 import { OperationAlert } from "@/components/ui/operation-alert";
 import { useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
 import { getJson } from "@/components/inventory/shared";
 type Member = {
   id: string;
@@ -32,6 +33,12 @@ export function BranchMembers({ branchId }: { branchId: string }) {
   return (
     <section className="surface-panel space-y-4 p-5">
       <h2 className="text-xl font-bold">Accesos a esta sucursal</h2>
+      <Link
+        href="/settings/users"
+        className="inline-flex min-h-10 items-center text-sm font-medium text-blue hover:underline"
+      >
+        Crear y administrar usuarios
+      </Link>
       <p className="text-sm text-muted">
         El permiso de catálogo es compartido por todas las sucursales. El rol
         operativo corresponde únicamente a esta sucursal.

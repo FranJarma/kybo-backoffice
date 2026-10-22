@@ -11,6 +11,7 @@ import {
 import {
   requireCatalogManagement,
   requireCatalogRead,
+  requireAdministrator,
 } from "../branches/context";
 import {
   modifierOptionComponents,
@@ -243,6 +244,7 @@ export function createCatalogService(db: AppDb) {
       if (setup && !values.kind)
         values.kind = setup.mode === "combo" ? "combo" : "individual";
       return db.transaction(async (tx) => {
+        if (entity === "payment-methods") await requireAdministrator(tx, actor);
         if (setup) await lockProductSetup(tx);
         if (isOrderedEntity(entity))
           values.sortOrder = await nextCatalogOrder(tx, entity);
@@ -300,6 +302,7 @@ export function createCatalogService(db: AppDb) {
       if (values && isOrderedEntity(entity)) delete values.sortOrder;
       const table = tables[entity];
       return db.transaction(async (tx) => {
+        if (entity === "payment-methods") await requireAdministrator(tx, actor);
         if (setup) await lockProductSetup(tx);
         if (isOrderedEntity(entity)) await lockCatalogOrder(tx, entity);
         const [current] = await tx

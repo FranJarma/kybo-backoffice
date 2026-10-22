@@ -3,7 +3,7 @@ import { BranchManager } from "@/components/branches/manager";
 import { redirect } from "next/navigation";
 export default async function BranchesPage() {
   const actor = await requireActor();
-  if (actor.role === "staff") redirect("/kitchen/production");
+  if (actor.role !== "admin") redirect("/");
   return (
     <BranchManager
       admin={actor.role === "admin"}

@@ -37,8 +37,12 @@ export async function POST(request: Request, { params }: Params) {
       input = locationCreateSchema.parse(await requestInput(request));
     const result = await db.transaction(async (tx) => {
       const ctx = await requireOperationalContext(tx, actor, id);
-      if (ctx.role === "staff")
-        throw new AppError("FORBIDDEN", "Se requiere un encargado.", 403);
+      if (ctx.role !== "admin")
+        throw new AppError(
+          "FORBIDDEN",
+          "Solo un administrador puede crear ubicaciones.",
+          403,
+        );
       const [row] = await tx
         .insert(locations)
         .values({ ...input, branchId: id })

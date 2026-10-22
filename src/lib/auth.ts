@@ -7,6 +7,7 @@ import { eq } from "drizzle-orm";
 import { headers } from "next/headers";
 import { z } from "zod";
 import type { AppDb } from "../db/client";
+import type { Tx } from "../db/types";
 import { getDb } from "../db/client";
 import * as authSchema from "../db/auth-schema";
 import { account, operationalUsers, user } from "../db/auth-schema";
@@ -127,9 +128,9 @@ export async function requireActor(): Promise<Actor> {
   return actor;
 }
 
-/** Trusted server-only administrative action. Never expose through an HTTP endpoint. */
+/** Internal provisioning. HTTP callers must first enforce live administrator authorization. */
 export async function provisionUser(
-  db: AppDb,
+  db: AppDb | Tx,
   input: {
     name: string;
     email?: string;
@@ -172,15 +173,13 @@ export async function provisionUser(
       if (!branch || branch.archivedAt || input.role === "admin")
         throw new AppError("INVALID_INPUT", "Sucursal o rol inválidos.", 400);
     }
-    await tx
-      .insert(user)
-      .values({
-        id,
-        name,
-        email,
-        username,
-        emailVerified: Boolean(suppliedEmail),
-      });
+    await tx.insert(user).values({
+      id,
+      name,
+      email,
+      username,
+      emailVerified: Boolean(suppliedEmail),
+    });
     await tx.insert(account).values({
       id: crypto.randomUUID(),
       accountId: id,

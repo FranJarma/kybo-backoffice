@@ -1,6 +1,6 @@
 "use client";
 import { OperationAlert } from "@/components/ui/operation-alert";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -17,7 +17,6 @@ import {
   ShoppingCart,
   Warehouse,
   LogOut,
-  UserRound,
   ChefHat,
   Store,
   LayoutGrid,
@@ -99,7 +98,6 @@ export function AppShell({
   children,
   role,
   name,
-  dateLabel,
   catalogManager = false,
   branches,
   selectedBranchId,
@@ -114,6 +112,15 @@ export function AppShell({
 }) {
   const [open, setOpen] = useState(false);
   const menuButton = useRef<HTMLButtonElement>(null);
+  useLayoutEffect(() => {
+    if (!selectedBranchId) return;
+    const saved = document.cookie
+      .split("; ")
+      .find((cookie) => cookie.startsWith("kybo-branch="))
+      ?.split("=")[1];
+    if (saved !== selectedBranchId)
+      document.cookie = `kybo-branch=${encodeURIComponent(selectedBranchId)}; Path=/; Max-Age=2592000; SameSite=Lax${window.location.protocol === "https:" ? "; Secure" : ""}`;
+  }, [selectedBranchId]);
   useEffect(() => {
     const desktop = window.matchMedia("(min-width: 1024px)");
     const closeAtDesktop = () => {
