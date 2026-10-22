@@ -1,5 +1,6 @@
 import { saleLineModifiers } from "@/db/modifier-schema";
-import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNull, sql } from "drizzle-orm";
+import { locatorAssignments } from "@/db/pickup-schema";
 import type { AppDb } from "@/db/client";
 import { sales, saleOrders, saleLines, salePayments } from "@/db/sales-schema";
 import { notFound, type Tx } from "@/modules/inventory/service";
@@ -99,12 +100,27 @@ export async function saleDetail(
     .from(salePayments)
     .where(eq(salePayments.saleId, id))
     .orderBy(asc(salePayments.createdAt), asc(salePayments.id));
+  const locators = orders.length
+    ? await db
+        .select()
+        .from(locatorAssignments)
+        .where(
+          and(
+            inArray(
+              locatorAssignments.orderId,
+              orders.map((o) => o.id),
+            ),
+            isNull(locatorAssignments.returnedAt),
+          ),
+        )
+    : [];
   return {
     ...(await summaries(db, [row]))[0],
     notes: row.notes,
     cancelReason: row.cancelReason,
     orders: orders.map((o) => ({
       id: o.id,
+      locatorNumber: locators.find((a) => a.orderId === o.id)?.number ?? null,
       sequence: o.sequence,
       totalAmount: o.totalAmount,
       notes: o.notes,

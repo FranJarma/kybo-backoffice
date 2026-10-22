@@ -8,6 +8,7 @@ import { requireOperationalContext } from "../branches/context";
 import type { Actor } from "@/lib/access";
 import type { CommandMeta, OperationalContext } from "./types";
 import { AppError } from "@/lib/errors";
+import { authorizeTaskCommand } from "../daily-operations/access";
 
 function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonical);
@@ -28,6 +29,7 @@ export async function executeCommand<T>(
   action: string,
   payload: unknown,
   run: (tx: Tx, ctx: OperationalContext, operationId: string) => Promise<T>,
+  transactionConfig?: { isolationLevel: "repeatable read" },
 ): Promise<{ result: T; operationId: string; replayed: boolean }> {
   if (!/^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i.test(meta.requestId))
     throw new AppError(
@@ -46,7 +48,10 @@ export async function executeCommand<T>(
     const productionCommand =
       action === "production-start" || action === "production-finish";
     const staffCommand =
-      action === "complete" || action === "deliver" || productionCommand;
+      action === "complete" ||
+      action === "deliver" ||
+      productionCommand ||
+      action === "daily-task";
     if (
       (!staffCommand && ctx.role === "staff") ||
       (action === "global-lot-recall" && ctx.role !== "admin")
@@ -56,6 +61,7 @@ export async function executeCommand<T>(
         "Ya no tenés permiso para realizar o consultar esta operación.",
         403,
       );
+    if (action === "daily-task") await authorizeTaskCommand(tx, ctx, payload);
     if (ctx.role === "staff" && productionCommand) {
       const orderId = (payload as { id?: unknown })?.id;
       const [order] =
@@ -120,5 +126,5 @@ export async function executeCommand<T>(
       .set({ result })
       .where(eq(stockOperations.id, id));
     return { result, operationId: id, replayed: false };
-  });
+  }, transactionConfig);
 }

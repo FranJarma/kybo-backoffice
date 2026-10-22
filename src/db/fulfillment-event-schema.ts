@@ -7,6 +7,7 @@ import {
   foreignKey,
   check,
   uniqueIndex,
+  index,
 } from "drizzle-orm/pg-core";
 import { saleLines } from "./sales-schema";
 import { productFulfillmentVersions } from "./product-fulfillment-schema";
@@ -34,6 +35,9 @@ export const saleLineFulfillments = pgTable(
   },
   (t) => [
     uniqueIndex("sale_line_fulfillment_branch").on(t.saleLineId, t.branchId),
+    index("pickup_active_fulfillments")
+      .on(t.branchId, t.saleLineId)
+      .where(sql`${t.delivered} + ${t.cancelled} < ${t.ordered}`),
     foreignKey({
       columns: [t.documentId, t.branchId],
       foreignColumns: [stockDocuments.id, stockDocuments.branchId],

@@ -77,6 +77,7 @@ describe("navegación por áreas", () => {
   });
   it("personal no recibe enlaces restringidos", () => {
     expect(visibleNavigation({ role: "staff" }).map((n) => n.id)).toEqual([
+      "daily-operations",
       "sales",
       "tables",
       "kitchen",

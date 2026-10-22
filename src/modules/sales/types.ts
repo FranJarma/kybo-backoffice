@@ -62,6 +62,7 @@ export type SaleDetail = SaleSummary & {
   cancelReason: string | null;
   orders: {
     id: string;
+    locatorNumber?: number | null;
     sequence: number;
     totalAmount: string;
     notes: string | null;

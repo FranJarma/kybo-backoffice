@@ -3,6 +3,7 @@ import { CheckCircle2, Plus, WalletCards, Ban, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { money } from "@/components/inventory/shared";
 import { SaleFulfillmentPanel } from "./fulfillment-panel";
+import { LocatorManager } from "@/components/pickup/locator-manager";
 import {
   channelLabels,
   originLabels,
@@ -24,6 +25,7 @@ export function SaleDetailPanel({
   onAdd,
   onCancel,
   onBack,
+  onLocatorChanged,
 }: {
   actorId: string;
   sale: SaleDetail;
@@ -33,6 +35,7 @@ export function SaleDetailPanel({
   onAdd: () => void;
   onCancel: () => void;
   onBack: () => void;
+  onLocatorChanged?: () => void;
 }) {
   return (
     <div className="space-y-5">
@@ -89,12 +92,26 @@ export function SaleDetailPanel({
           {sale.orders.map((order) => (
             <article key={order.id} className="surface-panel overflow-hidden">
               <div className="flex justify-between gap-3 border-b border-line px-5 py-4">
-                <h3 className="text-sm font-bold">Pedido {order.sequence}</h3>
+                <h3 className="text-sm font-bold">
+                  Pedido {sale.number}.{order.sequence}
+                  {order.locatorNumber != null
+                    ? ` · Localizador ${order.locatorNumber}`
+                    : ""}
+                </h3>
                 <span className="text-xs text-muted">
                   {time(order.createdAt)}
                 </span>
               </div>
               <div className="divide-y divide-line px-5">
+                <div className="py-3">
+                  <LocatorManager
+                    actorId={actorId}
+                    orderId={order.id}
+                    label={`${sale.number}.${order.sequence}`}
+                    cancelled={sale.status === "cancelled"}
+                    onChanged={onLocatorChanged}
+                  />
+                </div>
                 {order.lines.map((line) => (
                   <div key={line.id} className="py-4">
                     <div className="flex justify-between gap-4">

@@ -2,6 +2,7 @@
 import { useErrorFeedback } from "@/components/ui/use-error-feedback";
 import { OperationAlert } from "@/components/ui/operation-alert";
 import { FieldCaption } from "@/components/ui/field-caption";
+import { StockShortageNotice } from "./stock-shortage-notice";
 import { useEffect, useId, useState } from "react";
 import { Info, RotateCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -56,12 +57,16 @@ export function OperationNotice({
   if (!error && !uncertain) return null;
   return (
     <>
-      <OperationAlert
-        eventKey={eventKey}
-        tone="error"
-        title="No pudimos completar la operación"
-        message={error}
-      />
+      {error.startsWith("No hay stock disponible suficiente para reservar:") ? (
+        <StockShortageNotice key={`${eventKey}:${error}`} message={error} />
+      ) : (
+        <OperationAlert
+          eventKey={eventKey}
+          tone="error"
+          title="No pudimos completar la operación"
+          message={error}
+        />
+      )}
       {uncertain && (
         <div
           role="status"
@@ -95,7 +100,7 @@ export function LookupSelect({
   kind: "customers" | "payment-methods";
   label: string;
   value: string;
-  onChange: (value: string) => void;
+  onChange: (value: string, name?: string) => void;
   disabled?: boolean;
   empty?: string;
   initialName?: string;
@@ -147,7 +152,7 @@ export function LookupSelect({
       >
         <FieldCaption required={required}>{label}</FieldCaption>
       </label>
-      {(data.total > 30 || q) && (
+      {(kind === "customers" || data.total > 30 || q) && (
         <Input
           className="mb-2"
           aria-label={`Buscar ${label.toLowerCase()}`}
@@ -165,7 +170,10 @@ export function LookupSelect({
         disabled={disabled || loading}
         onChange={(e) => {
           setCached(options.find((r) => r.id === e.target.value) ?? null);
-          onChange(e.target.value);
+          onChange(
+            e.target.value,
+            options.find((r) => r.id === e.target.value)?.name,
+          );
         }}
       >
         <option value="">{loading ? "Cargando…" : empty}</option>

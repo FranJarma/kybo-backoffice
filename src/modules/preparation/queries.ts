@@ -1,6 +1,7 @@
 import { recipeVersions } from "@/db/recipe-schema";
 import { saleLineModifiers } from "@/db/modifier-schema";
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { locatorAssignments } from "@/db/pickup-schema";
 import {
   preparationStations,
   preparationTasks,
@@ -41,11 +42,19 @@ export async function taskViews(tx: Tx, ids: string[]): Promise<PrepTask[]> {
         status: sales.status,
       },
       assigneeName: user.name,
+      locatorNumber: locatorAssignments.number,
     })
     .from(preparationTasks)
     .innerJoin(saleOrders, eq(saleOrders.id, preparationTasks.orderId))
     .innerJoin(sales, eq(sales.id, saleOrders.saleId))
     .leftJoin(user, eq(user.id, preparationTasks.assigneeId))
+    .leftJoin(
+      locatorAssignments,
+      and(
+        eq(locatorAssignments.orderId, saleOrders.id),
+        isNull(locatorAssignments.returnedAt),
+      ),
+    )
     .where(inArray(preparationTasks.id, ids));
   const lines = await tx
     .select({
@@ -91,7 +100,14 @@ export async function taskViews(tx: Tx, ids: string[]): Promise<PrepTask[]> {
     deliveredAt: iso(t.deliveredAt),
   });
   const views = rows.map(
-    ({ task: t, order: o, sale: s, assigneeName }): PrepTask => ({
+    ({
+      task: t,
+      order: o,
+      sale: s,
+      assigneeName,
+      locatorNumber,
+    }): PrepTask => ({
+      locatorNumber,
       id: t.id,
       revision: t.revision,
       orderId: o.id,

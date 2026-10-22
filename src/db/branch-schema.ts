@@ -21,12 +21,16 @@ export const branches = pgTable(
     code: text("code").notNull(),
     name: text("name").notNull(),
     timeZone: text("time_zone").notNull(),
+    locatorCount: integer("locator_count").notNull().default(16),
+    publicQueueKey: uuid("public_queue_key").notNull().defaultRandom(),
     revision: integer("revision").notNull().default(1),
     archivedAt: at("archived_at"),
     createdAt: at("created_at").notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex("branch_code").on(t.code),
+    uniqueIndex("branch_public_queue_key").on(t.publicQueueKey),
+    check("branch_locator_count", sql`${t.locatorCount} between 1 and 999`),
     check("branch_code_valid", sql`${t.code} ~ '^[A-Z0-9][A-Z0-9._-]*$'`),
   ],
 );

@@ -299,7 +299,7 @@ export function AppShell({
       <div
         className={cn(
           "min-w-0",
-          register && "flex min-h-dvh flex-col md:h-dvh md:overflow-hidden",
+          register && "flex h-dvh min-h-dvh flex-col overflow-hidden",
         )}
       >
         <header

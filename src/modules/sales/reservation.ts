@@ -13,6 +13,7 @@ import { stockDocuments } from "@/db/inventory-document-schema";
 import { saleLineFulfillments } from "@/db/fulfillment-event-schema";
 import { reserveStock } from "../inventory/reservations";
 import { lockStock } from "../inventory/locking";
+import { assertStockAvailable } from "../inventory/stock-shortages";
 import { integer, safeQuantity } from "../inventory/decimal";
 import { AppError } from "@/lib/errors";
 function fail(message: string): never {
@@ -94,10 +95,16 @@ export async function reserveOrder(
     }));
     demandGroups.push({ line, version, demands });
   }
-  await lockStock(
+  const tracked = await lockStock(
     tx,
     ctx,
     demandGroups.flatMap((g) => g.demands),
+  );
+  await assertStockAvailable(
+    tx,
+    ctx,
+    demandGroups.flatMap((g) => g.demands),
+    tracked,
   );
   for (const { line, version, demands } of demandGroups) {
     const [document] = await tx

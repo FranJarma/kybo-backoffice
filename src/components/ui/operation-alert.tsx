@@ -64,7 +64,7 @@ function Notification({ message, title, tone, viewportClassName }: Props) {
             <Toast.Title className="text-sm font-semibold text-brand">
               {title}
             </Toast.Title>
-            <Toast.Description className="mt-1 text-sm leading-5 text-muted">
+            <Toast.Description className="mt-1 max-h-[50dvh] overflow-y-auto whitespace-pre-line text-sm leading-5 text-muted">
               {message}
             </Toast.Description>
           </div>

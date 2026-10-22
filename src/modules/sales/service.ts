@@ -1,4 +1,5 @@
 import { loadCombo } from "../combos/service";
+import { assignLocator } from "../pickup/service";
 import { lookupProducts } from "./product-lookup";
 import { canSellProduct } from "../products/availability";
 import { requireOperationalContext } from "../branches/context";
@@ -506,6 +507,7 @@ async function insertOrder(
   prepared: Awaited<ReturnType<typeof prepareLines>>,
   notes: string,
   operationId: string,
+  locatorNumber?: number | null,
 ) {
   const id = randomUUID();
   const ctx = await requireOperationalContext(tx, actor, actor.branchId ?? "");
@@ -540,6 +542,7 @@ async function insertOrder(
       });
   }
   await reserveOrder(tx, ctx, id, operationId);
+  await assignLocator(tx, actor, id, locatorNumber);
   await publishOrder(tx, actor, id);
 }
 const listSchema = z
@@ -621,7 +624,7 @@ export function createSalesService(db: AppDb) {
                 "La mesa tiene una cuenta abierta. Agregá el pedido a esa cuenta.",
               );
           }
-          let customerName: string | null = null;
+          let customerName: string | null = input.customerName ?? null;
           if (input.customerId) {
             const [customer] = await tx
               .select()
@@ -677,6 +680,7 @@ export function createSalesService(db: AppDb) {
             lines,
             input.notes,
             input.requestId,
+            input.locatorNumber,
           );
           if (payments.values.length)
             await tx.insert(salePayments).values(
@@ -733,6 +737,7 @@ export function createSalesService(db: AppDb) {
           lines,
           input.notes,
           input.requestId,
+          input.locatorNumber,
         );
         await tx
           .update(sales)

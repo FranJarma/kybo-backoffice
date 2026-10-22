@@ -5,7 +5,7 @@ import {
   type ComboSaleConfiguration,
 } from "./combo-configurator";
 
-import { paths } from "@/lib/navigation";
+import { CustomerPicker } from "./customer-picker";
 import { ProductConfigurator } from "./product-configurator";
 import type { PublicConfiguration } from "@/modules/recipes/configuration";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -19,6 +19,9 @@ import {
   ArrowLeft,
   Info,
   MessageSquare,
+  SlidersHorizontal,
+  ShoppingBag,
+  ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,16 +55,12 @@ import {
   appendCartLine,
   type CartLine,
 } from "./cart";
-import {
-  Control,
-  LookupSelect,
-  SalesScope,
-  OperationNotice,
-  selectClass,
-} from "./shared";
+import { Control, SalesScope, OperationNotice, selectClass } from "./shared";
 import { PaymentDialog, type PaymentDraft } from "./payment-dialog";
 import { SaleDetailPanel } from "./sale-detail";
 import { SaleHistory } from "./history";
+import { LocatorPicker } from "@/components/pickup/locator-picker";
+import { PickupActions } from "@/components/pickup/locator-manager";
 
 export function SalesManager({
   actorId,
@@ -76,6 +75,10 @@ export function SalesManager({
   initialAccount?: string;
   initialTable?: string;
 }) {
+  const [tabletPanel, setTabletPanel] = useState<"products" | "order">(
+    "products",
+  );
+  const [toolsOpen, setToolsOpen] = useState(false);
   const [view, setView] = useState<"new" | "history" | "detail" | "append">(
     initialAccount ? "detail" : "new",
   );
@@ -88,6 +91,7 @@ export function SalesManager({
     ),
     [tableId, setTableId] = useState(initialTable ?? ""),
     [customerId, setCustomerId] = useState(""),
+    [customerName, setCustomerName] = useState(""),
     [externalId, setExternalId] = useState(""),
     [notes, setNotes] = useState("");
   const [lines, setLines] = useState<CartLine[]>([]),
@@ -102,7 +106,7 @@ export function SalesManager({
     [cancelReason, setCancelReason] = useState(""),
     [refundConfirmed, setRefundConfirmed] = useState(false);
   const [lastSale, setLastSale] = useState<SaleDetail | null>(null);
-  const [customerOpen, setCustomerOpen] = useState(false);
+  const [locatorNumber, setLocatorNumber] = useState<number | null>(null);
   const [clearOpen, setClearOpen] = useState(false);
   const [stockHelpOpen, setStockHelpOpen] = useState(false);
   const [orderNoteOpen, setOrderNoteOpen] = useState(false);
@@ -145,16 +149,18 @@ export function SalesManager({
         setLastSale(sale);
         setNotes("");
         setCustomerId("");
-        setCustomerOpen(false);
+        setCustomerName("");
+        setTabletPanel("products");
         setExternalId("");
         setTableId("");
       }
       setLines([]);
+      setLocatorNumber(null);
       setDraftGeneration((n) => n + 1);
       setPaymentOpen(false);
       setCancelOpen(false);
       setNotice(
-        `Venta #${sale.number} guardada.${nextCustomer ? " Lista la caja para el siguiente pedido." : " Los importes quedaron registrados."}`,
+        `Venta #${sale.number} guardada.${sale.orders.at(-1)?.locatorNumber != null ? ` Localizador ${sale.orders.at(-1)!.locatorNumber}.` : ""}${nextCustomer ? " Lista la caja para el siguiente pedido." : " Los importes quedaron registrados."}`,
       );
       setError("");
       setRefresh((n) => n + 1);
@@ -244,12 +250,16 @@ export function SalesManager({
     valid = false;
   if (!isAppend && tableId && !selectedTable) valid = false;
   function newSale() {
+    setTabletPanel("products");
+    setToolsOpen(false);
+    setLocatorNumber(null);
     setDraftGeneration((n) => n + 1);
     window.history.replaceState(null, "", "/sales");
     setDetail(null);
     setLines([]);
     setNotes("");
     setCustomerId("");
+    setCustomerName("");
     setExternalId("");
     setTableId("");
     setOrigin("counter");
@@ -415,6 +425,7 @@ export function SalesManager({
         revision: detail.revision,
         lines: linePayload,
         notes,
+        locatorNumber,
       });
       return;
     }
@@ -425,13 +436,16 @@ export function SalesManager({
       fulfillment,
       tableId: tableId || undefined,
       customerId: customerId || undefined,
+      customerName: !customerId && customerName ? customerName : undefined,
       externalId: origin === "delivery" ? externalId.trim() : undefined,
       notes,
       lines: linePayload,
       payments,
+      locatorNumber,
     });
   }
   async function selectSale(id: string) {
+    setLocatorNumber(null);
     window.history.replaceState(null, "", `/sales?account=${id}`);
     setLoading(true);
     setError("");
@@ -444,6 +458,17 @@ export function SalesManager({
       setError(e instanceof Error ? e.message : "No pudimos abrir la cuenta.");
     } finally {
       setLoading(false);
+    }
+  }
+  async function refreshLocatorDetail() {
+    setRefresh((n) => n + 1);
+    if (!detail) return;
+    try {
+      setDetail(await getJson<SaleDetail>(`/api/sales/${detail.id}`));
+    } catch {
+      setError(
+        "El localizador se actualizó, pero no pudimos refrescar la venta. Volvé a abrirla para consultar su estado actual.",
+      );
     }
   }
   async function refreshPrices() {
@@ -514,7 +539,7 @@ export function SalesManager({
   return (
     <div
       data-pos
-      className="space-y-3 md:flex md:h-full md:min-h-0 md:flex-col [&>div:not([data-pos-workspace])]:shrink-0"
+      className="flex h-full min-h-0 flex-col gap-3 [&>div:not([data-pos-workspace])]:shrink-0"
     >
       <Dialog
         open={!!configuring}
@@ -611,7 +636,25 @@ export function SalesManager({
             Punto de venta
           </h1>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <Button
+          variant="outline"
+          className="min-h-12 xl:hidden"
+          aria-expanded={toolsOpen}
+          aria-controls="pos-tools"
+          onClick={() => setToolsOpen((open) => !open)}
+        >
+          <SlidersHorizontal size={18} />
+          Herramientas
+        </Button>
+        <div
+          id="pos-tools"
+          className={`${toolsOpen ? "flex" : "hidden"} w-full flex-wrap gap-2 rounded-xl border border-line bg-white p-3 xl:flex xl:w-auto xl:border-0 xl:bg-transparent xl:p-0`}
+        >
+          <PickupActions
+            key={branchId}
+            actorId={actorId}
+            onChanged={() => void refreshLocatorDetail()}
+          />
           <ReplenishmentPanel actorId={actorId} role={role} refresh={refresh} />
           <Button
             variant="ghost"
@@ -621,12 +664,6 @@ export function SalesManager({
           >
             <RotateCw size={17} />
             Actualizar carta
-          </Button>
-          <Button asChild variant="outline" className="min-h-12">
-            <Link href={paths["tables"]}>
-              <Armchair size={17} />
-              Mesas
-            </Link>
           </Button>
           {!showCart && (
             <Button onClick={newSale} disabled={locked}>
@@ -707,9 +744,12 @@ export function SalesManager({
         <>
           <div
             data-pos-workspace
-            className="grid min-h-0 gap-3 md:flex-1 md:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_440px] 2xl:grid-cols-[minmax(0,1fr)_480px]"
+            className="grid min-h-0 gap-3 flex-1 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_440px] 2xl:grid-cols-[minmax(0,1fr)_480px]"
           >
-            <div className="flex min-h-0 min-w-0 flex-col gap-3">
+            <div
+              data-pos-catalogue
+              className={`${tabletPanel === "products" ? "flex" : "hidden"} min-h-0 min-w-0 flex-col gap-3 lg:flex`}
+            >
               <div className="shrink-0">
                 {isAppend && detail ? (
                   <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4">
@@ -728,6 +768,7 @@ export function SalesManager({
                       onClick={() => {
                         setView("detail");
                         setLines([]);
+                        setLocatorNumber(null);
                         setNotes("");
                       }}
                     >
@@ -805,33 +846,21 @@ export function SalesManager({
                         ))}
                       </div>
                     )}
-                    <Button
-                      variant="ghost"
-                      className="min-h-12"
+                    <CustomerPicker
+                      id={customerId}
+                      name={customerName}
                       disabled={locked}
-                      aria-expanded={customerOpen}
-                      onClick={() => setCustomerOpen((v) => !v)}
-                    >
-                      {customerId ? "Cambiar cliente" : "Cliente ocasional"}
-                    </Button>
+                      onChange={(id, name) => {
+                        setCustomerId(id);
+                        setCustomerName(name);
+                      }}
+                    />
                   </div>
                 )}
               </div>
               {!isAppend &&
-                (customerOpen ||
-                  origin !== "counter" ||
-                  fulfillment === "dine_in") && (
+                (origin !== "counter" || fulfillment === "dine_in") && (
                   <section className="surface-panel grid shrink-0 gap-3 p-3 sm:grid-cols-2">
-                    {customerOpen && (
-                      <LookupSelect
-                        kind="customers"
-                        label="Cliente"
-                        value={customerId}
-                        disabled={locked}
-                        onChange={setCustomerId}
-                        empty="Consumidor ocasional"
-                      />
-                    )}
                     {origin === "delivery" ? (
                       <>
                         <Control label="Plataforma" required>
@@ -934,7 +963,18 @@ export function SalesManager({
                 onCatalogueLoaded={warmConfigurations}
               />
             </div>
-            <div className="flex min-h-0 min-w-0 flex-col gap-2">
+            <div
+              data-pos-order
+              className={`${tabletPanel === "order" ? "flex" : "hidden"} min-h-0 min-w-0 flex-col gap-2 lg:flex`}
+            >
+              <Button
+                variant="outline"
+                className="min-h-12 justify-start lg:hidden"
+                onClick={() => setTabletPanel("products")}
+              >
+                <ArrowLeft size={18} />
+                Seguir agregando productos
+              </Button>
               <Cart
                 key={`${branchId}:${channel}:${draftGeneration}`}
                 onEdit={(index) =>
@@ -949,6 +989,12 @@ export function SalesManager({
                 allowPrice={role !== "staff" || channel !== "counter"}
                 total={total}
               >
+                <LocatorPicker
+                  value={locatorNumber}
+                  onChange={setLocatorNumber}
+                  disabled={locked}
+                  refresh={refresh}
+                />
                 <Button
                   type="button"
                   variant="ghost"
@@ -1035,6 +1081,31 @@ export function SalesManager({
               )}
             </div>
           </div>
+          {tabletPanel === "products" && (
+            <div className="sticky bottom-0 z-10 bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden">
+              <Button
+                data-pos-order-summary
+                className="min-h-16 w-full justify-between gap-4 rounded-xl px-5 text-base shadow-lg"
+                onClick={() => setTabletPanel("order")}
+              >
+                <span className="flex items-center gap-3">
+                  <ShoppingBag size={22} />
+                  <span>
+                    Ver pedido ·{" "}
+                    {lines.reduce((sum, line) => sum + line.quantity, 0)} unid.
+                  </span>
+                </span>
+                <span
+                  className="flex items-center gap-3"
+                  aria-live="polite"
+                  aria-atomic="true"
+                >
+                  {total === null ? "Revisar total" : money(total)}
+                  <ArrowRight size={20} />
+                </span>
+              </Button>
+            </div>
+          )}
         </>
       )}
       <Dialog open={stockHelpOpen} onOpenChange={setStockHelpOpen}>
@@ -1127,6 +1198,7 @@ export function SalesManager({
               disabled={locked}
               onClick={() => {
                 setLines([]);
+                setLocatorNumber(null);
                 setDraftGeneration((n) => n + 1);
                 setNotes("");
                 operation.clearError();
@@ -1155,12 +1227,15 @@ export function SalesManager({
             sale={detail}
             canCancel={role !== "staff"}
             locked={locked}
+            onLocatorChanged={() => void refreshLocatorDetail()}
             onPay={() => {
               operation.clearError();
               setPaymentOpen(true);
             }}
             onAdd={() => {
               setView("append");
+              setTabletPanel("products");
+              setLocatorNumber(null);
               setChannel("counter");
               setLines([]);
               setDraftGeneration((n) => n + 1);

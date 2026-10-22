@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { FieldCaption } from "@/components/ui/field-caption";
 import { OperationAlert } from "@/components/ui/operation-alert";
 
@@ -610,6 +611,12 @@ export function ReplenishmentPanel({
           <DialogHeader className="shrink-0 border-b border-line p-5 text-left sm:p-6">
             <div className="flex items-center justify-between gap-3">
               <DialogTitle>Reposición y producción</DialogTitle>
+              <Link
+                href="/operations/day"
+                className="flex min-h-12 items-center text-sm font-semibold text-brand underline"
+              >
+                Abrir Operación del día
+              </Link>
               <Button
                 variant="outline"
                 className={touch}

@@ -74,20 +74,27 @@ const paymentSchema = z
   .strict();
 export const createSchema = z
   .object({
+    locatorNumber: z.number().int().min(1).max(999).nullish(),
     requestId: uuid,
     origin: z.enum(["counter", "table", "delivery"]),
     channel: channelSchema,
     fulfillment: z.enum(["takeaway", "dine_in", "delivery", "pickup"]),
     tableId: uuid.nullish(),
     customerId: uuid.nullish(),
+    customerName: z.string().trim().min(1).max(160).nullish(),
     externalId: z.string().trim().min(1).max(80).nullish(),
     notes: note,
     lines: z.array(lineSchema).min(1).max(50),
     payments: z.array(paymentSchema).max(10).default([]),
   })
-  .strict();
+  .strict()
+  .refine((value) => !(value.customerId && value.customerName), {
+    message: "Elegí un cliente guardado o escribí un nombre, no ambos.",
+    path: ["customerName"],
+  });
 export const orderSchema = z
   .object({
+    locatorNumber: z.number().int().min(1).max(999).nullish(),
     requestId: uuid,
     revision: z.number().int().positive(),
     lines: z.array(lineSchema).min(1).max(50),

@@ -1,4 +1,5 @@
-import { and, eq, inArray, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { locatorAssignments } from "@/db/pickup-schema";
 import type { AppDb } from "@/db/client";
 import { branches, locations } from "@/db/branch-schema";
 import { operationalUsers } from "@/db/auth-schema";
@@ -123,6 +124,22 @@ export async function archiveBranch(
         ),
       )
       .limit(1);
+    const heldLocators = await tx
+      .select({ id: locatorAssignments.id })
+      .from(locatorAssignments)
+      .where(
+        and(
+          eq(locatorAssignments.branchId, branchId),
+          isNull(locatorAssignments.returnedAt),
+        ),
+      )
+      .limit(1);
+    if (heldLocators.length)
+      throw new AppError(
+        "BRANCH_NOT_EMPTY",
+        "Registrá la devolución de los localizadores antes de cerrar la sucursal.",
+        409,
+      );
     if (
       [balances, transit, production, preparation, openSales, resolutions].some(
         (rows) => rows.length,

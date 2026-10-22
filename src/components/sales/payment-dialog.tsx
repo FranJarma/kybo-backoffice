@@ -169,13 +169,6 @@ export function PaymentDialog({
         </DialogHeader>
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-7 sm:py-6">
-          <OperationNotice
-            eventKey={eventKey}
-            error={error}
-            uncertain={uncertain}
-            busy={busy}
-            retry={onRetry}
-          />
           <fieldset disabled={locked} className="space-y-4">
             {rows.map((row, i) => {
               const method = methods.find((m) => m.id === row.methodId);
@@ -453,11 +446,18 @@ export function PaymentDialog({
           data-payment-footer
           className="shrink-0 space-y-3 border-t border-line bg-white px-5 py-4 sm:px-7"
         >
+          <OperationNotice
+            eventKey={eventKey}
+            error={error}
+            uncertain={uncertain}
+            busy={busy}
+            retry={onRetry}
+          />
           <p
             aria-live="polite"
             className={`text-sm ${remaining < 0n ? "text-red-700" : "text-muted"}`}
           >
-            {summary}
+            {error ? "Revisá el aviso antes de volver a confirmar." : summary}
           </p>
           <div className="flex gap-3">
             <Button

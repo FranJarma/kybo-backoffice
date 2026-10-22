@@ -1,6 +1,14 @@
 export type NavigationAccess = { role: string; catalogManager?: boolean };
 export const navigation = [
   {
+    id: "daily-operations",
+    area: "Operación",
+    label: "Operación del día",
+    href: "/operations/day",
+    icon: "ListChecks",
+    access: "all",
+  },
+  {
     id: "home",
     area: "Inicio",
     label: "Inicio",

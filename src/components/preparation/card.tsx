@@ -89,6 +89,11 @@ export function PrepCard({
                 / {t.sequence}
               </span>
             </h3>
+            {t.locatorNumber != null && (
+              <p className="mt-2 rounded-md bg-brand px-3 py-2 text-base font-bold text-white">
+                Localizador {t.locatorNumber}
+              </p>
+            )}
           </div>
           <span
             className={cn(
