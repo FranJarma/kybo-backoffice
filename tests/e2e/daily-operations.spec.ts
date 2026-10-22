@@ -101,20 +101,40 @@ for (const size of [
           configurationWarnings: [],
           summary: { critical: 0, high: 1, scheduled: 0 },
           people: [{ id: "staff", name: "Ana" }],
-          locations: [{ id: "bar", name: "Barra" }],
-          stock: [
-            {
-              itemId: "item",
-              itemName: "Vasos descartables",
-              unit: "unit",
-              locationId: "bar",
-              locationName: "Barra",
-              physical: "10.000000",
-              reserved: "2.000000",
-              unusable: "0.000000",
-              available: "8.000000",
-            },
+          locations: [
+            { id: "bar", name: "Barra" },
+            { id: "kitchen", name: "Cocina" },
+            { id: "depot", name: "Depósito" },
           ],
+          stock: ["bar", "kitchen", "depot"].flatMap((locationId) =>
+            Array.from({ length: 50 }, (_, i) => ({
+              itemId: `item-${i}`,
+              itemName: i === 0 ? "Vasos descartables" : `Insumo ${i}`,
+              unit: "unit",
+              locationId,
+              locationName:
+                locationId === "bar"
+                  ? "Barra"
+                  : locationId === "kitchen"
+                    ? "Cocina"
+                    : "Depósito",
+              physical:
+                locationId === "depot"
+                  ? "20.000000"
+                  : locationId === "bar" && i === 0
+                    ? "10.000000"
+                    : "0.000000",
+              reserved:
+                locationId === "bar" && i === 0 ? "2.000000" : "0.000000",
+              unusable: "0.000000",
+              available:
+                locationId === "depot"
+                  ? "20.000000"
+                  : locationId === "bar" && i === 0
+                    ? "8.000000"
+                    : "0.000000",
+            })),
+          ),
         },
       });
     });
@@ -156,6 +176,21 @@ for (const size of [
     await expect(
       page.getByText("Vasos descartables", { exact: true }),
     ).toBeVisible();
+    const cups = page
+      .getByRole("article")
+      .filter({ hasText: "Vasos descartables" });
+    await expect(page.getByRole("article")).toHaveCount(50);
+    await expect(cups.getByText("28 unit", { exact: true })).toBeVisible();
+    await cups
+      .getByText("Ver disponible por ubicación", { exact: false })
+      .click();
+    await expect(cups.getByText("Depósito", { exact: true })).toBeVisible();
+    await expect(cups.getByText("20 unit", { exact: true })).toBeVisible();
+    await page.getByLabel("Ubicación", { exact: true }).selectOption("bar");
+    await expect(cups.getByText("8 unit", { exact: true })).toBeVisible();
+    await expect(cups.getByText("28 unit", { exact: true })).toHaveCount(0);
+    await page.getByLabel("Ubicación", { exact: true }).selectOption("");
+    await expect(cups.getByText("28 unit", { exact: true })).toBeVisible();
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= innerWidth,
