@@ -42,6 +42,7 @@ async function mount(
     paginated?: boolean;
     tiny?: boolean;
     resolved?: boolean;
+    noDepot?: boolean;
   } = {},
 ) {
   const posted: { url: string; body: Record<string, unknown> }[] = [];
@@ -72,10 +73,12 @@ async function mount(
     if (url.pathname === "/api/branches/current")
       return r.fulfill({
         json: {
-          locations: [
-            { id: depot, name: "Depósito principal" },
-            { id: bar, name: "Barra" },
-          ],
+          locations: options.noDepot
+            ? [{ id: bar, name: "Barra", code: "BARRA" }]
+            : [
+                { id: depot, name: "Depósito principal", code: "DEPOSITO" },
+                { id: bar, name: "Barra", code: "BARRA" },
+              ],
         },
       });
     if (url.pathname === "/api/transfers")
@@ -156,9 +159,12 @@ for (const viewport of [
     await expect(
       page.getByRole("button", { name: "Página siguiente" }),
     ).toHaveCount(0);
-    await page
-      .getByRole("combobox", { name: "Origen", exact: true })
-      .selectOption(depot);
+    await expect(
+      page.getByRole("group", { name: "Origen seleccionado", exact: true }),
+    ).toContainText("Depósito principal");
+    await expect(
+      page.getByRole("combobox", { name: "Origen", exact: true }),
+    ).toHaveCount(0);
     await page
       .getByRole("combobox", { name: "Destino", exact: true })
       .selectOption(bar);
@@ -188,7 +194,7 @@ for (const viewport of [
     );
     if (viewport.width >= 640) {
       const from = await page
-        .getByRole("combobox", { name: "Origen", exact: true })
+        .getByRole("group", { name: "Origen seleccionado", exact: true })
         .boundingBox();
       const to = await page
         .getByRole("combobox", { name: "Destino", exact: true })
@@ -201,6 +207,7 @@ for (const viewport of [
     });
     await submit.click();
     await expect.poll(() => posted.length).toBe(1);
+    expect(posted[0].body.originLocationId).toBe(depot);
     expect(posted[0].body.demands).toEqual([
       { itemId: milk, quantity: "10000.000000" },
     ]);
@@ -269,6 +276,80 @@ test("partial receipt uses litres and rejects more than remaining before submitt
   expect(posted[0].body.lines).toEqual([
     { allocationId: milk, quantity: "2500.000000" },
   ]);
+});
+test("custom origin clears an identical destination and can return to the main depot", async ({
+  page,
+}) => {
+  const posted = await mount(page);
+  await expect(
+    page.getByRole("group", { name: "Origen seleccionado", exact: true }),
+  ).toContainText("Depósito principal");
+  await page
+    .getByRole("combobox", { name: "Destino", exact: true })
+    .selectOption(bar);
+  await page
+    .getByRole("button", { name: "Cambiar origen", exact: true })
+    .click();
+  await page
+    .getByRole("combobox", { name: "Origen", exact: true })
+    .selectOption(bar);
+  await expect(
+    page.getByRole("combobox", { name: "Destino", exact: true }),
+  ).toHaveValue("");
+  await expect(
+    page.getByRole("group", { name: "Origen seleccionado", exact: true }),
+  ).toContainText("Barra");
+  await page
+    .getByRole("combobox", { name: "Destino", exact: true })
+    .selectOption(depot);
+  await page.getByRole("combobox", { name: "Artículo", exact: true }).click();
+  await page.getByRole("option", { name: "Leche", exact: true }).click();
+  await page
+    .getByRole("textbox", { name: "Cantidad (litros)", exact: true })
+    .fill("2");
+  await page
+    .getByRole("textbox", { name: "Motivo", exact: true })
+    .fill("Devolución a depósito");
+  await page
+    .getByRole("button", { name: "Reservar traslado", exact: true })
+    .click();
+  await expect.poll(() => posted.length).toBe(1);
+  expect(posted[0].body).toMatchObject({
+    originLocationId: bar,
+    destinationLocationId: depot,
+  });
+  await expect(
+    page.getByRole("group", { name: "Origen seleccionado", exact: true }),
+  ).toContainText("Barra");
+  await page
+    .getByRole("button", { name: "Cambiar origen", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Usar depósito principal", exact: true })
+    .click();
+  await expect(
+    page.getByRole("group", { name: "Origen seleccionado", exact: true }),
+  ).toContainText("Depósito principal");
+  await expect(
+    page.getByRole("combobox", { name: "Destino", exact: true }),
+  ).toHaveValue("");
+});
+test("a branch without a main depot requires an explicit origin", async ({
+  page,
+}) => {
+  await mount(page, { noDepot: true });
+  await expect(
+    page.getByRole("combobox", { name: "Origen", exact: true }),
+  ).toHaveValue("");
+  await expect(
+    page.getByRole("button", { name: "Reservar traslado", exact: true }),
+  ).toBeDisabled();
+  await page
+    .getByRole("combobox", { name: "Origen", exact: true })
+    .selectOption(bar);
+  await expect(
+    page.getByRole("group", { name: "Origen seleccionado", exact: true }),
+  ).toContainText("Barra");
 });
 test("pagination identifies the page and pending transfers", async ({
   page,

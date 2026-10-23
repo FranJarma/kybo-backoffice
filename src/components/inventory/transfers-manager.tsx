@@ -1,5 +1,12 @@
 "use client";
-import { useCallback, useEffect, useId, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { ArrowRight, ArrowLeft, PackageCheck, Truck, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +14,6 @@ import { Card } from "@/components/ui/card";
 import { FieldCaption } from "@/components/ui/field-caption";
 import { OperationAlert } from "@/components/ui/operation-alert";
 import { useErrorFeedback } from "@/components/ui/use-error-feedback";
-import { LocationSelect } from "@/components/branches/location-select";
 import { getJson, SearchSelect, useOperation } from "./shared";
 import { integer, six } from "@/modules/inventory/decimal";
 import {
@@ -61,17 +67,47 @@ const selectClass =
 
 export function TransfersManager({ actorId }: { actorId: string }) {
   const quantityId = useId();
+  const originId = useId();
+  const [originLocations, setOriginLocations] =
+    useState<{ id: string; name: string; code: string }[]>();
+  const [originLoadError, setOriginLoadError] = useState("");
+  const [changingOrigin, setChangingOrigin] = useState(false);
+  const restoreOriginFocus = useRef(false);
   const [offset, setOffset] = useState(0),
     [scope, setScope] = useState("active");
   const [data, setData] = useState<Directory>(),
     [version, setVersion] = useState(0),
     [error, setError, errorAttempt] = useErrorFeedback();
-  const [origin, setOrigin] = useState(""),
+  const [originOverride, setOriginOverride] = useState<string | null>(null),
     [destination, setDestination] = useState(""),
     [itemId, setItemId] = useState(""),
     [item, setItem] = useState<CatalogRow>(),
     [amount, setAmount] = useState(""),
     [reason, setReason] = useState("");
+  const depot =
+    originLocations?.find((location) => location.code === "DEPOSITO") ??
+    originLocations?.find(
+      (location) =>
+        location.name.localeCompare("Depósito principal", "es", {
+          sensitivity: "base",
+        }) === 0,
+    );
+  const origin = originOverride ?? depot?.id ?? "";
+  const originInfo = originLocations?.find(
+    (location) => location.id === origin,
+  );
+  const focusOriginSelect = useCallback(
+    (select: HTMLSelectElement | null) => {
+      if (changingOrigin) select?.focus();
+    },
+    [changingOrigin],
+  );
+  const focusOriginButton = useCallback((button: HTMLButtonElement | null) => {
+    if (button && restoreOriginFocus.current) {
+      button.focus();
+      restoreOriginFocus.current = false;
+    }
+  }, []);
   const onSuccess = useCallback(() => {
     setVersion((v) => v + 1);
     setError("");
@@ -84,6 +120,26 @@ export function TransfersManager({ actorId }: { actorId: string }) {
   const entryUnit = transferEntryUnit(item?.baseUnit);
   const destinationInfo = data?.destinations.find((d) => d.id === destination);
   const sameBranch = !!data && destinationInfo?.branchId === data.branchId;
+  useEffect(() => {
+    let live = true;
+    getJson<{ locations: NonNullable<typeof originLocations> }>(
+      "/api/branches/current",
+    )
+      .then((result) => {
+        if (live) setOriginLocations(result.locations);
+      })
+      .catch(() => {
+        if (live) {
+          setOriginLocations([]);
+          setOriginLoadError(
+            "No pudimos cargar las ubicaciones de origen. Actualizá la página para volver a intentar.",
+          );
+        }
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
   useEffect(() => {
     let live = true;
     getJson<Directory>(`/api/transfers?scope=${scope}&offset=${offset}`)
@@ -118,9 +174,14 @@ export function TransfersManager({ actorId }: { actorId: string }) {
       setError(e instanceof Error ? e.message : "Revisá la cantidad.");
     }
   }
-  function chooseOrigin(value: string) {
-    setOrigin(value);
-    if (value === destination) setDestination("");
+  function chooseOrigin(value: string | null) {
+    const next = value ?? depot?.id ?? "";
+    setOriginOverride(value);
+    if (next === destination) setDestination("");
+    if (next) {
+      restoreOriginFocus.current = true;
+      setChangingOrigin(false);
+    }
   }
   return (
     <section data-transfers className="space-y-7 text-brand">
@@ -128,13 +189,13 @@ export function TransfersManager({ actorId }: { actorId: string }) {
         <p className="eyebrow">Inventario y compras</p>
         <h1 className="text-3xl font-extrabold">Traslados</h1>
         <p className="mt-2 max-w-3xl text-muted">
-          Mové insumos entre Depósito, Barra, Cocina u otra sucursal. Elegí el
-          origen, el destino y la cantidad.
+          Reponé Barra o Cocina desde Depósito. Para devoluciones u otros
+          movimientos, usá “Cambiar origen”.
         </p>
       </header>
       <OperationAlert
         title="No pudimos completar el traslado"
-        message={error || operation.error}
+        message={error || operation.error || originLoadError}
         eventKey={error ? errorAttempt : operation.errorAttempt}
         tone="error"
       />
@@ -160,16 +221,73 @@ export function TransfersManager({ actorId }: { actorId: string }) {
             disabled={operation.locked}
             className="grid items-start gap-5 p-5 sm:grid-cols-2 sm:p-6 [&_input]:min-h-12 [&_select]:min-h-12 [&_input[role=combobox]]:min-h-12 [&_label]:text-sm"
           >
-            <LocationSelect
-              label="Origen"
-              className={fieldClass}
-              value={origin}
-              onChange={chooseOrigin}
-            />
+            <div className={fieldClass}>
+              <span id={originId}>
+                <FieldCaption required>Origen</FieldCaption>
+              </span>
+              {originLocations && (changingOrigin || !originInfo) ? (
+                <div className="grid gap-2">
+                  <select
+                    id={`${originId}-select`}
+                    aria-labelledby={originId}
+                    ref={focusOriginSelect}
+                    required
+                    value={origin}
+                    onChange={(event) => chooseOrigin(event.target.value)}
+                    className={selectClass}
+                  >
+                    <option value="">Elegí una ubicación de origen</option>
+                    {originLocations.map((location) => (
+                      <option key={location.id} value={location.id}>
+                        {location.name}
+                      </option>
+                    ))}
+                  </select>
+                  {depot && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="w-fit text-blue"
+                      onClick={() => chooseOrigin(null)}
+                    >
+                      Usar depósito principal
+                    </Button>
+                  )}
+                  {!depot && (
+                    <p className="text-xs font-normal text-muted">
+                      No hay un depósito principal identificado. Elegí el origen
+                      de este traslado.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div
+                  role="group"
+                  aria-label="Origen seleccionado"
+                  className="flex min-h-12 items-center justify-between gap-2 rounded-lg border bg-surface pl-3 pr-1"
+                >
+                  <span className="text-sm font-normal">
+                    {originInfo?.name ?? "Cargando ubicaciones…"}
+                  </span>
+                  <Button
+                    ref={focusOriginButton}
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0 px-2 text-blue"
+                    disabled={!originInfo}
+                    onClick={() => setChangingOrigin(true)}
+                  >
+                    Cambiar origen
+                  </Button>
+                </div>
+              )}
+            </div>
             <label className={fieldClass}>
               <FieldCaption required>Destino</FieldCaption>
               <select
                 required
+                disabled={!origin}
                 value={destination}
                 onChange={(e) => setDestination(e.target.value)}
                 className={selectClass}
