@@ -297,7 +297,9 @@ export function TransfersManager({ actorId }: { actorId: string }) {
                   .filter((d) => d.id !== origin)
                   .map((d) => (
                     <option key={d.id} value={d.id}>
-                      {d.branchName} · {d.name}
+                      {d.branchId === data.branchId
+                        ? d.name
+                        : `${d.branchName} · ${d.name}`}
                     </option>
                   ))}
               </select>

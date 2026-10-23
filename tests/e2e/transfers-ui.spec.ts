@@ -167,7 +167,7 @@ for (const viewport of [
     ).toHaveCount(0);
     await page
       .getByRole("combobox", { name: "Destino", exact: true })
-      .selectOption(bar);
+      .selectOption({ label: "Barra" }, { timeout: 3000 });
     await page.getByRole("combobox", { name: "Artículo", exact: true }).click();
     await page.getByRole("option", { name: "Leche", exact: true }).click();
     await page
