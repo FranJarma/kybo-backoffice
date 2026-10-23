@@ -17,6 +17,7 @@ export async function createDataModelTestContext(
     legacyReplenishment?: boolean;
     legacyPricing?: boolean;
     legacyDailyOperations?: boolean;
+    legacySupplyAlerts?: boolean;
   } = {},
 ) {
   requireMigrationTestPermission();
@@ -75,11 +76,19 @@ export async function createDataModelTestContext(
         "alter table products alter column vat_rate set default 0",
       );
     }
-    await client.exec(await readFile("drizzle/0022_business_overheads.sql", "utf8"));
+    await client.exec(
+      await readFile("drizzle/0022_business_overheads.sql", "utf8"),
+    );
     await client.exec(await readFile("drizzle/0023_costing_iibb.sql", "utf8"));
     await client.exec(await readFile("drizzle/0024_order_pickup.sql", "utf8"));
     if (!options.legacyDailyOperations)
-      await client.exec(await readFile("drizzle/0025_daily_operations.sql", "utf8"));
+      await client.exec(
+        await readFile("drizzle/0025_daily_operations.sql", "utf8"),
+      );
+    if (!options.legacyDailyOperations && !options.legacySupplyAlerts)
+      await client.exec(
+        await readFile("drizzle/0026_supply_alerts.sql", "utf8"),
+      );
     return {
       ...fixture,
       client,

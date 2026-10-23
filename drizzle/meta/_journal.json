@@ -183,6 +183,13 @@
       "when": 1792670000000,
       "tag": "0025_daily_operations",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1792760000000,
+      "tag": "0026_supply_alerts",
+      "breakpoints": true
     }
   ]
 }

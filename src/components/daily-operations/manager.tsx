@@ -324,13 +324,22 @@ export function DailyOperationsManager({
           · Actualización cada minuto
         </span>
         {canManage && (
-          <Link
-            href="/inventory/replenishment"
-            prefetch={false}
-            className="flex min-h-12 items-center underline"
-          >
-            Configurar mínimos en Inventario
-          </Link>
+          <div className="flex flex-wrap gap-4">
+            <Link
+              href="/inventory/supply-alerts"
+              prefetch={false}
+              className="flex min-h-12 items-center underline"
+            >
+              Configurar compras de Bolivia
+            </Link>
+            <Link
+              href="/inventory/replenishment"
+              prefetch={false}
+              className="flex min-h-12 items-center underline"
+            >
+              Configurar mínimos en Inventario
+            </Link>
+          </div>
         )}
       </footer>
       {selected && data && (

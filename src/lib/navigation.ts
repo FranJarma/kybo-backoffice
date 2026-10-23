@@ -150,6 +150,15 @@ export const navigation = [
     parent: "inventory",
   },
   {
+    id: "supply-alerts",
+    area: "Inventario y compras",
+    label: "Compras de Bolivia",
+    href: "/inventory/supply-alerts",
+    icon: "ShoppingCart",
+    access: "manager",
+    parent: "inventory",
+  },
+  {
     id: "presentations",
     area: "Inventario y compras",
     label: "Presentaciones de compra",

@@ -19,6 +19,7 @@ import { businessDate } from "../operations/business-date";
 import { integer, six } from "../inventory/decimal";
 import { availableQuantity } from "../inventory/availability";
 import { dayFiltersSchema } from "./validation";
+import { supplyAvailable } from "../supply-alerts/policies";
 import type { DailySnapshot, StockRow, TaskRow } from "./types";
 export async function readStock(
   tx: Tx,
@@ -271,6 +272,7 @@ export async function getDailyOperationSnapshot(
             eq(replenishmentPolicies.enabled, true),
           ),
         );
+      const supplyReady = ctx.role === "staff" || (await supplyAvailable(tx));
       return {
         asOf: now.toISOString(),
         businessDate: today,
@@ -282,11 +284,18 @@ export async function getDailyOperationSnapshot(
           high: filtered.filter((t) => t.urgency === "high").length,
           scheduled: filtered.filter((t) => t.urgency === "scheduled").length,
         },
-        configurationWarnings: policies.length
-          ? []
-          : [
-              "Faltan mínimos de reposición. Los documentos existentes se muestran, pero todavía no se detectan todas las necesidades.",
-            ],
+        configurationWarnings: [
+          ...(policies.length
+            ? []
+            : [
+                "Faltan mínimos de reposición. Los documentos existentes se muestran, pero todavía no se detectan todas las necesidades.",
+              ]),
+          ...(supplyReady
+            ? []
+            : [
+                "Las compras anticipadas de Bolivia están pendientes de activación. Las tareas actuales siguen disponibles.",
+              ]),
+        ],
         stock: await readStock(tx, ctx.branchId, today),
         people,
         locations: locs,

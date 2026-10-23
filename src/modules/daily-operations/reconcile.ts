@@ -81,6 +81,8 @@ export async function reconcileDailyOperations(
             (old.state === "blocked" || old.reason === suggestion.reason) &&
             old.urgency === suggestion.urgency &&
             old.title === suggestion.title &&
+            (old.dueAt?.getTime() ?? null) ===
+              (suggestion.dueAt?.getTime() ?? null) &&
             old.locationId === suggestion.locationId
           )
             continue;
@@ -91,6 +93,7 @@ export async function reconcileDailyOperations(
               urgency: suggestion.urgency,
               title: suggestion.title,
               locationId: suggestion.locationId,
+              dueAt: suggestion.dueAt ?? null,
               ...(old.state === "blocked" ? {} : { reason: suggestion.reason }),
               revision: old.revision + 1,
               updatedAt: new Date(),

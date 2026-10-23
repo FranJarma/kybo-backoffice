@@ -10,6 +10,8 @@ import {
   currentPreparationRecipes,
 } from "./central-preparation";
 import { buildDailySuggestions } from "./suggestions";
+import { readSupplySnapshot } from "../supply-alerts/service";
+import { supplySuggestions } from "../supply-alerts/suggestions";
 
 /** Shared by reconciliation and confirmation so a stale task cannot ignore newer supply. */
 export async function readDailySuggestions(tx: Tx, ctx: OperationalContext) {
@@ -55,7 +57,7 @@ export async function readDailySuggestions(tx: Tx, ctx: OperationalContext) {
     const key = `${row.itemId}:${row.locationId}`;
     committed.set(key, (committed.get(key) ?? 0n) + integer(row.quantity));
   }
-  return buildDailySuggestions(
+  const operational = buildDailySuggestions(
     snapshot,
     new Map(
       prep.flatMap((p) =>
@@ -65,4 +67,19 @@ export async function readDailySuggestions(tx: Tx, ctx: OperationalContext) {
     committed,
     depot,
   );
+  const supply = await readSupplySnapshot(tx, ctx, new Date());
+  const coveredItems = new Set(
+    supply.policies
+      .filter(
+        (p) =>
+          p.enabled && p.dailyConsumption && integer(p.dailyConsumption) > 0n,
+      )
+      .map((p) => p.itemId),
+  );
+  return [
+    ...operational.filter(
+      (s) => s.kind !== "purchase" || !coveredItems.has(s.itemId!),
+    ),
+    ...supplySuggestions(supply, ctx.timeZone),
+  ];
 }

@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useState } from "react";
+import Link from "next/link";
 import { Plus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { OperationAlert } from "@/components/ui/operation-alert";
@@ -45,6 +46,12 @@ export function ReplenishmentManager({ actorId }: { actorId: string }) {
           el destino de los traslados.
         </p>
       </header>
+      <Link
+        href="/inventory/supply-alerts"
+        className="inline-flex min-h-12 items-center rounded-lg border border-line bg-white px-4 text-sm font-semibold text-brand"
+      >
+        Configurar compras anticipadas de Bolivia
+      </Link>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Button
           className="min-h-12"
