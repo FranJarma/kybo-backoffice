@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { AppDb } from "@/db/client";
 import type { Actor } from "@/lib/access";
@@ -8,13 +8,10 @@ import {
   dailyOperationSettings as settings,
 } from "@/db/daily-operation-schema";
 import { productionOrders } from "@/db/production-order-schema";
-import { stockTransfers, transferAllocations } from "@/db/transfer-schema";
-import { recipes } from "@/db/recipe-schema";
+import { stockTransfers } from "@/db/transfer-schema";
 import { executeCommand } from "../operations/command";
-import { readReplenishmentSnapshot } from "../replenishment/service";
 import { syncDocumentTask } from "./document-adapters";
-import { buildDailySuggestions } from "./suggestions";
-import { integer } from "../inventory/decimal";
+import { readDailySuggestions } from "./read-suggestions";
 export async function reconcileDailyOperations(
   db: AppDb,
   actor: Actor,
@@ -55,40 +52,7 @@ export async function reconcileDailyOperations(
         await syncDocumentTask(tx, ctx, { type: "production", id: o.id });
       for (const t of transfers)
         await syncDocumentTask(tx, ctx, { type: "transfer", id: t.id });
-      const snapshot = await readReplenishmentSnapshot(tx, ctx, new Date());
-      const prep = await tx
-        .select({ id: recipes.outputItemId })
-        .from(recipes)
-        .where(
-          and(eq(recipes.kind, "preparation"), isNotNull(recipes.outputItemId)),
-        );
-      const committed = new Map<string, bigint>();
-      const add = (key: string, q: string) =>
-        committed.set(key, (committed.get(key) ?? 0n) + integer(q));
-      for (const o of orders)
-        if (["planned", "confirmed"].includes(o.state))
-          add(`${o.outputItemId}:${o.locationId}`, o.plannedQuantity);
-      const pending = transfers.filter((t) => t.state === "confirmed");
-      if (pending.length) {
-        const allocations = await tx
-          .select()
-          .from(transferAllocations)
-          .where(
-            inArray(
-              transferAllocations.transferId,
-              pending.map((t) => t.id),
-            ),
-          );
-        for (const a of allocations) {
-          const t = pending.find((t) => t.id === a.transferId)!;
-          add(`${a.itemId}:${t.destinationLocationId}`, a.quantity);
-        }
-      }
-      const suggested = buildDailySuggestions(
-        snapshot,
-        new Set(prep.flatMap((p) => (p.id ? [p.id] : []))),
-        committed,
-      );
+      const suggested = await readDailySuggestions(tx, ctx);
       const existing = await tx
         .select()
         .from(tasks)
@@ -114,8 +78,10 @@ export async function reconcileDailyOperations(
             continue;
           if (
             old.quantity === suggestion.quantity &&
-            old.reason === suggestion.reason &&
-            old.urgency === suggestion.urgency
+            (old.state === "blocked" || old.reason === suggestion.reason) &&
+            old.urgency === suggestion.urgency &&
+            old.title === suggestion.title &&
+            old.locationId === suggestion.locationId
           )
             continue;
           const [saved] = await tx
@@ -123,6 +89,8 @@ export async function reconcileDailyOperations(
             .set({
               quantity: suggestion.quantity,
               urgency: suggestion.urgency,
+              title: suggestion.title,
+              locationId: suggestion.locationId,
               ...(old.state === "blocked" ? {} : { reason: suggestion.reason }),
               revision: old.revision + 1,
               updatedAt: new Date(),

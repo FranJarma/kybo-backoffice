@@ -8,12 +8,21 @@ import {
   dailyOperationDependencies as deps,
 } from "@/db/daily-operation-schema";
 import { productionOrders } from "@/db/production-order-schema";
+import { recipeLines, recipeOptions } from "@/db/recipe-schema";
+import { integer } from "../inventory/decimal";
+import { lockStock } from "../inventory/locking";
+import { readDailySuggestions } from "./read-suggestions";
+import {
+  centralPreparationLocation,
+  currentPreparationRecipes,
+} from "./central-preparation";
 import { executeCommand } from "../operations/command";
 import { requireAssignee } from "../production/access";
 import {
   startProduction,
   reviseProduction,
   cancelPlannedProduction,
+  planProduction,
 } from "../production/planning";
 import {
   dispatchTransferInTransaction,
@@ -95,6 +104,105 @@ export async function runTaskCommand(
         await tx
           .update(tasks)
           .set({ assignedTo: input.assignedTo })
+          .where(eq(tasks.id, taskId));
+      } else if (input.action === "confirm_production") {
+        const depot = await centralPreparationLocation(tx, ctx.branchId);
+        if (
+          task.kind !== "production" ||
+          task.documentId ||
+          !task.itemId ||
+          !task.quantity ||
+          !depot ||
+          task.locationId !== depot.id
+        )
+          conflict(
+            "Actualizá la sugerencia: la preparación debe realizarse en Depósito.",
+          );
+        if (!task.assignedTo)
+          conflict("Asigná un responsable antes de confirmar.");
+        const recipe = (await currentPreparationRecipes(tx)).find(
+          (p) => p.itemId === task.itemId,
+        );
+        if (
+          !recipe ||
+          integer(task.quantity) <= 0n ||
+          integer(task.quantity) % integer(recipe.yieldQuantity) !== 0n
+        )
+          conflict(
+            "La receta o el tamaño de la tanda cambió. Actualizá las tareas.",
+          );
+        const lines = await tx
+          .select()
+          .from(recipeLines)
+          .where(eq(recipeLines.versionId, recipe.versionId));
+        const options = lines.length
+          ? await tx
+              .select()
+              .from(recipeOptions)
+              .where(
+                inArray(
+                  recipeOptions.lineId,
+                  lines.map((l) => l.id),
+                ),
+              )
+          : [];
+        const selections = lines.map((line) => {
+          const choices = options.filter((o) => o.lineId === line.id);
+          if (!line.optional && choices.length !== 1)
+            conflict(
+              "Esta receta requiere elegir ingredientes. Planificá la orden desde Producción.",
+            );
+          return {
+            lineId: line.id,
+            optionId: line.optional ? null : choices[0].id,
+          };
+        });
+        // Use the same sorted stock locks as manual production planning and receipts.
+        // Read current supply after acquiring them; planned output is not physical stock.
+        await lockStock(tx, ctx, [
+          { itemId: task.itemId, locationId: depot.id },
+          ...options
+            .filter((option) =>
+              selections.some((s) => s.optionId === option.id),
+            )
+            .map((option) => ({ itemId: option.itemId, locationId: depot.id })),
+        ]);
+        const fresh = (await readDailySuggestions(tx, ctx)).find(
+          (s) => s.needKey === task.needKey && s.kind === "production",
+        );
+        if (
+          !fresh ||
+          fresh.quantity !== task.quantity ||
+          fresh.locationId !== depot.id
+        )
+          conflict(
+            "La necesidad cambió por stock u órdenes nuevas. Actualizá las tareas antes de confirmar.",
+          );
+        const order = await planProduction(
+          tx,
+          ctx,
+          operationId,
+          {
+            recipeVersionId: recipe.versionId,
+            locationId: depot.id,
+            plannedQuantity: task.quantity,
+            selections,
+          },
+          {
+            assignedTo: task.assignedTo,
+            scheduledFor: (task.dueAt ?? new Date()).toISOString(),
+            notes: task.reason || task.title,
+          },
+        );
+        await tx
+          .update(tasks)
+          .set({
+            documentId: order.id,
+            documentRevision: order.revision,
+            state: "pending",
+            // The real order now covers this quantity. A later shortage needs a new suggestion.
+            needKey: null,
+          })
           .where(eq(tasks.id, taskId));
       } else if (input.action === "confirm_transfer") {
         if (

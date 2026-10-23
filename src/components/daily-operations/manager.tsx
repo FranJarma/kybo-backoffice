@@ -341,8 +341,9 @@ export function DailyOperationsManager({
           canManage={canManage}
           disabled={!!error}
           onClose={() => setSelected(null)}
-          onRefresh={async () => {
+          onRefresh={async (reconcile = false) => {
             try {
+              if (reconcile) await refresh();
               const fresh = await load();
               return fresh.tasks.find((t) => t.id === selected.id);
             } catch (e) {

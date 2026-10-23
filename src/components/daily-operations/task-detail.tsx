@@ -25,7 +25,7 @@ export function TaskDetail({
   canManage: boolean;
   disabled: boolean;
   onClose: () => void;
-  onRefresh: () => Promise<TaskRow | undefined>;
+  onRefresh: (reconcile?: boolean) => Promise<TaskRow | undefined>;
 }) {
   const [current, setCurrent] = useState(task),
     [assignee, setAssignee] = useState(task.assignedTo ?? ""),
@@ -39,7 +39,7 @@ export function TaskDetail({
   async function reload() {
     setBusy(true);
     try {
-      const fresh = await onRefresh();
+      const fresh = await onRefresh(true);
       if (fresh) {
         setCurrent(fresh);
         setStale(false);
@@ -149,6 +149,9 @@ export function TaskDetail({
           {current.reason || "Tarea vinculada a un documento de operación."}
         </p>
         <p className="text-sm">
+          {current.quantity
+            ? `${quantity(current.quantity)} ${current.unit ?? ""} · `
+            : ""}
           {current.originName ? `${current.originName} → ` : ""}
           {current.locationName ?? "Sucursal"}
         </p>
@@ -211,6 +214,26 @@ export function TaskDetail({
                 </div>
               </div>
             )}
+            {canManage &&
+              !current.documentId &&
+              current.kind === "production" && (
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">
+                    Asigná un responsable y confirmá la preparación en Depósito.
+                    Cuando se registre como terminada, aparecerá la reposición a
+                    Barra o Cocina.
+                  </p>
+                  <Button
+                    className="min-h-14 w-full"
+                    disabled={
+                      locked || !current.assignedTo || !current.locationId
+                    }
+                    onClick={() => send("confirm_production")}
+                  >
+                    Confirmar preparación en Depósito
+                  </Button>
+                </div>
+              )}
             {current.documentId &&
               current.kind === "production" &&
               current.state !== "in_progress" && (

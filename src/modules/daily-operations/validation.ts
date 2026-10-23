@@ -11,6 +11,7 @@ export const taskCommandSchema = z
       "dispatch",
       "receive",
       "confirm_transfer",
+      "confirm_production",
     ]),
     assignedTo: z.string().min(1).max(200).optional(),
     reason: z.string().trim().max(2000).optional(),
