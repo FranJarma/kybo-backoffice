@@ -77,7 +77,11 @@ export async function lockStock(
     if (!tracked.has(pair.itemId)) continue;
     await tx
       .insert(locationStockBalances)
-      .values({ ...pair, branchId: ctx.branchId })
+      .values({
+        itemId: pair.itemId,
+        locationId: pair.locationId,
+        branchId: ctx.branchId,
+      })
       .onConflictDoNothing();
     await tx
       .select()

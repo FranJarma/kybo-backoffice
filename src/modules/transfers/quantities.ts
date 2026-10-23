@@ -39,6 +39,12 @@ export function formatTransferQuantity(
 ): string {
   const unit = transferEntryUnit(baseUnit);
   if (!unit) return `${value} (unidad no disponible)`;
+  return `${formatTransferAmount(value, baseUnit)} ${unit.symbol}`;
+}
+export function formatTransferAmount(value: string, baseUnit: unknown): string {
+  const unit = transferEntryUnit(baseUnit);
+  if (!unit)
+    throw new AppError("VALIDATION", "Unidad de insumo inválida.", 400);
   const q = integer(value),
     denominator = SCALE * unit.factor;
   const negative = q < 0n,
@@ -48,5 +54,5 @@ export function formatTransferQuantity(
     .toString()
     .padStart(scale, "0")
     .replace(/0+$/, "");
-  return `${negative ? "-" : ""}${(absolute / denominator).toLocaleString("es-AR")}${fraction ? "," + fraction : ""} ${unit.symbol}`;
+  return `${negative ? "-" : ""}${(absolute / denominator).toLocaleString("es-AR")}${fraction ? "," + fraction : ""}`;
 }

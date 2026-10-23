@@ -4,6 +4,7 @@ import { getDb } from "@/db/client";
 import { branches, locations } from "@/db/branch-schema";
 import { stockTransfers, transferAllocations } from "@/db/transfer-schema";
 import { items } from "@/db/item-schema";
+import { replenishmentPolicies } from "@/db/replenishment-schema";
 import { operationalActor } from "@/modules/branches/http";
 import { createTransferService } from "@/modules/transfers/service";
 import { inventoryResponse } from "@/modules/inventory/http";
@@ -54,6 +55,21 @@ export async function GET(request: Request) {
       .limit(101)
       .offset(offset);
     const rows = page.slice(0, 100);
+    const destinationPolicies = await db
+      .select({
+        itemId: replenishmentPolicies.itemId,
+        locationId: replenishmentPolicies.locationId,
+      })
+      .from(replenishmentPolicies)
+      .innerJoin(locations, eq(locations.id, replenishmentPolicies.locationId))
+      .where(
+        and(
+          eq(replenishmentPolicies.branchId, actor.branchId!),
+          eq(replenishmentPolicies.enabled, true),
+          isNull(locations.archivedAt),
+        ),
+      )
+      .orderBy(replenishmentPolicies.itemId, replenishmentPolicies.locationId);
     const allocations = rows.length
       ? await db
           .select({
@@ -75,6 +91,7 @@ export async function GET(request: Request) {
       hasMore: page.length > 100,
       branchId: actor.branchId,
       destinations,
+      destinationPolicies,
       rows: rows.map((row) => ({
         ...row,
         allocations: allocations
