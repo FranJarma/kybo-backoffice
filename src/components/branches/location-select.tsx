@@ -8,10 +8,14 @@ export function LocationSelect({
   value,
   onChange,
   disabled = false,
+  label = "Ubicación",
+  className = "space-y-2",
 }: {
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
+  label?: string;
+  className?: string;
 }) {
   const id = useId();
   const [locations, setLocations] = useState<{ id: string; name: string }[]>(
@@ -33,9 +37,9 @@ export function LocationSelect({
     };
   }, [setError]);
   return (
-    <div className="space-y-2">
+    <div className={className}>
       <label htmlFor={id} className="text-sm font-semibold">
-        <FieldCaption required>Ubicación</FieldCaption>
+        <FieldCaption required>{label}</FieldCaption>
       </label>
       <select
         id={id}

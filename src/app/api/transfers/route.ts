@@ -56,7 +56,11 @@ export async function GET(request: Request) {
     const rows = page.slice(0, 100);
     const allocations = rows.length
       ? await db
-          .select({ allocation: transferAllocations, itemName: items.name })
+          .select({
+            allocation: transferAllocations,
+            itemName: items.name,
+            baseUnit: items.baseUnit,
+          })
           .from(transferAllocations)
           .innerJoin(items, eq(items.id, transferAllocations.itemId))
           .where(
@@ -75,7 +79,11 @@ export async function GET(request: Request) {
         ...row,
         allocations: allocations
           .filter((a) => a.allocation.transferId === row.id)
-          .map((a) => ({ ...a.allocation, itemName: a.itemName })),
+          .map((a) => ({
+            ...a.allocation,
+            itemName: a.itemName,
+            baseUnit: a.baseUnit,
+          })),
       })),
     });
   } catch (error) {

@@ -332,3 +332,13 @@ a {
 [data-pos] [data-pos-order-summary] {
   min-height: 64px;
 }
+
+/* Transfer fields and actions stay comfortable to use on tablets. */
+[data-transfers] [data-slot="button"],
+[data-transfers] [data-slot="input"],
+[data-transfers] select {
+  min-height: 48px;
+}
+[data-transfers] [data-transfer-footer] [data-slot="button"] {
+  min-height: 56px;
+}
