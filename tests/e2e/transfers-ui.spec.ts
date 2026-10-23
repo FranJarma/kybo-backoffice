@@ -174,8 +174,8 @@ for (const viewport of [
       .getByRole("textbox", { name: "Cantidad (litros)", exact: true })
       .fill("10");
     await page
-      .getByRole("textbox", { name: "Motivo", exact: true })
-      .fill("Reposición de la mañana");
+      .getByRole("combobox", { name: "Motivo", exact: true })
+      .selectOption("Reposición para turno de la mañana");
     const submit = page.getByRole("button", {
       name: "Reservar traslado",
       exact: true,
@@ -184,7 +184,7 @@ for (const viewport of [
       page
         .getByRole("textbox", { name: "Cantidad (litros)", exact: true })
         .boundingBox(),
-      page.getByRole("textbox", { name: "Motivo", exact: true }).boundingBox(),
+      page.getByRole("combobox", { name: "Motivo", exact: true }).boundingBox(),
       submit.boundingBox(),
     ]);
     expect(amountBox?.height).toBeGreaterThanOrEqual(48);
@@ -208,6 +208,7 @@ for (const viewport of [
     await submit.click();
     await expect.poll(() => posted.length).toBe(1);
     expect(posted[0].body.originLocationId).toBe(depot);
+    expect(posted[0].body.reason).toBe("Reposición para turno de la mañana");
     expect(posted[0].body.demands).toEqual([
       { itemId: milk, quantity: "10000.000000" },
     ]);
@@ -308,8 +309,11 @@ test("custom origin clears an identical destination and can return to the main d
     .getByRole("textbox", { name: "Cantidad (litros)", exact: true })
     .fill("2");
   await page
-    .getByRole("textbox", { name: "Motivo", exact: true })
-    .fill("Devolución a depósito");
+    .getByRole("combobox", { name: "Motivo", exact: true })
+    .selectOption("Otro motivo");
+  await page
+    .getByRole("textbox", { name: "Aclaración", exact: true })
+    .fill("Movimiento puntual autorizado");
   await page
     .getByRole("button", { name: "Reservar traslado", exact: true })
     .click();
@@ -317,6 +321,7 @@ test("custom origin clears an identical destination and can return to the main d
   expect(posted[0].body).toMatchObject({
     originLocationId: bar,
     destinationLocationId: depot,
+    reason: "Otro motivo: Movimiento puntual autorizado",
   });
   await expect(
     page.getByRole("group", { name: "Origen seleccionado", exact: true }),
@@ -333,6 +338,59 @@ test("custom origin clears an identical destination and can return to the main d
   await expect(
     page.getByRole("combobox", { name: "Destino", exact: true }),
   ).toHaveValue("");
+});
+test("other reason requires a meaningful clarification and presets discard that clarification", async ({
+  page,
+}) => {
+  const posted = await mount(page);
+  const reason = page.getByRole("combobox", { name: "Motivo", exact: true });
+  await expect(reason).toBeVisible({ timeout: 3000 });
+  await page
+    .getByRole("combobox", { name: "Destino", exact: true })
+    .selectOption(bar);
+  await page.getByRole("combobox", { name: "Artículo", exact: true }).click();
+  await page.getByRole("option", { name: "Leche", exact: true }).click();
+  await page
+    .getByRole("textbox", { name: "Cantidad (litros)", exact: true })
+    .fill("1");
+  await reason.selectOption("Otro motivo");
+  const clarification = page.getByRole("textbox", {
+    name: "Aclaración",
+    exact: true,
+  });
+  const submit = page.getByRole("button", {
+    name: "Reservar traslado",
+    exact: true,
+  });
+  await submit.click();
+  await expect(clarification).toBeFocused();
+  expect(posted).toHaveLength(0);
+  await clarification.fill("   ");
+  await submit.click();
+  await expect(
+    page.getByText("Escribí la aclaración para el otro motivo.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  expect(posted).toHaveLength(0);
+  await clarification.fill("  Reposición por rotura de un envase  ");
+  await submit.click();
+  await expect.poll(() => posted.length).toBe(1);
+  expect(posted[0].body.reason).toBe(
+    "Otro motivo: Reposición por rotura de un envase",
+  );
+  for (const preset of [
+    "Reposición para turno de la tarde",
+    "Reposición atrasada",
+    "Reposición extra por mayor demanda",
+  ]) {
+    await reason.selectOption(preset);
+    await expect(clarification).toHaveCount(0);
+    await submit.click();
+    await expect.poll(() => posted.at(-1)?.body.reason).toBe(preset);
+  }
+  await reason.selectOption("Otro motivo");
+  await expect(clarification).toHaveValue("");
 });
 test("a branch without a main depot requires an explicit origin", async ({
   page,

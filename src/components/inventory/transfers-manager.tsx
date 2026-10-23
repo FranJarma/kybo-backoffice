@@ -64,6 +64,13 @@ const fieldClass =
   "grid min-w-0 content-start gap-2 text-sm font-semibold text-brand";
 const selectClass =
   "min-h-12 w-full rounded-lg border bg-white px-3 text-sm font-normal";
+const transferReasons = [
+  "Reposición para turno de la mañana",
+  "Reposición para turno de la tarde",
+  "Reposición atrasada",
+  "Reposición extra por mayor demanda",
+  "Otro motivo",
+] as const;
 
 export function TransfersManager({ actorId }: { actorId: string }) {
   const quantityId = useId();
@@ -83,7 +90,8 @@ export function TransfersManager({ actorId }: { actorId: string }) {
     [itemId, setItemId] = useState(""),
     [item, setItem] = useState<CatalogRow>(),
     [amount, setAmount] = useState(""),
-    [reason, setReason] = useState("");
+    [reason, setReason] = useState(""),
+    [reasonDetail, setReasonDetail] = useState("");
   const depot =
     originLocations?.find((location) => location.code === "DEPOSITO") ??
     originLocations?.find(
@@ -163,11 +171,17 @@ export function TransfersManager({ actorId }: { actorId: string }) {
       const quantity = parseTransferQuantity(amount, item?.baseUnit);
       if (origin === destination)
         throw new Error("Elegí una ubicación de destino distinta del origen.");
+      if (!reason) throw new Error("Elegí el motivo del traslado.");
+      if (reason === "Otro motivo" && !reasonDetail.trim())
+        throw new Error("Escribí la aclaración para el otro motivo.");
       operation.submit("/api/transfers", {
         requestId: crypto.randomUUID(),
         originLocationId: origin,
         destinationLocationId: destination,
-        reason,
+        reason:
+          reason === "Otro motivo"
+            ? `Otro motivo: ${reasonDetail.trim()}`
+            : reason,
         demands: [{ itemId, quantity }],
       });
     } catch (e) {
@@ -360,15 +374,35 @@ export function TransfersManager({ actorId }: { actorId: string }) {
             </div>
             <label className={`${fieldClass} sm:col-span-2`}>
               <FieldCaption required>Motivo</FieldCaption>
-              <Input
+              <select
                 required
-                maxLength={2000}
-                className="min-h-12"
+                className={selectClass}
                 value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                placeholder="Ej.: Reposición para el turno de la tarde"
-              />
+                onChange={(e) => {
+                  setReason(e.target.value);
+                  setReasonDetail("");
+                }}
+              >
+                <option value="">Elegí el motivo del traslado</option>
+                {transferReasons.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
             </label>
+            {reason === "Otro motivo" && (
+              <label className={`${fieldClass} sm:col-span-2`}>
+                <FieldCaption required>Aclaración</FieldCaption>
+                <Input
+                  required
+                  maxLength={2000 - "Otro motivo: ".length}
+                  value={reasonDetail}
+                  onChange={(event) => setReasonDetail(event.target.value)}
+                  placeholder="Explicá brevemente por qué realizás el traslado"
+                />
+              </label>
+            )}
           </fieldset>
           <div
             data-transfer-footer
