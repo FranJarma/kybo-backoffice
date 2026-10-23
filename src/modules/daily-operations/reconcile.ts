@@ -12,6 +12,9 @@ import { stockTransfers } from "@/db/transfer-schema";
 import { executeCommand } from "../operations/command";
 import { syncDocumentTask } from "./document-adapters";
 import { readDailySuggestions } from "./read-suggestions";
+import { purchaseOrders } from "@/db/procurement-schema";
+import { procurementAvailable } from "../procurement/queries";
+import { syncPurchaseTask } from "../procurement/tasks";
 export async function reconcileDailyOperations(
   db: AppDb,
   actor: Actor,
@@ -52,6 +55,13 @@ export async function reconcileDailyOperations(
         await syncDocumentTask(tx, ctx, { type: "production", id: o.id });
       for (const t of transfers)
         await syncDocumentTask(tx, ctx, { type: "transfer", id: t.id });
+      if (await procurementAvailable(tx)) {
+        const purchases = await tx
+          .select()
+          .from(purchaseOrders)
+          .where(eq(purchaseOrders.branchId, ctx.branchId));
+        for (const p of purchases) await syncPurchaseTask(tx, ctx, p);
+      }
       const suggested = await readDailySuggestions(tx, ctx);
       const existing = await tx
         .select()

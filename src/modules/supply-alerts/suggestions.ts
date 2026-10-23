@@ -28,6 +28,6 @@ export function supplySuggestions(
       reason:
         a.status === "needs_estimate"
           ? "Falta estimar el consumo diario en Inventario → Compras de Bolivia. Sin ese dato no se puede calcular la anticipación."
-          : `Bolivia · Cobertura aproximada: ${quantity(a.coverageDays!)} días. Disponible en la sucursal: ${quantity(a.availableQuantity, a.baseUnit)}. Consumo estimado manual: ${quantity(a.dailyConsumption!, a.baseUnit)}/día. Plazo ${a.leadDays} días + margen ${a.safetyDays}; objetivo ${a.targetDays} días. Tramitar hasta ${a.orderBy!.split("-").reverse().join("/")}. Calculado con stock recibido y vencimientos. Revisá pedidos en trámite antes de comprar.`,
+          : `Bolivia · Cobertura física: ${quantity(a.coverageDays!)} días; proyectada con pedidos: ${quantity(a.projectedCoverageDays!)} días. Disponible: ${quantity(a.availableQuantity, a.baseUnit)}. Pedido con fecha vigente: ${quantity(a.incomingQuantity, a.baseUnit)}. ${a.unconfirmedIncomingQuantity !== "0.000000" ? `Sin llegada confirmada o atrasado: ${quantity(a.unconfirmedIncomingQuantity, a.baseUnit)}; consultá al proveedor. ` : ""}Consumo estimado manual: ${quantity(a.dailyConsumption!, a.baseUnit)}/día. Plazo ${a.leadDays} días + margen ${a.safetyDays}; objetivo ${a.targetDays} días. Tramitar hasta ${a.orderBy!.split("-").reverse().join("/")}. Las llegadas se consideran al final del día; una llegada tardía no cubre un faltante anterior.`,
     }));
 }

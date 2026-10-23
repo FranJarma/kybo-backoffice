@@ -106,7 +106,9 @@ export function TaskDetail({
       ? "/kitchen/production"
       : current.kind === "transfer"
         ? "/inventory/transfers"
-        : "/inventory/purchases";
+        : current.documentId
+          ? `/inventory/purchases?order=${current.documentId}`
+          : "/inventory/purchases";
   return (
     <Dialog
       open

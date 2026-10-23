@@ -60,6 +60,10 @@ for (const width of [600, 768, 1024])
       suggestedQuantity: i ? "4657.894744" : "1050.000000",
       coverageDays: i ? "5.937499" : "10.000000",
       coverageAtLeast: false,
+      projectedCoverageDays: i ? "5.937499" : "10.000000",
+      projectedCoverageAtLeast: false,
+      incomingQuantity: "0.000000",
+      unconfirmedIncomingQuantity: "0.000000",
       riskOn: "2026-11-02",
       orderBy: i ? "2026-10-18" : "2026-10-23",
       urgency: i ? "critical" : "high",
@@ -105,7 +109,10 @@ for (const width of [600, 768, 1024])
     await expect(cups).toContainText("10 días");
     await expect(cups).toContainText("1.050 unid.");
     await cups.getByText("Ver cálculo y condiciones", { exact: true }).click();
-    await expect(cups).toContainText("pedidos en trámite");
+    await expect(cups).toContainText("Pedido con fecha vigente: 0 unid.");
+    await expect(
+      cups.getByRole("link", { name: "Ver pedidos a proveedores" }),
+    ).toHaveAttribute("href", "/inventory/purchases");
     await page
       .getByRole("button", { name: "Editar Vasos descartables", exact: true })
       .click();

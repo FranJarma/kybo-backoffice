@@ -43,6 +43,10 @@ import {
 import { parsePayment, parseReceive } from "./validation";
 import { allocateShipping } from "./shipping";
 import { stockOperations } from "@/db/stock-schema";
+import {
+  lockPurchaseReceipt,
+  finishPurchaseReceipt,
+} from "../procurement/receipts";
 import { requireOperationalContext } from "../branches/context";
 import type {
   LotRow,
@@ -486,6 +490,7 @@ export function createInventoryService(
           receiptId,
         );
         if (prior) return detail(tx, prior, ctx.branchId);
+        const orderReference = await lockPurchaseReceipt(tx, ctx, input);
         // Lock presentations before their references, mirroring catalog edits.
         const presentationIds = [
           ...new Set(
@@ -562,10 +567,23 @@ export function createInventoryService(
           locked.set(id, { row });
         }
         const prepared = input.lines.map((line, position) => {
+          const orderLine = line.orderLineId
+            ? orderReference?.byId.get(line.orderLineId)
+            : undefined;
+          const currentItem = locked.get(line.itemId)!.row;
+          if (
+            orderLine &&
+            (currentItem.baseUnit !== orderLine.baseUnit ||
+              !currentItem.stockTracked)
+          )
+            conflict(
+              "La unidad o modalidad de inventario del insumo no coincide con el pedido. Revisá su ficha antes de recibir.",
+            );
           const p = line.presentationId
             ? presentations.get(line.presentationId)
             : null;
           if (
+            !orderLine &&
             p &&
             (p.archivedAt ||
               p.supplierId !== input.supplierId ||
@@ -577,13 +595,18 @@ export function createInventoryService(
               409,
             );
           if (
-            (line.presentationRevision !== undefined &&
+            !orderLine &&
+            ((line.presentationRevision !== undefined &&
               (!p || p.revision !== line.presentationRevision)) ||
-            (line.itemRevision !== undefined &&
-              locked.get(line.itemId)!.row.revision !== line.itemRevision)
+              (line.itemRevision !== undefined &&
+                locked.get(line.itemId)!.row.revision !== line.itemRevision))
           )
             conflict("El catálogo cambió; revisá la recepción.");
-          const factor = p ? integer(p.baseQuantity) : SCALE;
+          const factor = orderLine
+            ? integer(orderLine.conversionFactor)
+            : p
+              ? integer(p.baseQuantity)
+              : SCALE;
           const baseQty = exactDivision(
             integer(line.quantity!) * factor,
             SCALE,
@@ -605,7 +628,7 @@ export function createInventoryService(
             invalid("Revisá el descuento del renglón.");
           const net = grossCents === null ? null : grossCents - discount;
           if (net !== null) safeScaled(net, 18);
-          return { line, p, factor, baseQty, net, position };
+          return { line, p, factor, baseQty, net, position, orderLine };
         });
         const total = prepared.some((p) => p.net === null)
           ? null
@@ -648,7 +671,20 @@ export function createInventoryService(
           .insert(stockDocuments)
           .values({ branchId: ctx.branchId, kind: "receipt", receiptId: r.id })
           .returning();
-        for (const { line, p, factor, baseQty, net, position } of prepared) {
+        const orderReceived: {
+          orderLineId: string;
+          receiptLineId: string;
+          quantity: string;
+        }[] = [];
+        for (const {
+          line,
+          p,
+          factor,
+          baseQty,
+          net,
+          position,
+          orderLine,
+        } of prepared) {
           const lockedItem = locked.get(line.itemId)!;
           const [lot] = await tx
             .insert(inventoryLots)
@@ -662,25 +698,34 @@ export function createInventoryService(
               remainingQuantity: six(baseQty),
             })
             .returning();
-          await tx.insert(purchaseReceiptLines).values({
-            position,
-            receiptId: r.id,
-            itemId: line.itemId,
-            itemName: lockedItem.row.name,
-            baseUnit: lockedItem.row.baseUnit,
-            presentationId: p?.id ?? null,
-            presentationName: p?.name ?? null,
-            conversionFactor: six(factor),
-            quantity: line.quantity!,
-            baseQuantity: six(baseQty),
-            unitPrice: line.unitPrice,
-            discount: line.discount,
-            lineTotal: net === null ? null : cents(net),
-            shippingAmount: cents(allocations[position]),
-            lotId: lot.id,
-            lotCode: line.lotCode,
-            expiresOn: line.expiresOn,
-          });
+          const [receiptLine] = await tx
+            .insert(purchaseReceiptLines)
+            .values({
+              position,
+              receiptId: r.id,
+              itemId: line.itemId,
+              itemName: orderLine?.itemName ?? lockedItem.row.name,
+              baseUnit: orderLine?.baseUnit ?? lockedItem.row.baseUnit,
+              presentationId: p?.id ?? null,
+              presentationName: orderLine?.presentationName ?? p?.name ?? null,
+              conversionFactor: six(factor),
+              quantity: line.quantity!,
+              baseQuantity: six(baseQty),
+              unitPrice: line.unitPrice,
+              discount: line.discount,
+              lineTotal: net === null ? null : cents(net),
+              shippingAmount: cents(allocations[position]),
+              lotId: lot.id,
+              lotCode: line.lotCode,
+              expiresOn: line.expiresOn,
+            })
+            .returning();
+          if (orderLine)
+            orderReceived.push({
+              orderLineId: orderLine.id,
+              receiptLineId: receiptLine.id,
+              quantity: six(baseQty),
+            });
           await postMovement(tx, ctx, {
             operationId: input.requestId,
             documentId: document.id,
@@ -701,7 +746,9 @@ export function createInventoryService(
             ],
           });
         }
+        await finishPurchaseReceipt(tx, ctx, orderReference, orderReceived);
         await audit(tx, actor, "purchase_receipts", r.id, "receive", {
+          purchaseOrderId: input.purchaseOrderId ?? null,
           totalAmount: total === null ? null : cents(total),
           shippingAmount: cents(freight),
           shippingSupplierId: shipping?.supplierId ?? null,

@@ -241,6 +241,10 @@ export async function runTaskCommand(
           .set({ state: "blocked", reason: input.reason })
           .where(eq(tasks.id, taskId));
       } else if (input.action === "cancel") {
+        if (task.kind === "purchase" && task.documentId)
+          conflict(
+            "Cancelá el remanente desde el pedido en Compras para mantener el seguimiento.",
+          );
         if (!input.reason) conflict("Indicá el motivo de cancelación.");
         if (task.documentId) {
           if (task.kind === "production")

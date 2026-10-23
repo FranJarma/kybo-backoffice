@@ -17,6 +17,10 @@ export type SupplyLot = {
   expiresOn: string | null;
 };
 export type SupplyAlert = SupplyPolicy & {
+  incomingQuantity: string;
+  unconfirmedIncomingQuantity: string;
+  projectedCoverageDays: string | null;
+  projectedCoverageAtLeast: boolean;
   availableQuantity: string;
   suggestedQuantity: string;
   coverageDays: string | null;
@@ -25,6 +29,11 @@ export type SupplyAlert = SupplyPolicy & {
   orderBy: string | null;
   urgency: Urgency | null;
   status: "needs_estimate" | "no_consumption" | "covered" | "action";
+};
+export type SupplyIncoming = {
+  id: string;
+  quantity: string;
+  expectedOn: string | null;
 };
 export type SupplySnapshot = {
   available: boolean;

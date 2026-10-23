@@ -28,3 +28,4 @@ export * from "./overhead-schema";
 export * from "./pickup-schema";
 export * from "./daily-operation-schema";
 export * from "./supply-alert-schema";
+export * from "./procurement-schema";

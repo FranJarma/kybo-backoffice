@@ -1,4 +1,5 @@
 export type ReceiptLineInput = {
+  orderLineId?: string;
   itemId: string;
   itemRevision?: number;
   presentationId?: string | null;
@@ -10,6 +11,8 @@ export type ReceiptLineInput = {
   expiresOn?: string | null;
 };
 export type ReceiveInput = {
+  purchaseOrderId?: string;
+  expectedOrderRevision?: number;
   locationId: string;
   requestId: string;
   supplierId: string;

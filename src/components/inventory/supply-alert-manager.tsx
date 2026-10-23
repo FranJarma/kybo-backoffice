@@ -237,9 +237,16 @@ export function SupplyAlertManager({ actorId }: { actorId: string }) {
                   <div className="grid gap-3 text-sm sm:grid-cols-3">
                     <p>
                       <span className="block text-muted-foreground">
-                        Cobertura aproximada
+                        Cobertura con pedidos
                       </span>
-                      <strong className="mt-1 block text-lg">{coverage}</strong>
+                      <strong className="mt-1 block text-lg">
+                        {a?.projectedCoverageDays
+                          ? `${a.projectedCoverageAtLeast ? "≥ " : ""}${quantity(a.projectedCoverageDays)} días`
+                          : coverage}
+                      </strong>
+                      <span className="mt-1 block text-xs text-muted-foreground">
+                        Stock físico: {coverage}
+                      </span>
                     </p>
                     <p>
                       <span className="block text-muted-foreground">
@@ -253,7 +260,7 @@ export function SupplyAlertManager({ actorId }: { actorId: string }) {
                     </p>
                     <p>
                       <span className="block text-muted-foreground">
-                        Compra sugerida · objetivo {p.targetDays} días
+                        Compra adicional · objetivo {p.targetDays} días
                       </span>
                       <strong className="mt-1 block">
                         {a?.status === "action"
@@ -262,6 +269,23 @@ export function SupplyAlertManager({ actorId }: { actorId: string }) {
                       </strong>
                     </p>
                   </div>
+                )}
+                {a && (
+                  <p className="text-sm text-muted-foreground">
+                    Pedido con fecha vigente:{" "}
+                    <strong className="text-brand">
+                      {quantity(a.incomingQuantity ?? "0.000000", p.baseUnit)}
+                    </strong>
+                    .{" "}
+                    {a.unconfirmedIncomingQuantity &&
+                      a.unconfirmedIncomingQuantity !== "0.000000" && (
+                        <span className="text-red-700">
+                          Atrasado o sin fecha:{" "}
+                          {quantity(a.unconfirmedIncomingQuantity, p.baseUnit)}.
+                          Consultá al proveedor.
+                        </span>
+                      )}
+                  </p>
                 )}
                 <details className="text-sm">
                   <summary className="min-h-10 cursor-pointer py-2 font-medium text-blue-700">
@@ -283,9 +307,18 @@ export function SupplyAlertManager({ actorId }: { actorId: string }) {
                       conservan el stock de la sucursal.
                     </p>
                     <p>
-                      Revisá los pedidos en trámite antes de comprar: aquí se
-                      calcula con mercadería ya recibida.
+                      Los pedidos confirmados aportan solo lo pendiente de
+                      recibir. La llegada se considera al final del día; una
+                      llegada tardía no cubre un faltante anterior. Los pedidos
+                      sin fecha o atrasados no aportan cobertura.
                     </p>
+                    <Link
+                      className="inline-flex min-h-12 items-center font-semibold text-blue-700"
+                      href="/inventory/purchases"
+                    >
+                      Ver pedidos a proveedores{" "}
+                      <ArrowUpRight className="ml-2 size-4" />
+                    </Link>
                   </div>
                 </details>
               </article>

@@ -1,5 +1,10 @@
 import { integer, safeQuantity, SCALE, six } from "../inventory/decimal";
-import type { SupplyPolicy, SupplyLot, SupplyAlert } from "./types";
+import type {
+  SupplyPolicy,
+  SupplyLot,
+  SupplyAlert,
+  SupplyIncoming,
+} from "./types";
 
 export function addDays(date: string, days: number) {
   const result = new Date(`${date}T12:00:00Z`);
@@ -40,11 +45,12 @@ export function dayStart(date: string, timeZone: string) {
   return new Date(instant);
 }
 
-/** Received stock only; future orders never enter this FEFO projection. */
+/** Physical coverage stays separate; dated arrivals become usable after that day's demand. */
 export function projectSupply(
   policy: SupplyPolicy,
   input: SupplyLot[],
   today: string,
+  incoming: SupplyIncoming[] = [],
 ): SupplyAlert {
   const lots = input
     .filter((l) => !l.expiresOn || l.expiresOn > today)
@@ -56,12 +62,26 @@ export function projectSupply(
         ) || a.id.localeCompare(b.id),
     );
   const available = lots.reduce((sum, l) => sum + l.remaining, 0n);
+  const eligible = incoming.filter(
+    (i) => i.expectedOn && i.expectedOn >= today,
+  );
+  const unconfirmed = incoming.filter(
+    (i) => !i.expectedOn || i.expectedOn < today,
+  );
   const base = {
     ...policy,
     availableQuantity: safeQuantity(available),
     suggestedQuantity: "0.000000",
     coverageDays: null,
     coverageAtLeast: false,
+    projectedCoverageDays: null,
+    projectedCoverageAtLeast: false,
+    incomingQuantity: safeQuantity(
+      eligible.reduce((n, i) => n + integer(i.quantity), 0n),
+    ),
+    unconfirmedIncomingQuantity: safeQuantity(
+      unconfirmed.reduce((n, i) => n + integer(i.quantity), 0n),
+    ),
     riskOn: null,
     orderBy: null,
     urgency: null,
@@ -70,26 +90,45 @@ export function projectSupply(
     return { ...base, status: "needs_estimate", urgency: "high" };
   const daily = integer(policy.dailyConsumption);
   if (daily === 0n) return { ...base, status: "no_consumption" };
-  let shortage: { day: number; remaining: bigint } | null = null;
-  let served = 0n;
-  for (let day = 0; day < 365; day++) {
-    const date = addDays(today, day);
-    let demand = daily;
-    for (const lot of lots) {
-      if (lot.expiresOn && lot.expiresOn <= date) lot.remaining = 0n;
-      const used = lot.remaining < demand ? lot.remaining : demand;
-      lot.remaining -= used;
-      demand -= used;
+  function simulate(withIncoming: boolean) {
+    const inventory = lots.map((l) => ({ ...l }));
+    let shortage: { day: number; remaining: bigint } | null = null;
+    let served = 0n;
+    for (let day = 0; day < 365; day++) {
+      const date = addDays(today, day);
+      let demand = daily;
+      for (const lot of inventory) {
+        if (lot.expiresOn && lot.expiresOn <= date) lot.remaining = 0n;
+        const used = lot.remaining < demand ? lot.remaining : demand;
+        lot.remaining -= used;
+        demand -= used;
+      }
+      if (day < policy.targetDays) served += daily - demand;
+      if (demand > 0n && !shortage)
+        shortage = { day, remaining: daily - demand };
+      if (withIncoming)
+        for (const i of eligible)
+          if (i.expectedOn === date)
+            inventory.push({
+              id: i.id,
+              quantity: i.quantity,
+              expiresOn: null,
+              remaining: integer(i.quantity),
+            });
     }
-    if (day < policy.targetDays) served += daily - demand;
-    if (demand > 0n && !shortage) shortage = { day, remaining: daily - demand };
+    return {
+      shortage,
+      served,
+      coverage: shortage
+        ? BigInt(shortage.day) * SCALE + (shortage.remaining * SCALE) / daily
+        : 365n * SCALE,
+    };
   }
+  const physical = simulate(false);
+  const { shortage, served, coverage } = simulate(true);
   let suggested = daily * BigInt(policy.targetDays) - served;
   if (policy.baseUnit === "unit")
     suggested = ((suggested + SCALE - 1n) / SCALE) * SCALE;
-  const coverage = shortage
-    ? BigInt(shortage.day) * SCALE + (shortage.remaining * SCALE) / daily
-    : 365n * SCALE;
   const within = (days: number) =>
     !!shortage &&
     (shortage.day < days ||
@@ -98,8 +137,10 @@ export function projectSupply(
     ...base,
     status: suggested > 0n ? "action" : "covered",
     suggestedQuantity: safeQuantity(suggested),
-    coverageDays: six(coverage),
-    coverageAtLeast: !shortage,
+    coverageDays: six(physical.coverage),
+    coverageAtLeast: !physical.shortage,
+    projectedCoverageDays: six(coverage),
+    projectedCoverageAtLeast: !shortage,
     riskOn: shortage ? addDays(today, shortage.day) : null,
     orderBy: shortage
       ? addDays(today, shortage.day - policy.leadDays - policy.safetyDays)

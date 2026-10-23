@@ -18,6 +18,7 @@ import { businessDate } from "../operations/business-date";
 import { supplyAvailable } from "./policies";
 import { projectSupply } from "./engine";
 import type { SupplySnapshot } from "./types";
+import { pendingPurchaseSupply } from "../procurement/queries";
 export async function getSupplySnapshot(
   db: AppDb,
   actor: Actor,
@@ -131,6 +132,7 @@ export async function readSupplySnapshot(
     );
   }
   const today = businessDate(now, ctx.timeZone);
+  const pending = await pendingPurchaseSupply(tx, ctx.branchId);
   const eligible = lots.map(({ lot, balance }) => {
     const id = `${lot.id}:${balance.locationId}`;
     const held = integer(balance.reserved),
@@ -168,6 +170,7 @@ export async function readSupplySnapshot(
           p,
           eligible.filter((l) => l.itemId === p.itemId),
           today,
+          pending.filter((i) => i.itemId === p.itemId),
         ),
       ),
   };

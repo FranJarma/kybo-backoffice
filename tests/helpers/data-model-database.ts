@@ -18,6 +18,7 @@ export async function createDataModelTestContext(
     legacyPricing?: boolean;
     legacyDailyOperations?: boolean;
     legacySupplyAlerts?: boolean;
+    legacyProcurement?: boolean;
   } = {},
 ) {
   requireMigrationTestPermission();
@@ -88,6 +89,10 @@ export async function createDataModelTestContext(
     if (!options.legacyDailyOperations && !options.legacySupplyAlerts)
       await client.exec(
         await readFile("drizzle/0026_supply_alerts.sql", "utf8"),
+      );
+    if (!options.legacyProcurement)
+      await client.exec(
+        await readFile("drizzle/0027_purchase_orders.sql", "utf8"),
       );
     return {
       ...fixture,
