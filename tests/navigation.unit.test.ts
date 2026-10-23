@@ -8,6 +8,28 @@ import {
   navigationIsActive,
 } from "../src/lib/navigation";
 describe("navegación por áreas", () => {
+  it("da acceso a mínimos en inventario solo al encargado y administrador", () => {
+    for (const role of ["manager", "admin"]) {
+      const entry = visibleNavigation({ role }).find(
+        (n) => n.href === "/inventory/replenishment",
+      );
+      expect(entry).toMatchObject({
+        label: "Mínimos de reposición",
+        area: "Inventario y compras",
+        parent: "inventory",
+      });
+    }
+    expect(
+      visibleNavigation({ role: "staff", catalogManager: true }).some(
+        (n) => n.href === "/inventory/replenishment",
+      ),
+    ).toBe(false);
+    expect(
+      breadcrumbs("/inventory/replenishment", { role: "manager" }).map(
+        (b) => b.label,
+      ),
+    ).toEqual(["Inicio", "Inventario y compras", "Mínimos de reposición"]);
+  });
   it("reserva sucursales y ubicaciones al administrador aunque el encargado gestione catálogo", () => {
     expect(
       visibleNavigation({ role: "admin" }).some((n) => n.id === "branches"),

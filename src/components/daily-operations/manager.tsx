@@ -325,11 +325,11 @@ export function DailyOperationsManager({
         </span>
         {canManage && (
           <Link
-            href="/sales"
+            href="/inventory/replenishment"
             prefetch={false}
             className="flex min-h-12 items-center underline"
           >
-            Configurar mínimos desde Reposición del punto de venta
+            Configurar mínimos en Inventario
           </Link>
         )}
       </footer>

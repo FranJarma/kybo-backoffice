@@ -141,6 +141,15 @@ export const navigation = [
     parent: "inventory",
   },
   {
+    id: "replenishment",
+    area: "Inventario y compras",
+    label: "Mínimos de reposición",
+    href: "/inventory/replenishment",
+    icon: "ListChecks",
+    access: "manager",
+    parent: "inventory",
+  },
+  {
     id: "presentations",
     area: "Inventario y compras",
     label: "Presentaciones de compra",
