@@ -62,3 +62,20 @@ it("shows distinct order and locator numbers and hides stale ready states on fai
   expect(offline).not.toContain("123.1");
   expect(offline).not.toContain("Martina");
 });
+it("hides the no-locator choice for a new order while a device is free, but retains it for returns", () => {
+  const fleet = { count: 1, publicPath: "/pickup/test", occupied: [] };
+  const props = {
+    value: null,
+    onChange: () => {},
+    fleet,
+    requireWhenAvailable: true,
+  };
+  expect(renderToStaticMarkup(createElement(LocatorGrid, props))).not.toContain(
+    ">Sin localizador<",
+  );
+  expect(
+    renderToStaticMarkup(
+      createElement(LocatorGrid, { ...props, requireWhenAvailable: false }),
+    ),
+  ).toContain("Sin localizador");
+});

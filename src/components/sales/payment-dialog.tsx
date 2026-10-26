@@ -55,6 +55,7 @@ export function PaymentDialog({
   methodsLoading,
   canManageMethods = false,
   onRefreshMethods,
+  checkoutIssue = "",
 }: {
   amount: string;
   delivery: boolean;
@@ -72,6 +73,7 @@ export function PaymentDialog({
   methodsLoading: boolean;
   canManageMethods?: boolean;
   onRefreshMethods: () => void;
+  checkoutIssue?: string;
 }) {
   const [received, setReceived] = useState<Record<string, string>>({});
   const [rows, setRows] = useState<(PaymentDraft & { key: string })[]>([
@@ -457,7 +459,10 @@ export function PaymentDialog({
             aria-live="polite"
             className={`text-sm ${remaining < 0n ? "text-red-700" : "text-muted"}`}
           >
-            {error ? "Revisá el aviso antes de volver a confirmar." : summary}
+            {checkoutIssue ||
+              (error
+                ? "Revisá el aviso antes de volver a confirmar."
+                : summary)}
           </p>
           <div className="flex gap-3">
             <Button
@@ -472,7 +477,7 @@ export function PaymentDialog({
             <Button
               type="button"
               className="min-h-14 min-w-0 flex-1 text-base"
-              disabled={locked || !valid}
+              disabled={locked || !valid || !!checkoutIssue}
               onClick={() =>
                 onConfirm(
                   rows.map(({ collector, methodId, amount, reference }) => ({

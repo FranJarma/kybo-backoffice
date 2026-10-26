@@ -1,18 +1,21 @@
 "use client";
 import { Button } from "@/components/ui/button";
 import type { LocatorFleet } from "@/modules/pickup/types";
+import { locatorSelection } from "@/modules/pickup/selection";
 export function LocatorGrid({
   fleet,
   value,
   onChange,
   disabled = false,
   currentId,
+  requireWhenAvailable = false,
 }: {
   fleet?: LocatorFleet;
   value: number | null;
   onChange: (number: number | null) => void;
   disabled?: boolean;
   currentId?: string;
+  requireWhenAvailable?: boolean;
 }) {
   return (
     <div data-pickup-controls className="space-y-3">
@@ -48,16 +51,19 @@ export function LocatorGrid({
           );
         })}
       </div>
-      <Button
-        type="button"
-        variant={value === null ? "default" : "outline"}
-        className="min-h-12 w-full"
-        disabled={disabled}
-        aria-pressed={value === null}
-        onClick={() => onChange(null)}
-      >
-        Sin localizador
-      </Button>
+      {(!requireWhenAvailable ||
+        (fleet && !locatorSelection(fleet, null).required)) && (
+        <Button
+          type="button"
+          variant={value === null ? "default" : "outline"}
+          className="min-h-12 w-full"
+          disabled={disabled}
+          aria-pressed={value === null}
+          onClick={() => onChange(null)}
+        >
+          Sin localizador
+        </Button>
+      )}
     </div>
   );
 }

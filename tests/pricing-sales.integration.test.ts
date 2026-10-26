@@ -53,6 +53,7 @@ it("charges a final price, snapshots VAT and each fee, and keeps history unchang
   expect(config.basePrice).toBe("10000.00");
   const saleService = createSalesService(c.db);
   const input = {
+    locatorNumber: 1,
     requestId: crypto.randomUUID(),
     origin: "counter",
     channel: "counter",
@@ -163,6 +164,7 @@ it("keeps unknown tax and fees distinct from explicit zero", async () => {
   });
   const config = await getProductConfiguration(c.db, actor, zero.id, "counter");
   const sale = await createSalesService(c.db).create(actor, {
+    locatorNumber: 2,
     requestId: crypto.randomUUID(),
     origin: "counter",
     channel: "counter",
@@ -297,6 +299,7 @@ it("sums final combo extras and extracts VAT without another surcharge", async (
     commissionPercent: "0",
   });
   const sale = await createSalesService(c.db).create(actor, {
+    locatorNumber: 3,
     requestId: crypto.randomUUID(),
     origin: "counter",
     channel: "counter",

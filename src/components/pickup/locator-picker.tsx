@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -8,37 +9,81 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { useLocators } from "./use-locators";
+import type { LocatorFleet } from "@/modules/pickup/types";
+import { locatorSelection } from "@/modules/pickup/selection";
 import { LocatorGrid } from "./locator-grid";
 export function LocatorPicker({
   value,
   onChange,
   disabled,
-  refresh,
+  fleet,
+  issue,
+  automatic = false,
+  onAutomatic,
 }: {
   value: number | null;
   onChange: (number: number | null) => void;
   disabled: boolean;
-  refresh: number;
+  fleet?: LocatorFleet;
+  issue: string;
+  automatic?: boolean;
+  onAutomatic?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <>
+    <div className="min-w-0">
+      <p className="mb-1.5 text-xs font-semibold text-brand">Localizador</p>
       <Button
         type="button"
         variant="outline"
-        className="mb-2 min-h-12 w-full"
-        disabled={disabled}
+        className={`min-h-12 w-full gap-2 whitespace-normal rounded-lg px-3 text-xs shadow-none sm:text-sm ${value !== null ? "border-orange-300 bg-orange-50/40 hover:bg-orange-50" : "border-line bg-white"}`}
+        disabled={disabled || !fleet}
         onClick={() => setOpen(true)}
       >
-        {value === null
-          ? "Sin localizador · Elegir"
-          : `Localizador ${value} · Cambiar`}
+        <Radio className="size-5 shrink-0" aria-hidden="true" />
+        <span>
+          {automatic
+            ? !fleet
+              ? "Se asigna al confirmar"
+              : value === null
+                ? "Sin localizadores disponibles"
+                : `Localizador ${value} · Automático · Cambiar`
+            : value === null
+              ? !fleet
+                ? "Consultando localizadores…"
+                : locatorSelection(fleet, null).required
+                  ? "Elegir localizador · Obligatorio"
+                  : "Sin localizador · No hay disponibles"
+              : `Localizador ${value} · Cambiar`}
+        </span>
       </Button>
+      {automatic && value !== null && (
+        <p className="mt-1 text-[11px] leading-snug text-muted">
+          Se confirma al guardar el pedido.
+        </p>
+      )}
+      {issue && (
+        <p
+          role="status"
+          className="mb-3 text-xs leading-relaxed text-muted-foreground"
+        >
+          {issue}
+        </p>
+      )}
       {open && (
         <PickerDialog
           value={value}
-          refresh={refresh}
+          fleet={fleet}
+          issue={issue}
+          automatic={automatic}
+          onAutomatic={
+            onAutomatic
+              ? () => {
+                  onAutomatic();
+                  setOpen(false);
+                }
+              : undefined
+          }
           onClose={() => setOpen(false)}
           onChange={(number) => {
             onChange(number);
@@ -46,21 +91,26 @@ export function LocatorPicker({
           }}
         />
       )}
-    </>
+    </div>
   );
 }
 function PickerDialog({
   value,
-  refresh,
+  fleet,
+  issue,
   onClose,
   onChange,
+  automatic,
+  onAutomatic,
 }: {
   value: number | null;
-  refresh: number;
+  fleet?: LocatorFleet;
+  issue: string;
   onClose: () => void;
   onChange: (number: number | null) => void;
+  automatic: boolean;
+  onAutomatic?: () => void;
 }) {
-  const { fleet, error } = useLocators(refresh);
   return (
     <Dialog
       open
@@ -73,22 +123,37 @@ function PickerDialog({
         className="max-h-[90dvh] overflow-y-auto sm:max-w-md"
       >
         <DialogHeader>
-          <DialogTitle>Localizador del pedido</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <Radio className="size-5 shrink-0" aria-hidden="true" />
+            Localizador del pedido
+          </DialogTitle>
           <DialogDescription>
             Elegí el equipo que entregarás. Se reserva al guardar el pedido.
           </DialogDescription>
         </DialogHeader>
-        {error && (
-          <p role="alert" className="text-sm text-red-700">
-            {error} Podés continuar sin localizador.
-          </p>
+        {issue && <p className="text-sm text-muted-foreground">{issue}</p>}
+        {onAutomatic && (
+          <Button
+            variant="outline"
+            className={`min-h-12 border-orange-300 ${automatic ? "bg-orange-50" : "bg-white"}`}
+            onClick={onAutomatic}
+          >
+            <Radio className="size-4" aria-hidden="true" />
+            {automatic
+              ? "Mantener asignación automática"
+              : "Volver a asignación automática"}
+          </Button>
         )}
         <LocatorGrid
-          fleet={error ? undefined : fleet}
+          fleet={fleet}
+          requireWhenAvailable
           value={value}
           onChange={onChange}
         />
         <p className="text-xs text-muted">
+          {fleet && !locatorSelection(fleet, null).required
+            ? "Todos están ocupados. Podés registrar este pedido sin localizador. "
+            : "La selección es obligatoria mientras haya equipos disponibles. "}
           Los ocupados se liberan al confirmar su devolución.
         </p>
       </DialogContent>

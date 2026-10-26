@@ -1,6 +1,11 @@
 "use client";
-import { useEffect, useState } from "react";
-import type { PrepList, PrepDetail } from "@/modules/preparation/types";
+import { useCallback, useEffect, useState } from "react";
+import type {
+  PrepList,
+  PrepDetail,
+  PrepTask,
+} from "@/modules/preparation/types";
+import { confirmedPreparation } from "@/modules/preparation/confirmed";
 type Snapshot<T> = { key: string; data: T; received: number };
 function usePreparationResource<T>(url: string, revision: number) {
   const key = `${url}:${revision}`;
@@ -84,7 +89,18 @@ function usePreparationResource<T>(url: string, revision: number) {
     };
   }, [url, key]);
   const age = snapshot ? Math.max(0, tick - snapshot.received) : Infinity;
+  const updateData = useCallback(
+    (update: (data: T) => T) => {
+      setSnapshot((current) =>
+        current && current.key === key
+          ? { ...current, data: update(current.data) }
+          : current,
+      );
+    },
+    [key],
+  );
   return {
+    updateData,
     data: snapshot?.data ?? null,
     error,
     fresh: !!snapshot && snapshot.key === key && !error && age <= 15000,
@@ -94,8 +110,18 @@ function usePreparationResource<T>(url: string, revision: number) {
 }
 export function usePreparationFeed(url: string, revision: number) {
   const feed = usePreparationResource<PrepList>(url, revision);
+  const { updateData } = feed;
+  const active =
+    new URLSearchParams(url.split("?")[1] ?? "").get("scope") !== "history";
+  const confirmTask = useCallback(
+    (task: PrepTask) => {
+      updateData((data) => confirmedPreparation(data, task, active));
+    },
+    [updateData, active],
+  );
   return {
     ...feed,
+    confirmTask,
     now: feed.data ? Date.parse(feed.data.serverNow) + feed.age : 0,
   };
 }

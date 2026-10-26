@@ -1,13 +1,17 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Image from "next/image";
 import type { PublicQueue } from "@/modules/pickup/types";
+import { SoundControl } from "@/components/notifications/sound-control";
+import { useReadySound } from "@/components/notifications/use-ready-sound";
 
 export function PickupDisplay({ queueKey }: { queueKey: string }) {
   const [data, setData] = useState<PublicQueue>();
   const [unavailable, setUnavailable] = useState(false);
+  const { observe, ...sound } = useReadySound(queueKey);
   useEffect(() => {
     let live = true,
+      baseline = true,
       offset = 0;
     let timer: ReturnType<typeof setTimeout>;
     let controller: AbortController;
@@ -22,6 +26,15 @@ export function PickupDisplay({ queueKey }: { queueKey: string }) {
         if (!response.ok) throw new Error("unavailable");
         const result: PublicQueue = await response.json();
         if (live) {
+          observe(
+            queueKey,
+            result.rows.map((row) => ({
+              id: row.label,
+              ready: row.state === "ready",
+            })),
+            { baseline },
+          );
+          if (result.nextOffset === 0) baseline = false;
           setData(result);
           setUnavailable(false);
           offset = result.nextOffset;
@@ -43,16 +56,24 @@ export function PickupDisplay({ queueKey }: { queueKey: string }) {
       clearTimeout(timer);
       controller?.abort();
     };
-  }, [queueKey]);
-  return <PublicBoard data={data} unavailable={unavailable} />;
+  }, [queueKey, observe]);
+  return (
+    <PublicBoard
+      data={data}
+      unavailable={unavailable}
+      soundControl={<SoundControl {...sound} />}
+    />
+  );
 }
 
 export function PublicBoard({
   data,
   unavailable,
+  soundControl,
 }: {
   data?: PublicQueue;
   unavailable: boolean;
+  soundControl?: ReactNode;
 }) {
   return (
     <main className="min-h-dvh bg-[#f7f7f7] text-[#063f5c]">
@@ -70,9 +91,12 @@ export function PublicBoard({
             {data?.branchName ?? "Retiro de pedidos"}
           </p>
         </div>
-        <p className="text-lg font-medium md:text-2xl">
-          Tu pedido, recién hecho.
-        </p>
+        <div className="flex flex-wrap items-center gap-4">
+          <p className="text-lg font-medium md:text-2xl">
+            Tu pedido, recién hecho.
+          </p>
+          {soundControl}
+        </div>
       </header>
       {unavailable ? (
         <div role="status" className="mx-auto max-w-2xl px-6 py-28 text-center">

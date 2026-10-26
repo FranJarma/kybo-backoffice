@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import type { Tx } from "@/db/types";
 import type { OperationalContext } from "../operations/types";
@@ -11,9 +12,7 @@ import {
 } from "@/db/preparation-schema";
 import { stockDocuments } from "@/db/inventory-document-schema";
 import { saleLineFulfillments } from "@/db/fulfillment-event-schema";
-import { reserveStock } from "../inventory/reservations";
-import { lockStock } from "../inventory/locking";
-import { assertStockAvailable } from "../inventory/stock-shortages";
+import { reserveStockBatch } from "../inventory/reservation-batch";
 import { integer, safeQuantity } from "../inventory/decimal";
 import { AppError } from "@/lib/errors";
 function fail(message: string): never {
@@ -25,105 +24,106 @@ export async function reserveOrder(
   orderId: string,
   operationId: string,
 ) {
-  const [order] = await tx
-    .select()
+  const rows = await tx
+    .select({
+      line: saleLines,
+      component: saleLineComponents,
+      version: productFulfillmentVersions,
+      enabled: branchProducts,
+      recipeLocationId: preparationStations.consumptionLocationId,
+    })
     .from(saleOrders)
+    .innerJoin(saleLines, eq(saleLines.orderId, saleOrders.id))
+    .leftJoin(
+      saleLineComponents,
+      eq(saleLineComponents.saleLineId, saleLines.id),
+    )
+    .leftJoin(
+      productFulfillmentVersions,
+      and(
+        eq(productFulfillmentVersions.id, saleLines.fulfillmentVersionId),
+        eq(productFulfillmentVersions.productId, saleLines.productId),
+      ),
+    )
+    .leftJoin(
+      branchProducts,
+      and(
+        eq(branchProducts.branchId, ctx.branchId),
+        eq(branchProducts.productId, saleLines.productId),
+        eq(branchProducts.enabled, true),
+      ),
+    )
+    .leftJoin(
+      preparationRoutes,
+      and(
+        eq(preparationRoutes.productId, saleLines.productId),
+        eq(preparationRoutes.branchId, ctx.branchId),
+      ),
+    )
+    .leftJoin(
+      preparationStations,
+      and(
+        eq(preparationStations.id, preparationRoutes.stationId),
+        eq(preparationStations.branchId, ctx.branchId),
+      ),
+    )
     .where(
       and(eq(saleOrders.id, orderId), eq(saleOrders.branchId, ctx.branchId)),
-    );
-  if (!order) fail("El pedido no pertenece a esta sucursal.");
-  const lines = await tx
-    .select()
-    .from(saleLines)
-    .where(eq(saleLines.orderId, orderId))
+    )
     .orderBy(saleLines.id);
+  if (!rows.length) fail("El pedido no pertenece a esta sucursal.");
+  const lines = [...new Map(rows.map((r) => [r.line.id, r.line])).values()];
   const demandGroups = [];
+  const physicalLines = lines.filter((l) => l.lineKind !== "combo");
+  if (!physicalLines.length) return;
   for (const line of lines) {
     if (line.lineKind === "combo") continue;
     if (!line.fulfillmentVersionId)
       fail("El producto necesita una configuración física publicada.");
-    const [version] = await tx
-      .select()
-      .from(productFulfillmentVersions)
-      .where(
-        and(
-          eq(productFulfillmentVersions.id, line.fulfillmentVersionId),
-          eq(productFulfillmentVersions.productId, line.productId),
-        ),
-      );
-    const [enabled] = await tx
-      .select()
-      .from(branchProducts)
-      .where(
-        and(
-          eq(branchProducts.branchId, ctx.branchId),
-          eq(branchProducts.productId, line.productId),
-          eq(branchProducts.enabled, true),
-        ),
-      );
+    const row = rows.find((r) => r.line.id === line.id)!;
+    const { version, enabled } = row;
     if (!version || !enabled)
       fail("El producto no está habilitado en esta sucursal.");
     let locationId = enabled.dispatchLocationId;
     if (version.mode === "recipe") {
-      const [route] = await tx
-        .select({ locationId: preparationStations.consumptionLocationId })
-        .from(preparationRoutes)
-        .innerJoin(
-          preparationStations,
-          eq(preparationStations.id, preparationRoutes.stationId),
-        )
-        .where(
-          and(
-            eq(preparationRoutes.productId, line.productId),
-            eq(preparationRoutes.branchId, ctx.branchId),
-            eq(preparationStations.branchId, ctx.branchId),
-          ),
-        );
-      locationId = route?.locationId ?? null;
+      locationId = row.recipeLocationId;
     }
     if (!locationId)
       fail("Configurá la ubicación de consumo o despacho del producto.");
-    const components = await tx
-      .select()
-      .from(saleLineComponents)
-      .where(eq(saleLineComponents.saleLineId, line.id));
+    const components = rows
+      .filter((r) => r.line.id === line.id)
+      .flatMap((r) => (r.component ? [r.component] : []));
     if (!components.length) fail("El producto no tiene composición física.");
     const demands = components.map((c) => ({
       itemId: c.itemId,
       locationId,
       quantity: safeQuantity(integer(c.quantity) * BigInt(line.quantity)),
     }));
-    demandGroups.push({ line, version, demands });
+    demandGroups.push({ line, version, demands, documentId: randomUUID() });
   }
-  const tracked = await lockStock(
+  await tx.insert(stockDocuments).values(
+    demandGroups.map((g) => ({
+      id: g.documentId,
+      branchId: ctx.branchId,
+      kind: "sale",
+      saleLineId: g.line.id,
+    })),
+  );
+  const reservations = await reserveStockBatch(
     tx,
     ctx,
-    demandGroups.flatMap((g) => g.demands),
+    operationId,
+    demandGroups,
   );
-  await assertStockAvailable(
-    tx,
-    ctx,
-    demandGroups.flatMap((g) => g.demands),
-    tracked,
-  );
-  for (const { line, version, demands } of demandGroups) {
-    const [document] = await tx
-      .insert(stockDocuments)
-      .values({ branchId: ctx.branchId, kind: "sale", saleLineId: line.id })
-      .returning();
-    const reservation = await reserveStock(tx, ctx, {
-      operationId,
-      documentId: document.id,
-      demands,
-    });
-    await tx.insert(saleLineFulfillments).values({
+  await tx.insert(saleLineFulfillments).values(
+    demandGroups.map(({ line, version, documentId }, position) => ({
       saleLineId: line.id,
       branchId: ctx.branchId,
       versionId: version.id,
-      documentId: document.id,
-      reservationId: reservation.reservationId,
+      documentId,
+      reservationId: reservations[position].reservationId,
       mode: version.mode,
       ordered: line.quantity,
-    });
-  }
+    })),
+  );
 }

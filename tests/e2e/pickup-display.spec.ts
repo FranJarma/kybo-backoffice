@@ -42,12 +42,20 @@ test("public display updates, hides stale orders on disconnect, and recovers wit
   await expect(page.getByText("Martina", { exact: true })).toBeVisible();
   await expect(page.getByText("Lucía", { exact: true })).toBeVisible();
   await expect(page.getByText("44.1", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", {
+      name: /Activar sonido|Activando sonido|Silenciar sonido/,
+    }),
+  ).toBeVisible();
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
-  await page.screenshot({ path: ".next/pickup-public.png", fullPage: true });
+  await page.screenshot({
+    path: ".next-e2e/ready-sound-public.png",
+    fullPage: true,
+  });
   offline = true;
   await expect(page.getByText("Estamos reconectando")).toBeVisible({
     timeout: 15000,

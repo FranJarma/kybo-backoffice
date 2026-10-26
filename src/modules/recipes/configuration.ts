@@ -6,7 +6,12 @@ import { publishGroup } from "@/modules/modifiers/service";
 import { eq, asc, and, inArray, sql } from "drizzle-orm";
 import type { AppDb } from "@/db/client";
 import { items, products, productPrices } from "@/db/business-schema";
-import { recipeVersions, recipes } from "@/db/recipe-schema";
+import {
+  recipeVersions,
+  recipes,
+  recipeLines,
+  recipeOptions,
+} from "@/db/recipe-schema";
 import {
   modifierGroups,
   modifierGroupVersions,
@@ -44,16 +49,41 @@ export async function loadConfiguration(
     .from(recipeVersions)
     .where(eq(recipeVersions.id, recipeVersionId));
   if (!v) notFound();
-  const def =
+  // Checkout only needs the fixed composition, not the recipe editor's target,
+  // history and repeated version reads. Retain the supplied-definition path.
+  const fixed =
     definition?.versionId === v.id
-      ? definition
-      : await recipeDefinition(db, v.recipeId, v.id);
+      ? definition.lines.map((l) => l.options[0])
+      : (
+          await db
+            .select({
+              lineId: recipeLines.id,
+              option: recipeOptions,
+              archivedAt: items.archivedAt,
+              itemClass: items.class,
+            })
+            .from(recipeLines)
+            .innerJoin(recipeOptions, eq(recipeOptions.lineId, recipeLines.id))
+            .innerJoin(items, eq(items.id, recipeOptions.itemId))
+            .where(eq(recipeLines.versionId, v.id))
+            .orderBy(asc(recipeLines.position), asc(recipeOptions.position))
+        )
+          .filter(
+            (row, i, rows) => i === 0 || rows[i - 1].lineId !== row.lineId,
+          )
+          .map(({ option, archivedAt, itemClass }) => ({
+            ...option,
+            name: option.itemName,
+            archived: !!archivedAt,
+            itemClass,
+            unitCost: null,
+          }));
   const config: Configuration = {
     recipeVersionId: v.id,
     revision: v.version,
     model: v.compositionModel as Configuration["model"],
     yieldQuantity: v.yieldQuantity,
-    fixed: def.lines.map((l) => l.options[0]),
+    fixed,
     groups: [],
   };
   const rows = await db

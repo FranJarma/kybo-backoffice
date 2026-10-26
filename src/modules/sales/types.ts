@@ -76,6 +76,7 @@ export type SaleLookup = {
   categories?: { id: string; name: string }[];
   offset?: number;
   rows: {
+    email?: string | null;
     kind?: string;
     configured?: boolean;
     vatPending?: boolean;

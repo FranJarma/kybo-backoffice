@@ -13,7 +13,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import type { LocatorFleet, LocatorHistory } from "@/modules/pickup/types";
+import type { LocatorHistory } from "@/modules/pickup/types";
 import { useLocators } from "./use-locators";
 import { LocatorGrid } from "./locator-grid";
 
@@ -120,14 +120,21 @@ function LocatorManagementDialog({
   const [number, setNumber] = useState<number | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [notice, setNotice] = useState("");
-  const success = useCallback(() => {
-    setVersion((v) => v + 1);
-    setSelected(null);
-    setHistory(undefined);
-    setConfirmed(false);
-    setNotice("Asignación actualizada. El historial quedó guardado.");
-    onChanged?.();
-  }, [onChanged]);
+  const success = useCallback(
+    (result: unknown) => {
+      setVersion((v) => v + 1);
+      setSelected(null);
+      setHistory(undefined);
+      setConfirmed(false);
+      setNotice(
+        (result as LocatorHistory[]).every((a) => a.returnedAt)
+          ? "Localizador devuelto. Ya está disponible."
+          : "Asignación actualizada. El historial quedó guardado.",
+      );
+      onChanged?.();
+    },
+    [onChanged],
+  );
   const operation = useOperation<Record<string, unknown>>(
     actorId,
     "pickup",
@@ -155,13 +162,6 @@ function LocatorManagementDialog({
     };
   }, [selected]);
   const current = history?.find((a) => !a.returnedAt);
-  function select(item: LocatorFleet["occupied"][number]) {
-    setHistory(undefined);
-    setHistoryError("");
-    setConfirmed(false);
-    setNumber(null);
-    setSelected(item);
-  }
   return (
     <Dialog
       open
@@ -178,8 +178,9 @@ function LocatorManagementDialog({
             {selected ? `Pedido ${selected.label}` : "Localizadores"}
           </DialogTitle>
           <DialogDescription>
-            Confirmá la devolución física para liberar un equipo. El llamado se
-            realiza manualmente desde la base.
+            {selected
+              ? "Podés cambiar el equipo o consultar su historial. Se libera al entregar el pedido completo."
+              : "Se liberan al entregar el pedido completo. Usá «Devolver» para registrar una devolución puntual."}
           </DialogDescription>
         </DialogHeader>
         <OperationNotice
@@ -324,12 +325,21 @@ function LocatorManagementDialog({
                   </Link>
                 </div>
                 <Button
+                  type="button"
                   variant="outline"
                   className="min-h-12"
+                  aria-label={`Devolver localizador ${a.number}`}
                   disabled={operation.locked || !!error}
-                  onClick={() => select(a)}
+                  onClick={() =>
+                    operation.submit(`/api/pickup/orders/${a.orderId}`, {
+                      requestId: crypto.randomUUID(),
+                      expectedAssignmentId: a.id,
+                      number: null,
+                      returnConfirmed: true,
+                    })
+                  }
                 >
-                  Gestionar / devolver
+                  Devolver
                 </Button>
               </div>
             ))}

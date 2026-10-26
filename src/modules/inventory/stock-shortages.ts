@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import type { Tx } from "@/db/types";
 import { items } from "@/db/item-schema";
 import { locations } from "@/db/branch-schema";
@@ -37,35 +37,48 @@ export async function assertStockAvailable(
     six(value)
       .replace(/\.?0+$/, "")
       .replace(".", ",");
-  for (const demand of grouped.values()) {
-    const lots = await tx
-      .select({ lot: inventoryLots, balance: lotLocationBalances })
-      .from(lotLocationBalances)
-      .innerJoin(inventoryLots, eq(inventoryLots.id, lotLocationBalances.lotId))
-      .where(
-        and(
-          eq(lotLocationBalances.branchId, ctx.branchId),
-          eq(lotLocationBalances.locationId, demand.locationId),
-          eq(inventoryLots.itemId, demand.itemId),
+  if (!grouped.size) return;
+  const lots = await tx
+    .select({ lot: inventoryLots, balance: lotLocationBalances })
+    .from(lotLocationBalances)
+    .innerJoin(inventoryLots, eq(inventoryLots.id, lotLocationBalances.lotId))
+    .where(
+      and(
+        eq(lotLocationBalances.branchId, ctx.branchId),
+        or(
+          ...[...grouped.values()].map((d) =>
+            and(
+              eq(lotLocationBalances.locationId, d.locationId),
+              eq(inventoryLots.itemId, d.itemId),
+            ),
+          ),
         ),
-      );
-    const available = lots.reduce(
-      (sum, { lot, balance }) =>
-        sum +
-        availableQuantity(
-          {
-            id: lot.id,
-            receivedOn: lot.receivedOn,
-            expiresOn: lot.expiresOn,
-            blocked: lot.blocked,
-            locationBlocked: balance.blocked,
-            quantity: integer(balance.quantity),
-            reserved: integer(balance.reserved),
-          },
-          today,
-        ),
-      0n,
+      ),
     );
+  for (const demand of grouped.values()) {
+    const available = lots
+      .filter(
+        ({ lot, balance }) =>
+          lot.itemId === demand.itemId &&
+          balance.locationId === demand.locationId,
+      )
+      .reduce(
+        (sum, { lot, balance }) =>
+          sum +
+          availableQuantity(
+            {
+              id: lot.id,
+              receivedOn: lot.receivedOn,
+              expiresOn: lot.expiresOn,
+              blocked: lot.blocked,
+              locationBlocked: balance.blocked,
+              quantity: integer(balance.quantity),
+              reserved: integer(balance.reserved),
+            },
+            today,
+          ),
+        0n,
+      );
     if (available >= demand.needed) continue;
     const [item] = await tx
       .select({ name: items.name, unit: items.baseUnit })

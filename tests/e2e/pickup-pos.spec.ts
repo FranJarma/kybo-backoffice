@@ -21,6 +21,16 @@ test.beforeAll(async () => {
 
 const saleId = "22222222-2222-4222-8222-222222222222",
   orderId = "33333333-3333-4333-8333-333333333333";
+const returnedLocatorHistory = [
+  {
+    id: "44444444-4444-4444-8444-444444444444",
+    number: 3,
+    assignedBy: "Operador",
+    assignedAt: "2026-10-22T12:00:00Z",
+    returnedBy: "Operador",
+    returnedAt: "2026-10-22T12:30:00Z",
+  },
+];
 test.beforeEach(async ({ page }) => {
   page.on("pageerror", (error) =>
     console.error("Component fixture:", error.stack),
@@ -121,7 +131,9 @@ test("a new draft does not inherit the abandoned draft's locator", async ({
 }) => {
   await page.goto("/__pickup-fixture");
   await page.addScriptTag({ path: ".next/pickup-ui.js" });
-  await page.getByRole("button", { name: "Sin localizador · Elegir" }).tap();
+  await page
+    .getByRole("button", { name: "Localizador 1 · Automático · Cambiar" })
+    .tap();
   const seven = page.getByRole("button", {
     name: "Localizador 7",
     exact: true,
@@ -145,8 +157,129 @@ test("a new draft does not inherit the abandoned draft's locator", async ({
     .first()
     .tap();
   await expect(
-    page.getByRole("button", { name: "Sin localizador · Elegir" }),
+    page.getByRole("button", { name: "Localizador 1 · Automático · Cambiar" }),
   ).toBeVisible();
+});
+
+test("automatic locators follow availability during payment and manual choices remain validated", async ({
+  page,
+}) => {
+  let occupied: number[] = [];
+  await page.route("**/api/pickup", (r) =>
+    r.fulfill({
+      json: {
+        count: 2,
+        publicPath: "/pickup/test",
+        occupied: occupied.map((number) => ({
+          id: String(number),
+          number,
+          orderId,
+          saleId,
+          label: "1.1",
+          cancelled: false,
+        })),
+      },
+    }),
+  );
+  await page.route("**/api/sales/lookup?kind=products**", (r) =>
+    r.fulfill({
+      json: {
+        rows: [
+          {
+            id: "product",
+            name: "Kybo Tea",
+            price: "100.00",
+            configured: true,
+          },
+        ],
+        total: 1,
+        categories: [],
+      },
+    }),
+  );
+  await page.route("**/api/sales/lookup?kind=payment-methods**", (r) =>
+    r.fulfill({
+      json: {
+        rows: [{ id: "cash", name: "Efectivo", kind: "cash" }],
+        total: 1,
+      },
+    }),
+  );
+  await page.route("**/api/sales/products/*/configuration?**", (r) =>
+    r.fulfill({
+      json: {
+        model: "direct",
+        basePrice: "100.00",
+        pricingRevision: 1,
+        fulfillmentVersionId: "fixture",
+      },
+    }),
+  );
+  await page.goto("/__pickup-fixture");
+  await page.addScriptTag({ path: ".next/pickup-ui.js" });
+  await page
+    .getByRole("button", { name: "Agregar Kybo Tea", exact: true })
+    .click();
+  const pay = page.getByRole("button", { name: "Cobrar", exact: true });
+  await expect(pay).toBeEnabled();
+  await pay.click();
+  await page.getByRole("button", { name: "Efectivo", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Importe exacto", exact: true })
+    .click();
+  const confirm = page.getByRole("button", {
+    name: "Confirmar cobro",
+    exact: true,
+  });
+  await expect(confirm).toBeEnabled();
+  occupied = [1];
+  await expect(page.locator("[data-pos-order-setup]")).toContainText(
+    "Localizador 2 · Automático",
+    { timeout: 10000 },
+  );
+  await expect(confirm).toBeEnabled();
+  occupied = [1, 2];
+  await expect(page.locator("[data-pos-order-setup]")).toContainText(
+    "Sin localizadores disponibles",
+    { timeout: 10000 },
+  );
+  await expect(confirm).toBeEnabled();
+  await page.getByRole("button", { name: "Cancelar", exact: true }).click();
+  occupied = [];
+  await expect(
+    page.getByRole("button", {
+      name: "Localizador 1 · Automático · Cambiar",
+      exact: true,
+    }),
+  ).toBeVisible({ timeout: 10000 });
+  await page
+    .getByRole("button", {
+      name: "Localizador 1 · Automático · Cambiar",
+      exact: true,
+    })
+    .click();
+  await page
+    .getByRole("button", { name: "Localizador 2", exact: true })
+    .click();
+  await pay.click();
+  await page.getByRole("button", { name: "Efectivo", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Importe exacto", exact: true })
+    .click();
+  occupied = [2];
+  await expect(confirm).toBeDisabled({ timeout: 10000 });
+  await expect(page.getByRole("dialog")).toContainText("ya está ocupado");
+  await page.getByRole("button", { name: "Cancelar", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Localizador 2 · Cambiar", exact: true })
+    .click();
+  await page
+    .getByRole("button", {
+      name: "Volver a asignación automática",
+      exact: true,
+    })
+    .click();
+  await expect(pay).toBeEnabled();
 });
 
 test("changing a locator refreshes the order heading after confirmation", async ({
@@ -201,6 +334,130 @@ test("customer display opens directly while locator management stays separate", 
   await page.getByRole("button", { name: "Localizadores", exact: true }).tap();
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(page.getByText("15 de 16 disponibles")).toBeVisible();
+});
+
+test("the locator list returns a cancelled order's device in one click without opening its editor", async ({
+  page,
+}) => {
+  let held = true;
+  let finish: (() => void) | undefined;
+  await page.route("**/api/pickup", (route) =>
+    route.fulfill({
+      json: {
+        count: 16,
+        publicPath: "/pickup/test",
+        occupied: held
+          ? [
+              {
+                id: "44444444-4444-4444-8444-444444444444",
+                number: 3,
+                orderId,
+                saleId,
+                label: "12.1",
+                cancelled: true,
+              },
+            ]
+          : [],
+      },
+    }),
+  );
+  await page.route(`**/api/pickup/orders/${orderId}`, async (route) => {
+    expect(route.request().method()).toBe("POST");
+    expect(route.request().postDataJSON()).toMatchObject({
+      expectedAssignmentId: "44444444-4444-4444-8444-444444444444",
+      number: null,
+      returnConfirmed: true,
+    });
+    await new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    held = false;
+    await route.fulfill({ json: returnedLocatorHistory });
+  });
+  await page.goto("/__pickup-fixture");
+  await page.addScriptTag({ path: ".next/pickup-ui.js" });
+  await page.getByRole("button", { name: "Localizadores", exact: true }).tap();
+  const action = page.getByRole("button", {
+    name: "Devolver localizador 3",
+    exact: true,
+  });
+  await action.tap();
+  await expect(action).toBeDisabled();
+  await expect(page.getByRole("checkbox")).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "Localizadores", exact: true }),
+  ).toBeVisible();
+  await expect.poll(() => !!finish).toBe(true);
+  finish!();
+  await expect(page.getByText("16 de 16 disponibles")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Devolver localizador 3", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "Localizadores", exact: true }),
+  ).toBeVisible();
+});
+
+test("direct locator return retries the same request after a lost response", async ({
+  page,
+}) => {
+  const requests: Record<string, unknown>[] = [];
+  await page.route(`**/api/pickup/orders/${orderId}`, async (route) => {
+    requests.push(route.request().postDataJSON());
+    if (requests.length === 1) return route.abort();
+    await route.fulfill({ json: returnedLocatorHistory });
+  });
+  await page.goto("/__pickup-fixture");
+  await page.addScriptTag({ path: ".next/pickup-ui.js" });
+  await page.getByRole("button", { name: "Localizadores", exact: true }).tap();
+  const action = page.getByRole("button", {
+    name: "Devolver localizador 3",
+    exact: true,
+  });
+  await action.tap();
+  await expect(action).toBeDisabled();
+  await page.getByRole("button", { name: /Reintentar/ }).tap();
+  await expect.poll(() => requests.length).toBe(2);
+  expect(requests[0]).toEqual(requests[1]);
+  expect(requests[0]).toMatchObject({
+    expectedAssignmentId: "44444444-4444-4444-8444-444444444444",
+    number: null,
+    returnConfirmed: true,
+  });
+  await expect(
+    page.getByText("Localizador devuelto. Ya está disponible.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+});
+
+test("a conflicting direct return keeps the locator visible and reports the assignment change", async ({
+  page,
+}) => {
+  await page.route(`**/api/pickup/orders/${orderId}`, (route) =>
+    route.fulfill({
+      status: 409,
+      json: { error: "La asignación cambió. Actualizá antes de confirmar." },
+    }),
+  );
+  await page.goto("/__pickup-fixture");
+  await page.addScriptTag({ path: ".next/pickup-ui.js" });
+  await page.getByRole("button", { name: "Localizadores", exact: true }).tap();
+  const action = page.getByRole("button", {
+    name: "Devolver localizador 3",
+    exact: true,
+  });
+  await action.tap();
+  await expect(
+    page.getByText("La asignación cambió. Actualizá antes de confirmar.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(action).toBeEnabled();
+  await expect(page.getByText("15 de 16 disponibles")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Localizadores", exact: true }),
+  ).toBeVisible();
 });
 
 test("tablet order entry keeps the catalogue spacious and the order accessible across rotation", async ({
@@ -328,14 +585,18 @@ test("tablet order entry keeps the catalogue spacious and the order accessible a
   ).toBe(true);
 });
 
-test("customer picker supports saved customers and a name only without table management", async ({
+test("customer autocomplete supports saved clients and new names without a modal or table management", async ({
   page,
 }) => {
   await page.route("**/api/sales/lookup?kind=customers**", (route) =>
     route.fulfill({
       json: {
         rows: [
-          { id: "77777777-7777-4777-8777-777777777777", name: "Lucía Torres" },
+          {
+            id: "77777777-7777-4777-8777-777777777777",
+            name: "Lucía Torres",
+            email: "lucia@test.local",
+          },
         ],
         total: 1,
       },
@@ -346,40 +607,24 @@ test("customer picker supports saved customers and a name only without table man
   await expect(
     page.getByRole("link", { name: "Mesas", exact: true }),
   ).toHaveCount(0);
+  const customer = page.getByRole("combobox", { name: "Cliente", exact: true });
+  await customer.fill("Lucía");
+  await page.getByRole("option", { name: /Lucía Torres/ }).tap();
+  await expect(customer).toHaveValue("Lucía Torres");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await customer.fill("Martina");
+  await page.keyboard.press("Tab");
+  await expect(customer).toHaveValue("Martina");
   await page
-    .getByRole("button", { name: "Agregar cliente", exact: true })
-    .tap();
-  const dialog = page.getByRole("dialog");
-  await expect(
-    dialog.getByRole("textbox", { name: "Buscar cliente guardado" }),
-  ).toBeVisible();
-  await expect(
-    dialog.getByLabel("Cliente guardado", { exact: true }),
-  ).toBeEnabled();
-  await dialog
-    .getByLabel("Cliente guardado", { exact: true })
-    .selectOption("77777777-7777-4777-8777-777777777777");
-  await dialog.getByRole("button", { name: "Usar cliente" }).tap();
-  await page.getByRole("button", { name: "Cliente: Lucía Torres" }).tap();
-  await dialog.getByLabel("O escribí un nombre").fill("Martina");
-  await expect(
-    dialog.getByLabel("Cliente guardado", { exact: true }),
-  ).toHaveValue("");
-  await dialog.getByRole("button", { name: "Usar cliente" }).tap();
-  await page.getByRole("button", { name: "Cliente: Martina" }).tap();
-  await dialog.getByLabel("O escribí un nombre").fill("Cambio descartado");
-  await page.keyboard.press("Escape");
-  await expect(
-    page.getByRole("button", { name: "Cliente: Martina" }),
-  ).toBeVisible();
+    .getByLabel("Email del cliente (opcional)")
+    .fill("martina@test.local");
   await page.getByRole("button", { name: "Historial", exact: true }).tap();
   await page
     .getByRole("button", { name: "Nueva venta", exact: true })
     .first()
     .tap();
-  await expect(
-    page.getByRole("button", { name: "Agregar cliente", exact: true }),
-  ).toBeVisible();
+  await expect(customer).toHaveValue("");
+  await expect(page.getByLabel("Email del cliente (opcional)")).toHaveCount(0);
 });
 
 test("stock error stays compact and help preserves the payment form", async ({
@@ -414,4 +659,242 @@ test("stock error stays compact and help preserves the payment form", async ({
   await expect(
     page.getByRole("dialog", { name: "Registrar cobro", exact: true }),
   ).toBeVisible();
+});
+
+test("inline order actions use the shared customer autocomplete and automatic locator", async ({
+  page,
+}) => {
+  await page.route("**/api/sales/lookup?kind=customers**", (route) =>
+    route.fulfill({
+      json: {
+        rows: [
+          {
+            id: "77777777-7777-4777-8777-777777777777",
+            name: "Lucía Torres",
+            email: "lucia@test.local",
+          },
+        ],
+        total: 1,
+      },
+    }),
+  );
+  await page.goto("/__pickup-fixture");
+  await page.addScriptTag({ path: ".next/pickup-ui.js" });
+  await expect(
+    page.getByRole("group", { name: "Lugar de consumo", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("group", { name: "Forma de consumo", exact: true }),
+  ).toBeVisible();
+  const actions = page.getByRole("group", { name: "Acciones", exact: true });
+  const customer = actions.getByRole("combobox", {
+    name: "Cliente",
+    exact: true,
+  });
+  await customer.fill("Lucía");
+  await actions.getByRole("option", { name: /Lucía Torres/ }).click();
+  await expect(customer).toHaveValue("Lucía Torres");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await actions
+    .getByRole("button", { name: "Quitar cliente", exact: true })
+    .click();
+  await customer.fill("Martina nueva");
+  await page.keyboard.press("Tab");
+  await expect(customer).toHaveValue("Martina nueva");
+  await expect(
+    actions.getByLabel("Email del cliente (opcional)"),
+  ).toBeVisible();
+  await actions
+    .getByLabel("Email del cliente (opcional)")
+    .fill("martina@test.local");
+  await expect(
+    actions.getByRole("button", {
+      name: "Localizador 1 · Automático · Cambiar",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page
+      .locator("[data-pos-order]")
+      .getByRole("button", { name: /Localizador/ }),
+  ).toHaveCount(0);
+  await page.screenshot({
+    path: ".next-e2e/pos-entry-desktop.png",
+    fullPage: true,
+  });
+});
+
+test("typed customers and optional email travel with checkout without an extra registration request", async ({
+  page,
+}) => {
+  const registrations: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "POST" && request.url().includes("customers"))
+      registrations.push(request.url());
+  });
+  await page.route("**/api/sales/lookup?kind=products**", (route) =>
+    route.fulfill({
+      json: {
+        rows: [
+          {
+            id: "product",
+            name: "Kybo Tea",
+            price: "100.00",
+            configured: true,
+          },
+        ],
+        total: 1,
+        categories: [],
+      },
+    }),
+  );
+  await page.route("**/api/sales/lookup?kind=payment-methods**", (route) =>
+    route.fulfill({
+      json: {
+        rows: [{ id: "cash", name: "Efectivo", kind: "cash" }],
+        total: 1,
+      },
+    }),
+  );
+  await page.route("**/api/sales/products/*/configuration?**", (route) =>
+    route.fulfill({
+      json: {
+        model: "direct",
+        basePrice: "100.00",
+        pricingRevision: 1,
+        fulfillmentVersionId: "fixture",
+      },
+    }),
+  );
+  const submissions: Record<string, unknown>[] = [];
+  await page.route("**/api/sales", async (route) => {
+    submissions.push(route.request().postDataJSON());
+    await route.fulfill({
+      json: {
+        id: saleId,
+        number: 88,
+        status: "closed",
+        origin: "counter",
+        orders: [{ id: orderId, locatorNumber: 2 }],
+      },
+    });
+  });
+  await page.goto("/__pickup-fixture");
+  await page.addScriptTag({ path: ".next/pickup-ui.js" });
+  await page
+    .getByRole("combobox", { name: "Cliente", exact: true })
+    .fill("Martina nueva");
+  await page
+    .getByLabel("Email del cliente (opcional)")
+    .fill("email-incorrecto");
+  await page
+    .getByRole("button", { name: "Agregar Kybo Tea", exact: true })
+    .click();
+  const pay = page.getByRole("button", { name: "Cobrar", exact: true });
+  await expect(pay).toBeDisabled();
+  await page
+    .getByLabel("Email del cliente (opcional)")
+    .fill("martina@test.local");
+  await pay.click();
+  await page.getByRole("button", { name: "Efectivo", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Importe exacto", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Confirmar cobro", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Última venta #88", exact: true }),
+  ).toBeVisible();
+  expect(submissions).toHaveLength(1);
+  expect(submissions[0]).toMatchObject({
+    newCustomer: { name: "Martina nueva", email: "martina@test.local" },
+    locatorMode: "automatic",
+  });
+  expect(submissions[0].locatorNumber).toBeUndefined();
+  expect(submissions[0].customerName).toBeUndefined();
+  expect(registrations).toHaveLength(0);
+  await expect(
+    page.getByRole("combobox", { name: "Cliente", exact: true }),
+  ).toHaveValue("");
+  await expect(page.getByLabel("Email del cliente (opcional)")).toHaveCount(0);
+});
+
+test("an exact existing name still permits a different optional email for a homonym", async ({
+  page,
+}) => {
+  await page.route("**/api/sales/lookup?kind=customers**", (route) =>
+    route.fulfill({
+      json: {
+        rows: [
+          {
+            id: "77777777-7777-4777-8777-777777777777",
+            name: "Lucía Torres",
+            email: "lucia@test.local",
+          },
+        ],
+        total: 1,
+      },
+    }),
+  );
+  await page.goto("/__pickup-fixture");
+  await page.addScriptTag({ path: ".next/pickup-ui.js" });
+  const customer = page.getByRole("combobox", { name: "Cliente", exact: true });
+  await customer.fill("Lucía Torres");
+  await expect(
+    page.getByRole("option", { name: /Lucía Torres/ }),
+  ).toBeVisible();
+  const email = page.getByLabel("Email del cliente (opcional)");
+  await email.focus();
+  await expect(email).toBeVisible();
+  await email.fill("otra-lucia@test.local");
+  await expect(customer).toHaveValue("Lucía Torres");
+  await expect(email).toHaveValue("otra-lucia@test.local");
+});
+
+test("clearing a typed customer also clears its hidden email and permits an occasional sale", async ({
+  page,
+}) => {
+  await page.route("**/api/sales/lookup?kind=products**", (route) =>
+    route.fulfill({
+      json: {
+        rows: [
+          {
+            id: "product",
+            name: "Kybo Tea",
+            price: "100.00",
+            configured: true,
+          },
+        ],
+        total: 1,
+        categories: [],
+      },
+    }),
+  );
+  await page.route("**/api/sales/products/*/configuration?**", (route) =>
+    route.fulfill({
+      json: {
+        model: "direct",
+        basePrice: "100.00",
+        pricingRevision: 1,
+        fulfillmentVersionId: "fixture",
+      },
+    }),
+  );
+  await page.goto("/__pickup-fixture");
+  await page.addScriptTag({ path: ".next/pickup-ui.js" });
+  await page
+    .getByRole("button", { name: "Agregar Kybo Tea", exact: true })
+    .click();
+  const customer = page.getByRole("combobox", { name: "Cliente", exact: true });
+  await customer.fill("Nombre anterior");
+  await page.getByLabel("Email del cliente (opcional)").fill("invalido");
+  const pay = page.getByRole("button", { name: "Cobrar", exact: true });
+  await expect(pay).toBeDisabled();
+  await customer.fill("");
+  await customer.press("Tab");
+  await expect(page.getByLabel("Email del cliente (opcional)")).toHaveCount(0);
+  await expect(pay).toBeEnabled();
+  await customer.fill("Otra persona");
+  await expect(page.getByLabel("Email del cliente (opcional)")).toHaveValue("");
 });

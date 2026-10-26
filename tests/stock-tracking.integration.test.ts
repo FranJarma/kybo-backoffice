@@ -347,6 +347,7 @@ it.each([false, true])(
         .where(eq(inventoryValuations.itemId, tea))
     )[0].quantity;
     const sale = await createSalesService(ctx.db).create(actor, {
+      locatorNumber: onlyWater ? 2 : 1,
       requestId: randomUUID(),
       origin: "counter",
       channel: "counter",

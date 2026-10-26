@@ -37,3 +37,20 @@ it("rejects blank, overly long or ambiguous customer details", () => {
     }).success,
   ).toBe(false);
 });
+it("accepts inline registration and rejects invalid emails or ambiguous customer sources", () => {
+  expect(
+    createSchema.safeParse({
+      ...sale,
+      locatorMode: "automatic",
+      newCustomer: { name: "Martina" },
+    }).success,
+  ).toBe(true);
+  for (const invalid of [
+    { newCustomer: { name: "Martina", email: "no-es-email" } },
+    { newCustomer: { name: " " } },
+    { newCustomer: { name: "Martina" }, customerId: crypto.randomUUID() },
+    { newCustomer: { name: "Martina" }, customerName: "Otro" },
+    { locatorMode: "automatic", locatorNumber: 1 },
+  ])
+    expect(createSchema.safeParse({ ...sale, ...invalid }).success).toBe(false);
+});

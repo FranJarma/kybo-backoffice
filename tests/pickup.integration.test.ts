@@ -15,6 +15,8 @@ import {
   branches,
   locatorAssignments,
   stockMovements,
+  lotLocationBalances,
+  saleLineFulfillments,
 } from "../src/db/schema";
 import { createSalesService } from "../src/modules/sales/service";
 import {
@@ -115,6 +117,27 @@ const create = (number: number | null) =>
     locatorNumber: number,
   });
 
+it("rejects new orders without a locator when one is free, rolling back all writes", async () => {
+  const before = await c.db.select().from(sales),
+    paid = await c.db.select().from(salePayments),
+    orders = await c.db.select().from(saleOrders),
+    balances = await c.db.select().from(lotLocationBalances);
+  for (const locatorNumber of [null, undefined])
+    await expect(
+      createSalesService(c.db).create(actor, {
+        ...input,
+        requestId: crypto.randomUUID(),
+        locatorNumber,
+      }),
+    ).rejects.toMatchObject({
+      status: 400,
+      message: expect.stringContaining("Elegí un localizador"),
+    });
+  expect(await c.db.select().from(sales)).toHaveLength(before.length);
+  expect(await c.db.select().from(salePayments)).toHaveLength(paid.length);
+  expect(await c.db.select().from(saleOrders)).toHaveLength(orders.length);
+  expect(await c.db.select().from(lotLocationBalances)).toEqual(balances);
+});
 it("assigns atomically; duplicate claims roll back sales and payments", async () => {
   const before = await c.db.select().from(sales);
   const paidBefore = await c.db.select().from(salePayments);
@@ -131,6 +154,31 @@ it("assigns atomically; duplicate claims roll back sales and payments", async ()
     1,
   );
   expect(await c.db.select().from(stockMovements)).toHaveLength(0);
+});
+it("allows no locator when the entire fleet is held and preserves idempotent replay after availability changes", async () => {
+  await c.db
+    .update(branches)
+    .set({ locatorCount: 1 })
+    .where(eq(branches.id, actor.branchId!));
+  const command = {
+    ...input,
+    requestId: crypto.randomUUID(),
+    locatorNumber: null,
+  };
+  let sale;
+  try {
+    sale = await createSalesService(c.db).create(actor, command);
+    expect(sale.orders[0].locatorNumber).toBeNull();
+  } finally {
+    await c.db
+      .update(branches)
+      .set({ locatorCount: 16 })
+      .where(eq(branches.id, actor.branchId!));
+  }
+  expect((await createSalesService(c.db).create(actor, command)).id).toBe(
+    sale!.id,
+  );
+  await expect(create(null)).rejects.toMatchObject({ status: 400 });
 });
 it("preserves history and rejects stale returns after reassignment", async () => {
   const sale = await create(2),
@@ -190,7 +238,7 @@ it("requires branch membership and hides all internal fields from the public que
   );
   expect(queue.rows[0].customerName).toBe("Martina");
 });
-it("delivery consumes stock once and leaves the locator occupied until physical return", async () => {
+it("delivery consumes stock once, returns the locator and never returns its next assignment on replay", async () => {
   const sale = await create(3),
     order = sale.orders[0];
   const command = {
@@ -214,13 +262,81 @@ it("delivery consumes stock once and leaves the locator occupied until physical 
   await deliver();
   await deliver();
   const fleet = await createPickupService(c.db).fleet(actor);
-  expect(fleet.occupied.some((a) => a.orderId === order.id)).toBe(true);
+  expect(fleet.occupied.some((a) => a.orderId === order.id)).toBe(false);
+  const [history] = await createPickupService(c.db).history(actor, order.id);
+  expect(history.returnedBy).toBe(actor.id);
+  expect(history.returnedAt).not.toBeNull();
   expect(
     (await publicQueue(c.db, key)).rows.some(
       (r) => r.label === `${sale.number}.1`,
     ),
   ).toBe(false);
   expect(await c.db.select().from(stockMovements)).toHaveLength(1);
+  const next = await create(3);
+  await deliver();
+  expect(
+    (await createPickupService(c.db).fleet(actor)).occupied.find(
+      (a) => a.number === 3,
+    )?.orderId,
+  ).toBe(next.orders[0].id);
+});
+
+it("holds the locator for a partial delivery and rolls its return back if final delivery fails", async () => {
+  const sale = await createSalesService(c.db).create(actor, {
+    ...input,
+    requestId: crypto.randomUUID(),
+    locatorNumber: 5,
+    lines: (input.lines as Record<string, unknown>[]).map((line) => ({
+      ...line,
+      quantity: 2,
+    })),
+    payments: (input.payments as Record<string, unknown>[]).map((payment) => ({
+      ...payment,
+      amount: "200",
+    })),
+  });
+  const orderId = sale.orders[0].id,
+    saleLineId = sale.orders[0].lines[0].id;
+  const deliver = (fail = false) => {
+    const command = {
+      requestId: crypto.randomUUID(),
+      orderId,
+      lines: [{ saleLineId, quantity: 1 }],
+    };
+    return executeCommand(
+      c.db,
+      actor,
+      actor.branchId!,
+      command,
+      "deliver",
+      command,
+      async (tx, ctx, operationId) => {
+        await deliverLines(tx, ctx, { ...command, operationId });
+        if (fail) throw new Error("Delivery aborted");
+        return { delivered: true };
+      },
+    );
+  };
+  const held = async () =>
+    (await createPickupService(c.db).fleet(actor)).occupied.some(
+      (a) => a.orderId === orderId,
+    );
+  await deliver();
+  expect(await held()).toBe(true);
+  const before = await c.db.select().from(stockMovements);
+  await expect(deliver(true)).rejects.toThrow("Delivery aborted");
+  expect(await held()).toBe(true);
+  expect(await c.db.select().from(stockMovements)).toEqual(before);
+  expect(
+    (
+      await c.db
+        .select()
+        .from(saleLineFulfillments)
+        .where(eq(saleLineFulfillments.saleLineId, saleLineId))
+    )[0].delivered,
+  ).toBe(1);
+  await deliver();
+  expect(await held()).toBe(false);
 });
 it("cancellation retains a held locator and returning allows another order to reuse it", async () => {
   const sale = await create(4);
@@ -249,8 +365,8 @@ it("cancellation retains a held locator and returning allows another order to re
       .where(eq(locatorAssignments.number, 4)),
   ).toHaveLength(2);
 });
-it("supports no locator and rejects numbers outside this branch's capacity", async () => {
-  await create(null);
+it("requires a locator when available and rejects numbers outside this branch's capacity", async () => {
+  await expect(create(null)).rejects.toMatchObject({ status: 400 });
   await expect(create(17)).rejects.toMatchObject({ status: 400 });
 });
 
@@ -485,11 +601,23 @@ it("waits for both stations of a mixed combo and keeps direct stock for delivery
     expect(await state()).toBe(index === 0 ? "preparing" : "ready");
   }
   expect((await c.db.select().from(stockMovements)).length).toBe(before);
+  for (const task of tasks) {
+    await prep.act(actor, task.id, {
+      requestId: crypto.randomUUID(),
+      revision: 3,
+      action: "deliver",
+    });
+    expect(
+      (await createPickupService(c.db).fleet(actor)).occupied.some(
+        (a) => a.orderId === orderId,
+      ),
+    ).toBe(true);
+  }
   const command = {
     requestId: crypto.randomUUID(),
     orderId,
     lines: sale.orders[0].lines
-      .filter((l) => l.lineKind === "combo_component")
+      .filter((l) => l.productId === direct.productId)
       .map((l) => ({ saleLineId: l.id, quantity: 1 })),
   };
   await executeCommand(
@@ -505,6 +633,11 @@ it("waits for both stations of a mixed combo and keeps direct stock for delivery
     },
   );
   expect(await state()).toBeUndefined();
+  expect(
+    (await createPickupService(c.db).fleet(actor)).occupied.some(
+      (a) => a.orderId === orderId,
+    ),
+  ).toBe(false);
   expect((await c.db.select().from(stockMovements)).length).toBe(before + 1);
 });
 
@@ -538,6 +671,14 @@ it("assigns table rounds independently and replays without adding another order"
     locatorNumber: 11,
   };
   const updated = await service.addOrder(actor, sale.id, next);
+  await expect(
+    service.addOrder(actor, sale.id, {
+      ...next,
+      requestId: crypto.randomUUID(),
+      revision: updated.revision,
+      locatorNumber: null,
+    }),
+  ).rejects.toMatchObject({ status: 400 });
   expect(updated.orders.map((order) => order.locatorNumber)).toEqual([10, 11]);
   expect((await service.addOrder(actor, sale.id, next)).orders).toHaveLength(2);
   await expect(

@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, gte, lte, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { AppDb } from "@/db/client";
 import type { Actor } from "@/lib/access";
@@ -19,19 +19,63 @@ import {
 } from "@/modules/inventory/service";
 import { parse, salesAccess, uuid } from "@/modules/sales/validation";
 import type { LocatorFleet, LocatorHistory } from "./types";
+import { locatorLockKey } from "./lifecycle";
 
 export async function assignLocator(
   tx: Tx,
   actor: Actor,
   orderId: string,
   number: number | null | undefined,
+  requireWhenAvailable = false,
+  automatic = false,
 ) {
-  if (number == null) return;
+  if (number == null && !requireWhenAvailable && !automatic) return null;
   const [branch] = await tx
-    .select({ count: branches.locatorCount })
+    .select({
+      count: branches.locatorCount,
+      lock: sql`pg_advisory_xact_lock(hashtextextended(${locatorLockKey(actor.branchId!)}, 0))`,
+    })
     .from(branches)
     .where(eq(branches.id, actor.branchId!));
-  if (!branch || number < 1 || number > branch.count)
+  if (!branch) invalid("La sucursal no está disponible.");
+  if (automatic) {
+    // A separate statement after the advisory lock sees the latest assignments.
+    const result = await tx.execute(sql`
+      with candidate as materialized (
+        select n.number from generate_series(1, ${branch.count}::integer) as n(number)
+        where not exists (select 1 from ${locatorAssignments} a where a.branch_id = ${actor.branchId}::uuid and a.number = n.number and a.returned_at is null)
+        order by n.number limit 1
+      ), assigned as (
+        insert into ${locatorAssignments} (branch_id, order_id, number, assigned_by)
+        select ${actor.branchId}::uuid, ${orderId}::uuid, number, ${actor.id} from candidate
+        on conflict do nothing returning number
+      ) select (select number from assigned) as number, exists(select 1 from candidate) as available
+    `);
+    const row = result.rows[0];
+    if (row?.number != null) return Number(row.number);
+    if (row?.available)
+      return conflict(
+        "La disponibilidad del localizador cambió. Volvé a confirmar el pedido.",
+      );
+    return null;
+  }
+  if (number == null) {
+    const held = await tx
+      .select({ number: locatorAssignments.number })
+      .from(locatorAssignments)
+      .where(
+        and(
+          eq(locatorAssignments.branchId, actor.branchId!),
+          isNull(locatorAssignments.returnedAt),
+          gte(locatorAssignments.number, 1),
+          lte(locatorAssignments.number, branch.count),
+        ),
+      );
+    if (new Set(held.map((a) => a.number)).size < branch.count)
+      invalid("Elegí un localizador para continuar: hay equipos disponibles.");
+    return null;
+  }
+  if (number < 1 || number > branch.count)
     invalid("Elegí un localizador disponible de esta sucursal.");
   const [inserted] = await tx
     .insert(locatorAssignments)
@@ -45,8 +89,9 @@ export async function assignLocator(
     .returning({ id: locatorAssignments.id });
   if (!inserted)
     conflict(
-      "Ese localizador ya está ocupado. No se guardó ningún cambio. Elegí otro o continuá sin localizador.",
+      "Ese localizador ya está ocupado. No se guardó ningún cambio. Elegí otro disponible. Solo podés continuar sin localizador si están todos ocupados.",
     );
+  return number;
 }
 
 export async function locatorHistory(
@@ -189,6 +234,11 @@ export function createPickupService(db: AppDb) {
           .where(eq(saleOrders.id, orderId))
           .for("update");
         if (old) return locatorHistory(tx, orderId);
+        // All assignment writers take this lock before touching a held number.
+        // Otherwise an insert can wait on our return while we wait on its lock.
+        await tx.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${locatorLockKey(ctx.branchId)}, 0))`,
+        );
         const [current] = await tx
           .select()
           .from(locatorAssignments)

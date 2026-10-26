@@ -91,6 +91,7 @@ beforeAll(async () => {
     .values({ name: "Cash", kind: "cash" })
     .returning();
   input = {
+    locatorNumber: 1,
     payments: [{ collector: "local", methodId: method.id, amount: "21400" }],
     requestId: crypto.randomUUID(),
     origin: "counter",
@@ -208,6 +209,7 @@ it("cancels unprepared combo reservations without consuming stock", async () => 
   const service = createSalesService(c.db),
     sale = await service.create(actor, {
       ...input,
+      locatorNumber: 2,
       requestId: crypto.randomUUID(),
     });
   const before = await c.db.select().from(stockMovements);
@@ -247,6 +249,7 @@ it("keeps individual product pricing and fulfillment unchanged", async () => {
   const sale = await createSalesService(c.db).create(actor, {
     ...input,
     customerName: "  Martina  ",
+    locatorNumber: 3,
     requestId: crypto.randomUUID(),
     lines: [
       {

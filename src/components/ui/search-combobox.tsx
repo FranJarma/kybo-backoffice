@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, Check, X } from "lucide-react";
+import { ChevronDown, Check, Plus, X } from "lucide-react";
 import { Input } from "./input";
+import { cn } from "@/lib/utils";
 
-type Option = { id: string; name: string };
+type Option = { id: string; name: string; description?: string | null };
 
 export function SearchCombobox({
   id,
@@ -17,6 +18,14 @@ export function SearchCombobox({
   loading,
   onChange,
   onSearch,
+  onCreate,
+  onTextChange,
+  commitOnBlur = false,
+  placeholder,
+  inputClassName,
+  maxLength,
+  createLabel = "Crear opción",
+  selectExactOnBlur = true,
 }: {
   id: string;
   label: string;
@@ -28,6 +37,14 @@ export function SearchCombobox({
   loading?: boolean;
   onChange: (value: string) => void;
   onSearch: (query: string) => void;
+  onCreate?: (name: string) => void;
+  onTextChange?: (text: string) => void;
+  commitOnBlur?: boolean;
+  placeholder?: string;
+  inputClassName?: string;
+  maxLength?: number;
+  createLabel?: string;
+  selectExactOnBlur?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -39,11 +56,28 @@ export function SearchCombobox({
     );
   }, [required, value]);
   const rows = options.filter((option) =>
-    option.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()),
+    `${option.name} ${option.description ?? ""}`
+      .toLocaleLowerCase()
+      .includes(query.toLocaleLowerCase()),
   );
+  const normalized = query.trim().replace(/\s+/g, " ");
+  const exact = rows.filter(
+    (option) =>
+      option.name.trim().toLocaleLowerCase() ===
+        normalized.toLocaleLowerCase() ||
+      option.description?.trim().toLocaleLowerCase() ===
+        normalized.toLocaleLowerCase(),
+  );
+  const canCreate = !!onCreate && !!normalized && !exact.length;
+  const optionCount = rows.length + (canCreate ? 1 : 0);
   const listId = `${id}-options`;
-  const activeId =
-    open && rows[active] ? `${listId}-${rows[active].id}` : undefined;
+  const activeId = open
+    ? rows[active]
+      ? `${listId}-${rows[active].id}`
+      : canCreate && active === rows.length
+        ? `${listId}-create`
+        : undefined
+    : undefined;
   useEffect(() => {
     if (activeId)
       document.getElementById(activeId)?.scrollIntoView({ block: "nearest" });
@@ -59,11 +93,21 @@ export function SearchCombobox({
     setOpen(false);
     search("");
   }
+  function commit(selectExact = true) {
+    if (!normalized || disabled) return;
+    if (selectExact && exact.length === 1) choose(exact[0]);
+    else if (onCreate && (!selectExact || exact.length === 0)) {
+      onCreate(normalized);
+      setOpen(false);
+      search("");
+    }
+  }
   return (
     <div
       className="relative min-w-0"
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) {
+          if (commitOnBlur) commit(selectExactOnBlur);
           setOpen(false);
           search("");
         }
@@ -79,25 +123,27 @@ export function SearchCombobox({
         aria-expanded={open && !disabled}
         aria-busy={loading || undefined}
         aria-controls={open ? listId : undefined}
-        aria-activedescendant={
-          open && rows[active] ? `${listId}-${rows[active].id}` : undefined
-        }
+        aria-activedescendant={activeId}
         required={required && !value}
         disabled={disabled}
         autoComplete="off"
+        maxLength={maxLength}
         placeholder={
-          value && open ? selectedLabel : "Escribí para buscar y seleccionar…"
+          value && open
+            ? selectedLabel
+            : (placeholder ?? "Escribí para buscar y seleccionar…")
         }
         value={open ? query : selectedLabel}
-        className="pr-16"
+        className={cn("pr-16", inputClassName)}
         onFocus={() => {
           setOpen(true);
-          search("");
+          search(onTextChange ? selectedLabel : "");
         }}
         onClick={() => setOpen(true)}
         onChange={(event) => {
           setOpen(true);
           search(event.target.value);
+          onTextChange?.(event.target.value);
         }}
         onKeyDown={(event) => {
           if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -105,12 +151,13 @@ export function SearchCombobox({
             setOpen(true);
             setActive((current) =>
               event.key === "ArrowDown"
-                ? Math.min(current + 1, rows.length - 1)
+                ? Math.min(current + 1, optionCount - 1)
                 : Math.max(current - 1, 0),
             );
           } else if (event.key === "Enter" && open) {
             event.preventDefault();
             if (rows[active]) choose(rows[active]);
+            else commit();
           } else if (event.key === "Escape" && open) {
             event.preventDefault();
             event.stopPropagation();
@@ -121,7 +168,7 @@ export function SearchCombobox({
       />
       <div
         className="pointer-events-none flex items-center gap-2"
-        style={{ position: "absolute", right: 12, top: 0, height: 44 }}
+        style={{ position: "absolute", right: 12, top: 0, height: "100%" }}
       >
         {value && !disabled && (
           <button
@@ -161,17 +208,46 @@ export function SearchCombobox({
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => choose(option)}
               >
-                <span>{option.name}</span>
+                <span className="min-w-0">
+                  <span className="block truncate">{option.name}</span>
+                  {option.description && (
+                    <span className="block truncate text-xs text-muted">
+                      {option.description}
+                    </span>
+                  )}
+                </span>
                 {option.id === value && <Check size={16} aria-hidden="true" />}
               </li>
             ))}
+            {canCreate && (
+              <li
+                id={`${listId}-create`}
+                role="option"
+                aria-selected={false}
+                className={`flex cursor-pointer items-center gap-2 rounded-lg px-3 py-3 text-sm ${active === rows.length ? "bg-orange-50" : "hover:bg-surface"}`}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  onCreate?.(normalized);
+                  setOpen(false);
+                  search("");
+                }}
+              >
+                <Plus
+                  className="size-4 shrink-0 text-orange-600"
+                  aria-hidden="true"
+                />
+                <span className="min-w-0 truncate">
+                  {createLabel} «{normalized}»
+                </span>
+              </li>
+            )}
           </ul>
           {loading && (
             <p role="status" className="px-3 py-2 text-sm text-muted">
               Buscando opciones…
             </p>
           )}
-          {!rows.length && !loading && (
+          {!rows.length && !loading && !canCreate && (
             <p role="status" className="px-3 py-4 text-sm text-muted">
               No hay coincidencias. Probá con otro nombre.
             </p>

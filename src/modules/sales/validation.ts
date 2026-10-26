@@ -72,8 +72,24 @@ const paymentSchema = z
     reference: z.string().trim().max(120).default(""),
   })
   .strict();
+const locatorMode = z.enum(["automatic", "manual"]).optional();
+const newCustomer = z
+  .object({
+    name: z
+      .string()
+      .trim()
+      .min(1)
+      .max(160)
+      .transform((value) => value.replace(/\s+/g, " ")),
+    email: z
+      .union([z.literal(""), z.string().trim().max(254).pipe(z.email())])
+      .optional()
+      .transform((value) => value?.toLowerCase() || undefined),
+  })
+  .strict();
 export const createSchema = z
   .object({
+    locatorMode,
     locatorNumber: z.number().int().min(1).max(999).nullish(),
     requestId: uuid,
     origin: z.enum(["counter", "table", "delivery"]),
@@ -82,25 +98,46 @@ export const createSchema = z
     tableId: uuid.nullish(),
     customerId: uuid.nullish(),
     customerName: z.string().trim().min(1).max(160).nullish(),
+    newCustomer: newCustomer.optional(),
     externalId: z.string().trim().min(1).max(80).nullish(),
     notes: note,
     lines: z.array(lineSchema).min(1).max(50),
     payments: z.array(paymentSchema).max(10).default([]),
   })
   .strict()
-  .refine((value) => !(value.customerId && value.customerName), {
-    message: "Elegí un cliente guardado o escribí un nombre, no ambos.",
-    path: ["customerName"],
-  });
+  .refine(
+    (value) =>
+      [value.customerId, value.customerName, value.newCustomer].filter(Boolean)
+        .length <= 1,
+    {
+      message: "Elegí un cliente guardado o escribí un nombre, no ambos.",
+      path: ["customerName"],
+    },
+  )
+  .refine(
+    (value) => value.locatorMode !== "automatic" || value.locatorNumber == null,
+    {
+      message: "La asignación automática no admite un equipo fijo.",
+      path: ["locatorNumber"],
+    },
+  );
 export const orderSchema = z
   .object({
+    locatorMode,
     locatorNumber: z.number().int().min(1).max(999).nullish(),
     requestId: uuid,
     revision: z.number().int().positive(),
     lines: z.array(lineSchema).min(1).max(50),
     notes: note,
   })
-  .strict();
+  .strict()
+  .refine(
+    (value) => value.locatorMode !== "automatic" || value.locatorNumber == null,
+    {
+      message: "La asignación automática no admite un equipo fijo.",
+      path: ["locatorNumber"],
+    },
+  );
 export const paySchema = z
   .object({
     requestId: uuid,

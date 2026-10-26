@@ -34,7 +34,16 @@ export async function summaries(
     .from(salePayments)
     .where(inArray(salePayments.saleId, ids))
     .groupBy(salePayments.saleId, salePayments.collector);
-  return rows.map((r) => ({
+  return rows.map((r) =>
+    saleSummary(r, counts.find((c) => c.id === r.id)?.total ?? 0, payments),
+  );
+}
+function saleSummary(
+  r: typeof sales.$inferSelect,
+  orderCount: number,
+  payments: { id: string; collector: string; total: string }[],
+): SaleSummary {
+  return {
     id: r.id,
     number: r.number,
     revision: r.revision,
@@ -59,11 +68,11 @@ export async function summaries(
     platformCollected:
       payments.find((p) => p.id === r.id && p.collector === "platform")
         ?.total ?? "0.00",
-    orderCount: counts.find((c) => c.id === r.id)?.total ?? 0,
+    orderCount,
     businessDate: r.businessDate,
     createdAt: r.createdAt.toISOString(),
     closedAt: r.closedAt?.toISOString() ?? null,
-  }));
+  };
 }
 export async function saleDetail(
   db: AppDb | Tx,
@@ -114,8 +123,40 @@ export async function saleDetail(
           ),
         )
     : [];
+  return saleDetailFromRows(
+    row,
+    orders,
+    lines.map((l) => l.line),
+    modifiers,
+    payments,
+    locators,
+  );
+}
+
+/** Also used with INSERT RETURNING rows, avoiding a second read of a new sale. */
+export function saleDetailFromRows(
+  row: typeof sales.$inferSelect,
+  orders: (typeof saleOrders.$inferSelect)[],
+  saleRows: (typeof saleLines.$inferSelect)[],
+  modifiers: (typeof saleLineModifiers.$inferSelect)[],
+  payments: (typeof salePayments.$inferSelect)[],
+  locators: { orderId: string; number: number }[],
+): SaleDetail {
+  const collected = (collector: string) =>
+    cents(
+      payments
+        .filter((p) => p.collector === collector)
+        .reduce(
+          (sum, p) =>
+            sum + (p.kind === "refund" ? -1n : 1n) * integer(p.amount),
+          0n,
+        ),
+    );
   return {
-    ...(await summaries(db, [row]))[0],
+    ...saleSummary(row, orders.length, [
+      { id: row.id, collector: "local", total: collected("local") },
+      { id: row.id, collector: "platform", total: collected("platform") },
+    ]),
     notes: row.notes,
     cancelReason: row.cancelReason,
     orders: orders.map((o) => ({
@@ -125,9 +166,10 @@ export async function saleDetail(
       totalAmount: o.totalAmount,
       notes: o.notes,
       createdAt: o.createdAt.toISOString(),
-      lines: lines
+      lines: [...saleRows]
+        .sort((a, b) => a.position - b.position)
         .filter((l) => l.orderId === o.id)
-        .map(({ line: l }) => ({
+        .map((l) => ({
           lineKind: l.lineKind,
           parentLineId: l.parentLineId,
           compositionStatus: l.compositionStatus,
@@ -147,19 +189,25 @@ export async function saleDetail(
           recipeVersionId: l.recipeVersionId,
         })),
     })),
-    payments: payments.map((p) => ({
-      id: p.id,
-      kind: p.kind as SalePayment["kind"],
-      collector: p.collector as SalePayment["collector"],
-      methodName: p.methodName,
-      commissionPercent: p.commissionPercent,
-      commissionAmount: p.commissionAmount,
-      settlementNet: p.settlementNet,
-      amount: p.amount,
-      reference: p.reference,
-      originalPaymentId: p.originalPaymentId,
-      createdAt: p.createdAt.toISOString(),
-      actorId: p.actorId,
-    })),
+    payments: [...payments]
+      .sort(
+        (a, b) =>
+          a.createdAt.getTime() - b.createdAt.getTime() ||
+          a.id.localeCompare(b.id),
+      )
+      .map((p) => ({
+        id: p.id,
+        kind: p.kind as SalePayment["kind"],
+        collector: p.collector as SalePayment["collector"],
+        methodName: p.methodName,
+        commissionPercent: p.commissionPercent,
+        commissionAmount: p.commissionAmount,
+        settlementNet: p.settlementNet,
+        amount: p.amount,
+        reference: p.reference,
+        originalPaymentId: p.originalPaymentId,
+        createdAt: p.createdAt.toISOString(),
+        actorId: p.actorId,
+      })),
   };
 }

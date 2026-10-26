@@ -1,116 +1,136 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { UserRound } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { SearchCombobox } from "@/components/ui/search-combobox";
 import { Input } from "@/components/ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
-import { LookupSelect } from "./shared";
+import { getJson } from "@/components/inventory/shared";
+import type { SaleLookup } from "@/modules/sales/types";
 
 export function CustomerPicker({
   id,
   name,
+  email,
+  issue,
   disabled,
   onChange,
 }: {
   id: string;
   name: string;
+  email: string;
   disabled: boolean;
-  onChange: (id: string, name: string) => void;
+  issue: string;
+  onChange: (id: string, name: string, email: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const [draftId, setDraftId] = useState("");
-  const [draftName, setDraftName] = useState("");
+  const [query, setQuery] = useState("");
+  const [rows, setRows] = useState<SaleLookup["rows"]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let live = true;
+    const timer = setTimeout(
+      () => {
+        setLoading(true);
+        getJson<SaleLookup>(
+          `/api/sales/lookup?kind=customers&q=${encodeURIComponent(query)}`,
+        )
+          .then((result) => {
+            if (live) {
+              setRows(result.rows);
+              setError("");
+            }
+          })
+          .catch(() => {
+            if (live)
+              setError(
+                "No pudimos buscar clientes. Podés escribir su nombre; lo verificaremos al guardar.",
+              );
+          })
+          .finally(() => {
+            if (live) setLoading(false);
+          });
+      },
+      query ? 150 : 0,
+    );
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [query]);
   return (
-    <>
-      <Button
-        variant="outline"
-        className="min-h-12 max-w-full"
-        disabled={disabled}
-        onClick={() => {
-          setDraftId(id);
-          setDraftName(name);
-          setOpen(true);
-        }}
+    <div className="min-w-0">
+      <label
+        htmlFor="pos-customer"
+        className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-brand"
       >
-        <UserRound size={18} aria-hidden="true" />
-        <span className="truncate">
-          {name ? `Cliente: ${name}` : "Agregar cliente"}
-        </span>
-      </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Cliente del pedido</DialogTitle>
-            <DialogDescription>
-              Elegí un cliente de tu listado o escribí un nombre para esta
-              venta.
-            </DialogDescription>
-          </DialogHeader>
-          <LookupSelect
-            kind="customers"
-            label="Cliente guardado"
-            value={draftId}
-            initialName={draftId ? draftName : undefined}
+        <UserRound className="size-3.5" aria-hidden="true" /> Cliente{" "}
+        <span className="font-normal text-muted">· Opcional</span>
+      </label>
+      <SearchCombobox
+        createLabel="Nuevo cliente:"
+        id="pos-customer"
+        label="Cliente"
+        value={id || (name ? "__new__" : "")}
+        selectedLabel={name}
+        options={rows.map((row) => ({
+          id: row.id,
+          name: row.name,
+          description: row.email,
+        }))}
+        loading={loading}
+        disabled={disabled}
+        placeholder="Buscar cliente o escribir nombre…"
+        maxLength={160}
+        inputClassName={`min-h-12 bg-white text-sm ${name.trim() ? "border-orange-300 bg-orange-50/40" : "border-line"}`}
+        commitOnBlur
+        selectExactOnBlur={false}
+        onSearch={setQuery}
+        onTextChange={(text) =>
+          onChange("", text, id || !text.trim() ? "" : email)
+        }
+        onCreate={(text) => onChange("", text, id ? "" : email)}
+        onChange={(value) => {
+          const selected = rows.find((row) => row.id === value);
+          onChange(value, selected?.name ?? "", "");
+        }}
+      />
+      {!id && name.trim() && (
+        <div className="mt-2">
+          <label
+            htmlFor="pos-customer-email"
+            className="mb-1 block text-xs text-muted"
+          >
+            Email del cliente (opcional)
+          </label>
+          <Input
+            id="pos-customer-email"
+            type="email"
+            inputMode="email"
+            autoComplete="email"
+            maxLength={254}
+            placeholder="nombre@ejemplo.com"
+            className="min-h-11 bg-white text-sm"
+            value={email}
             disabled={disabled}
-            empty="Seleccionar del listado"
-            onChange={(nextId, nextName) => {
-              setDraftId(nextId);
-              setDraftName(nextName ?? "");
-            }}
+            aria-invalid={!!issue}
+            aria-describedby={issue ? "pos-customer-email-issue" : undefined}
+            onChange={(event) => onChange("", name, event.target.value)}
           />
-          <div className="space-y-2 border-t border-line pt-4">
-            <label
-              htmlFor="pos-customer-name"
-              className="block text-sm font-semibold"
-            >
-              O escribí un nombre
-            </label>
-            <Input
-              id="pos-customer-name"
-              className="min-h-12"
-              maxLength={160}
-              autoComplete="off"
-              placeholder="Ej. Martina"
-              value={draftId ? "" : draftName}
-              disabled={disabled}
-              onChange={(event) => {
-                setDraftId("");
-                setDraftName(event.target.value);
-              }}
-            />
-            <p className="text-xs text-muted">
-              Se guarda en la venta, sin agregar un cliente al listado.
-            </p>
-          </div>
-          <Button
-            className="min-h-12"
-            disabled={disabled || !draftName.trim()}
-            onClick={() => {
-              onChange(draftId, draftName.trim());
-              setOpen(false);
-            }}
-          >
-            Usar cliente
-          </Button>
-          <Button
-            variant="ghost"
-            className="min-h-12"
-            disabled={disabled}
-            onClick={() => {
-              onChange("", "");
-              setOpen(false);
-            }}
-          >
-            Continuar sin cliente
-          </Button>
-        </DialogContent>
-      </Dialog>
-    </>
+        </div>
+      )}
+      {issue && (
+        <p
+          id="pos-customer-email-issue"
+          role="status"
+          className="mt-1 text-xs text-red-600"
+        >
+          {issue}
+        </p>
+      )}
+      {error && (
+        <p role="status" className="mt-1 text-xs text-muted">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }

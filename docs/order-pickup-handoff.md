@@ -2,6 +2,8 @@
 
 Contexto de continuidad al 22 de octubre de 2026.
 
+Actualización del 26/10/2026: el usuario pidió liberar el localizador al entregar el pedido completo y devolverlo con un clic desde el listado. Esto sustituye la devolución separada obligatoria descrita en el traspaso original. Las entregas parciales conservan la asignación; cobros y anulaciones tampoco la liberan. Se conserva la devolución puntual directa y el historial. Ver [plan y verificación](superpowers/plans/2026-10-26-locator-delivery-return.md).
+
 Actualización posterior: el circuito está implementado. El usuario autorizó mostrar el nombre del cliente junto al identificador en la pantalla pública, además de los colores/logo de Kybo y los ajustes de tablet, selección de cliente y detalle de faltantes. Esa autorización sustituye la recomendación inicial de omitir nombres. La migración 0024 se aplicó a Neon con autorización expresa; el 22/10/2026 también autorizó commit y push de la rama junto con Operación del día. Las restricciones de no migrar/publicar que aparecen abajo describen el alcance del traspaso original, no revocan estas autorizaciones posteriores.
 
 ## Pedido del usuario
