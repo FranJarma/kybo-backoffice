@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { eq } from "drizzle-orm";
 import { AppShell } from "@/components/app-shell";
 import { requireActor } from "@/lib/auth";
@@ -40,6 +41,9 @@ export default async function SellingLayout({
         ({ id, name }) => ({ id, name }),
       )}
       selectedBranchId={actor.branchId ?? ""}
+      initialSidebarCollapsed={
+        (await cookies()).get("kybo-sidebar")?.value === "collapsed"
+      }
       dateLabel={new Intl.DateTimeFormat("es-AR", {
         day: "numeric",
         month: "long",

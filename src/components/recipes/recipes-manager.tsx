@@ -1054,7 +1054,7 @@ export function RecipeEditor({
               Creala en{" "}
               {kind === "product"
                 ? "Catálogo y precios"
-                : "Catálogo de inventario"}
+                : "Insumos y artículos"}
             </Link>{" "}
             antes de armar la receta.
           </p>

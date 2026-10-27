@@ -117,7 +117,7 @@ export const navigation = [
   {
     id: "inventory",
     area: "Inventario y compras",
-    label: "Inventario y compras",
+    label: "Stock actual",
     href: "/inventory",
     icon: "Warehouse",
     access: "manager",
@@ -125,7 +125,7 @@ export const navigation = [
   {
     id: "items",
     area: "Inventario y compras",
-    label: "Catálogo de inventario",
+    label: "Insumos y artículos",
     href: "/inventory/items",
     icon: "Boxes",
     access: "catalog",
