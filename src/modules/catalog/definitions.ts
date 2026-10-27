@@ -68,7 +68,7 @@ export const definitions: Record<Entity, EntityDefinition> = {
     columns: ["name", "kind", "commissionPercent"],
   },
   items: {
-    title: "Catálogo de inventario",
+    title: "Insumos y artículos",
     singular: "artículo",
     description:
       "Todos los artículos: alimentos, bebidas, descartables y limpieza. Clasificá cada uno y definí cómo se utiliza.",

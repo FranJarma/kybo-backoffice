@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { requireActor } from "@/lib/auth";
 import { shellActor } from "@/modules/branches/page-context";
 import { AppShell } from "@/components/app-shell";
@@ -47,6 +48,9 @@ export default async function OperationsLayout({
         ({ id, name }) => ({ id, name }),
       )}
       selectedBranchId={actor.branchId ?? ""}
+      initialSidebarCollapsed={
+        (await cookies()).get("kybo-sidebar")?.value === "collapsed"
+      }
     >
       {children}
     </AppShell>

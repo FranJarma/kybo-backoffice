@@ -409,7 +409,7 @@ export function InventoryManager({
     <div className="space-y-6">
       <header className="page-heading">
         <div>
-          <h1 className="page-title">Inventario y compras</h1>
+          <h1 className="page-title">Stock actual</h1>
           <p className="page-description">
             Stock, lotes y movimientos de tus artículos en un solo lugar.
           </p>
