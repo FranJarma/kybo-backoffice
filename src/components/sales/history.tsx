@@ -17,9 +17,11 @@ import { Control, selectClass } from "./shared";
 export function SaleHistory({
   onSelect,
   locked,
+  refresh = 0,
 }: {
   onSelect: (sale: SaleSummary) => void;
   locked: boolean;
+  refresh?: number;
 }) {
   const [date, setDate] = useState(today()),
     [origin, setOrigin] = useState(""),
@@ -51,7 +53,7 @@ export function SaleHistory({
       live = false;
       clearTimeout(timer);
     };
-  }, [date, origin, status, q, offset, setError]);
+  }, [date, origin, status, q, offset, refresh, setError]);
   return (
     <section className="surface-panel p-4 sm:p-6">
       <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -113,7 +115,7 @@ export function SaleHistory({
           title="No pudimos completar la operación"
           message={error}
         />
-      ) : loading ? (
+      ) : loading && !data.rows.length ? (
         <p role="status" className="py-12 text-center text-sm text-muted">
           Cargando ventas…
         </p>

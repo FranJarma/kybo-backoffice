@@ -126,7 +126,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test("a new draft does not inherit the abandoned draft's locator", async ({
+test("returning from history preserves the current draft's locator", async ({
   page,
 }) => {
   await page.goto("/__pickup-fixture");
@@ -157,7 +157,7 @@ test("a new draft does not inherit the abandoned draft's locator", async ({
     .first()
     .tap();
   await expect(
-    page.getByRole("button", { name: "Localizador 1 · Automático · Cambiar" }),
+    page.getByRole("button", { name: "Localizador 7 · Cambiar" }),
   ).toBeVisible();
 });
 
@@ -307,7 +307,9 @@ test("changing a locator refreshes the order heading after confirmation", async 
   await page
     .getByRole("button", { name: "Cerrar formulario", exact: true })
     .tap();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(
+    page.getByRole("dialog", { name: "Venta #12", exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByRole("heading", {
       name: "Pedido 12.1 · Localizador 5",
@@ -623,8 +625,10 @@ test("customer autocomplete supports saved clients and new names without a modal
     .getByRole("button", { name: "Nueva venta", exact: true })
     .first()
     .tap();
-  await expect(customer).toHaveValue("");
-  await expect(page.getByLabel("Email del cliente (opcional)")).toHaveCount(0);
+  await expect(customer).toHaveValue("Martina");
+  await expect(page.getByLabel("Email del cliente (opcional)")).toHaveValue(
+    "martina@test.local",
+  );
 });
 
 test("stock error stays compact and help preserves the payment form", async ({

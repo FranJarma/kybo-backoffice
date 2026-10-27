@@ -2,7 +2,13 @@
 import { useErrorFeedback } from "@/components/ui/use-error-feedback";
 import { FieldCaption } from "@/components/ui/field-caption";
 import { OperationAlert } from "@/components/ui/operation-alert";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { getJson, useOperation, quantity } from "@/components/inventory/shared";
 import { LocationSelect } from "@/components/branches/location-select";
 import { Button } from "@/components/ui/button";
@@ -42,20 +48,34 @@ export function SaleFulfillmentPanel({
   actorId,
   saleId,
   canManage,
+  renderOrders,
+  onChanged,
+  onBusy,
 }: {
   actorId: string;
   saleId: string;
   canManage: boolean;
+  renderOrders?: (renderProgress: (lineId: string) => ReactNode) => ReactNode;
+  onChanged?: () => void;
+  onBusy?: (busy: boolean) => void;
 }) {
   const [data, setData] = useState<State>(),
     [version, setVersion] = useState(0),
     [error, setError, errorAttempt] = useErrorFeedback();
-  const refresh = useCallback(() => setVersion((v) => v + 1), []);
+  const [resolutionBusy, setResolutionBusy] = useState(false);
+  const refresh = useCallback(() => {
+    setVersion((v) => v + 1);
+    onChanged?.();
+  }, [onChanged]);
   const operation = useOperation<Record<string, unknown>>(
     actorId,
     "fulfillment",
     refresh,
   );
+  useEffect(() => {
+    onBusy?.(operation.busy || operation.uncertain || resolutionBusy);
+    return () => onBusy?.(false);
+  }, [operation.busy, operation.uncertain, resolutionBusy, onBusy]);
   useEffect(() => {
     let live = true;
     getJson<State>(`/api/fulfillment/state?saleId=${saleId}`)
@@ -70,8 +90,8 @@ export function SaleFulfillmentPanel({
     };
   }, [saleId, version, setError]);
   return (
-    <div className="surface-panel space-y-4 p-5">
-      <h3 className="font-bold">Preparación y entrega</h3>
+    <div className={renderOrders ? "space-y-4" : "surface-panel space-y-4 p-5"}>
+      {!renderOrders && <h3 className="font-bold">Preparación y entrega</h3>}
       {(error || operation.error) && (
         <OperationAlert
           eventKey={error ? errorAttempt : operation.errorAttempt}
@@ -83,24 +103,43 @@ export function SaleFulfillmentPanel({
       {operation.uncertain && (
         <Button onClick={operation.retry}>Reintentar el mismo envío</Button>
       )}
-      {data?.combos?.map((combo) => (
-        <p key={combo.id} className="rounded-lg bg-surface p-3 text-sm">
-          <strong>{combo.name}</strong> · {combo.progress.delivered} de{" "}
-          {combo.progress.ordered} combos entregados
-          {combo.progress.cancelled
-            ? ` · ${combo.progress.cancelled} cancelados`
-            : ""}
-        </p>
-      ))}
-      {data?.rows.map((row) => (
-        <ProgressRow
-          key={`${row.lineId}:${version}`}
-          row={row}
-          actorId={actorId}
-          disabled={operation.locked || data.cancelled}
-          submit={operation.submit}
-        />
-      ))}
+      {!renderOrders &&
+        data?.combos?.map((combo) => (
+          <p key={combo.id} className="rounded-lg bg-surface p-3 text-sm">
+            <strong>{combo.name}</strong> · {combo.progress.delivered} de{" "}
+            {combo.progress.ordered} combos entregados
+            {combo.progress.cancelled
+              ? ` · ${combo.progress.cancelled} cancelados`
+              : ""}
+          </p>
+        ))}
+      {renderOrders
+        ? renderOrders((lineId) => {
+            const row = data?.rows.find((row) => row.lineId === lineId);
+            return row ? (
+              <ProgressRow
+                key={`${row.lineId}:${version}`}
+                row={row}
+                actorId={actorId}
+                disabled={operation.locked || !!data?.cancelled}
+                submit={operation.submit}
+                compact
+              />
+            ) : !data ? (
+              <p className="mt-2 text-xs text-muted">
+                Consultando preparación y entrega…
+              </p>
+            ) : null;
+          })
+        : data?.rows.map((row) => (
+            <ProgressRow
+              key={`${row.lineId}:${version}`}
+              row={row}
+              actorId={actorId}
+              disabled={operation.locked || data.cancelled}
+              submit={operation.submit}
+            />
+          ))}
       {canManage &&
         data?.rows
           .filter((r) => r.returnLots.length > 0)
@@ -125,6 +164,7 @@ export function SaleFulfillmentPanel({
             id={data.resolution.id}
             actorId={actorId}
             onSaved={refresh}
+            onBusy={setResolutionBusy}
           />
         ) : (
           <p role="status">
@@ -140,11 +180,13 @@ function ProgressRow({
   actorId,
   disabled,
   submit,
+  compact = false,
 }: {
   row: Row;
   actorId: string;
   disabled: boolean;
   submit: (url: string, payload: Record<string, unknown>) => void;
+  compact?: boolean;
 }) {
   const [amount, setAmount] = useState(1);
   const completing =
@@ -167,18 +209,43 @@ function ProgressRow({
     });
   }
   return (
-    <div className="space-y-2 border-t pt-3">
-      <p className="text-sm font-semibold">
-        {r.name}
-        {r.notes?.startsWith("Combo:") && (
-          <span className="ml-2 text-xs font-normal text-muted">{r.notes}</span>
-        )}
-      </p>
-      <p className="text-xs text-muted">
-        Pedido: {r.progress.ordered} · Preparado: {r.progress.completed} ·
-        Entregado: {r.progress.delivered} · Cancelado: {r.progress.cancelled}
-      </p>
-      {remaining > 0 && !disabled && (
+    <div className={compact ? "mt-3 space-y-2" : "space-y-2 border-t pt-3"}>
+      {!compact && (
+        <p className="text-sm font-semibold">
+          {r.name}
+          {r.notes?.startsWith("Combo:") && (
+            <span className="ml-2 text-xs font-normal text-muted">
+              {r.notes}
+            </span>
+          )}
+        </p>
+      )}
+      {compact ? (
+        <p
+          className={`inline-flex rounded-md px-2 py-1 text-xs font-semibold ${r.progress.cancelled === r.progress.ordered ? "bg-red-50 text-red-700" : r.progress.delivered + r.progress.cancelled === r.progress.ordered ? "bg-emerald-50 text-emerald-800" : "bg-blue-50 text-brand"}`}
+        >
+          {r.progress.cancelled === r.progress.ordered
+            ? "Cancelado"
+            : r.progress.delivered + r.progress.cancelled === r.progress.ordered
+              ? "Entregado"
+              : r.progress.mode === "direct" ||
+                  r.progress.completed + r.progress.cancelled ===
+                    r.progress.ordered
+                ? "Listo para entregar"
+                : r.task?.status === "pending"
+                  ? "Pendiente de preparación"
+                  : "En preparación"}
+          {r.progress.ordered > 1
+            ? ` · ${r.progress.delivered} de ${r.progress.ordered} entregados`
+            : ""}
+        </p>
+      ) : (
+        <p className="text-xs text-muted">
+          Pedido: {r.progress.ordered} · Preparado: {r.progress.completed} ·
+          Entregado: {r.progress.delivered} · Cancelado: {r.progress.cancelled}
+        </p>
+      )}
+      {remaining > 0 && (
         <form onSubmit={save} className="flex items-end gap-3">
           <label className="text-sm">
             <FieldCaption required>Cantidad</FieldCaption>
@@ -188,11 +255,12 @@ function ProgressRow({
               max={remaining}
               step={1}
               required
+              disabled={disabled}
               value={amount}
               onChange={(e) => setAmount(Number(e.target.value))}
             />
           </label>
-          <Button type="submit">
+          <Button type="submit" disabled={disabled}>
             {completing ? "Terminar preparación" : "Entregar"}
           </Button>
         </form>
@@ -214,10 +282,12 @@ function ResolutionPanel({
   id,
   actorId,
   onSaved,
+  onBusy,
 }: {
   id: string;
   actorId: string;
   onSaved: () => void;
+  onBusy?: (busy: boolean) => void;
 }) {
   const [data, setData] = useState<Resolution>(),
     [error, setError, errorAttempt] = useErrorFeedback();
@@ -226,6 +296,10 @@ function ResolutionPanel({
     "stock-resolution",
     onSaved,
   );
+  useEffect(() => {
+    onBusy?.(operation.busy || operation.uncertain);
+    return () => onBusy?.(false);
+  }, [operation.busy, operation.uncertain, onBusy]);
   useEffect(() => {
     let live = true;
     getJson<Resolution>(`/api/stock-resolutions/${id}`)

@@ -23,12 +23,16 @@ export function LocatorManager({
   label,
   cancelled = false,
   onChanged,
+  onOpenSale,
+  disabled = false,
 }: {
   actorId: string;
   orderId?: string;
   label?: string;
   cancelled?: boolean;
   onChanged?: () => void;
+  onOpenSale?: (saleId: string) => void;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -37,6 +41,7 @@ export function LocatorManager({
         type="button"
         variant="outline"
         className="min-h-12"
+        disabled={disabled}
         onClick={() => setOpen(true)}
       >
         <Radio size={17} aria-hidden="true" />
@@ -49,6 +54,7 @@ export function LocatorManager({
           label={label}
           cancelled={cancelled}
           onChanged={onChanged}
+          onOpenSale={onOpenSale}
           onClose={() => setOpen(false)}
         />
       )}
@@ -58,9 +64,11 @@ export function LocatorManager({
 export function PickupActions({
   actorId,
   onChanged,
+  onOpenSale,
 }: {
   actorId: string;
   onChanged: () => void;
+  onOpenSale?: (saleId: string) => void;
 }) {
   const { fleet, error } = useLocators(0);
   return (
@@ -68,7 +76,11 @@ export function PickupActions({
       className="flex flex-wrap items-center gap-2"
       aria-label="Retiro de pedidos"
     >
-      <LocatorManager actorId={actorId} onChanged={onChanged} />
+      <LocatorManager
+        actorId={actorId}
+        onChanged={onChanged}
+        onOpenSale={onOpenSale}
+      />
       {fleet && !error ? (
         <Button asChild variant="secondary" className="min-h-12">
           <a href={fleet.publicPath} target="_blank" rel="noreferrer">
@@ -100,6 +112,7 @@ function LocatorManagementDialog({
   cancelled,
   onClose,
   onChanged,
+  onOpenSale,
 }: {
   actorId: string;
   orderId?: string;
@@ -107,6 +120,7 @@ function LocatorManagementDialog({
   cancelled: boolean;
   onClose: () => void;
   onChanged?: () => void;
+  onOpenSale?: (saleId: string) => void;
 }) {
   const [version, setVersion] = useState(0);
   const { fleet, error } = useLocators(version);
@@ -320,6 +334,25 @@ function LocatorManagementDialog({
                   <Link
                     href={`/sales?account=${a.saleId}`}
                     className="inline-flex min-h-12 items-center text-sm underline"
+                    aria-disabled={operation.locked || undefined}
+                    tabIndex={operation.locked ? -1 : undefined}
+                    onClick={(event) => {
+                      if (operation.locked) {
+                        event.preventDefault();
+                        return;
+                      }
+                      if (
+                        onOpenSale &&
+                        !event.metaKey &&
+                        !event.ctrlKey &&
+                        !event.shiftKey &&
+                        !event.altKey
+                      ) {
+                        event.preventDefault();
+                        onClose();
+                        onOpenSale(a.saleId);
+                      }
+                    }}
                   >
                     Ver venta
                   </Link>
