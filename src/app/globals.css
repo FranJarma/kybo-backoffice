@@ -333,6 +333,11 @@ a {
   min-height: 64px;
 }
 
+/* The sale modal is portaled outside the register's touch target scope. */
+[data-sale-detail] [data-slot="button"],
+[data-sale-detail] [data-slot="input"] {
+  min-height: 48px;
+}
 /* Transfer fields and actions stay comfortable to use on tablets. */
 [data-transfers] [data-slot="button"],
 [data-transfers] [data-slot="input"],

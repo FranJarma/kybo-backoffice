@@ -9,7 +9,7 @@ export default async function SalesPage({
     query = await searchParams;
   return (
     <SalesManager
-      key={`${actor.branchId}:${query.account ?? ""}:${query.table ?? ""}`}
+      key={`${actor.branchId}:${query.table ?? ""}`}
       actorId={actor.id}
       branchId={actor.branchId!}
       role={actor.role}

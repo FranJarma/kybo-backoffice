@@ -55,7 +55,7 @@ import {
 } from "./cart";
 import { Control, SalesScope, OperationNotice, selectClass } from "./shared";
 import { PaymentDialog, type PaymentDraft } from "./payment-dialog";
-import { SaleDetailPanel } from "./sale-detail";
+import { SaleDetailDialog } from "./sale-detail-dialog";
 import { SaleHistory } from "./history";
 import { LocatorPicker } from "@/components/pickup/locator-picker";
 import { useLocators } from "@/components/pickup/use-locators";
@@ -64,6 +64,23 @@ import {
   nextAvailableLocator,
 } from "@/modules/pickup/selection";
 import { PickupActions } from "@/components/pickup/locator-manager";
+
+type WorkspaceView = "new" | "history" | "append";
+type DraftSnapshot = {
+  lines: CartLine[];
+  origin: SaleOrigin;
+  channel: SaleChannel;
+  fulfillment: string;
+  tableId: string;
+  customerId: string;
+  customerName: string;
+  customerEmail: string;
+  externalId: string;
+  notes: string;
+  locatorNumber: number | null;
+  locatorMode: "automatic" | "manual";
+  tabletPanel: "products" | "order";
+};
 
 export function SalesManager({
   actorId,
@@ -85,6 +102,21 @@ export function SalesManager({
   const [view, setView] = useState<"new" | "history" | "detail" | "append">(
     initialAccount ? "detail" : "new",
   );
+  const [returnView, setReturnView] = useState<WorkspaceView>("new");
+  const [seenAccount, setSeenAccount] = useState(initialAccount);
+  const workspaceView = view === "detail" ? returnView : view;
+  const [appendSale, setAppendSale] = useState<SaleDetail | null>(null);
+  const savedDraft = useRef<{
+    view: WorkspaceView;
+    draft: DraftSnapshot;
+  } | null>(null);
+  const [historyOpened, setHistoryOpened] = useState(false);
+  const detailRequest = useRef({ revision: 0 });
+  const activeDetailId = useRef(initialAccount ?? "");
+  const modalOpener = useRef<HTMLElement | null>(null);
+  const [detailLoading, setDetailLoading] = useState(!!initialAccount);
+  const [detailError, setDetailError] = useState("");
+  const [fulfillmentBusy, setFulfillmentBusy] = useState(false);
   const [origin, setOrigin] = useState<SaleOrigin>(
       initialTable ? "table" : "counter",
     ),
@@ -101,7 +133,7 @@ export function SalesManager({
   const [lines, setLines] = useState<CartLine[]>([]),
     [tables, setTables] = useState<TableView[]>([]),
     [detail, setDetail] = useState<SaleDetail | null>(null),
-    [loading, setLoading] = useState(!!initialAccount),
+    [loading, setLoading] = useState(false),
     [refresh, setRefresh] = useState(0),
     [error, setError, errorAttempt] = useErrorFeedback(),
     [notice, setNotice] = useState("");
@@ -155,9 +187,76 @@ export function SalesManager({
     };
   }, [branchId, channel, catalogueRefresh]);
   const configRequest = useRef(false);
+  const restoreDraft = useCallback((draft: DraftSnapshot) => {
+    setLines(draft.lines);
+    setOrigin(draft.origin);
+    setChannel(draft.channel);
+    setFulfillment(draft.fulfillment);
+    setTableId(draft.tableId);
+    setCustomerId(draft.customerId);
+    setCustomerName(draft.customerName);
+    setCustomerEmail(draft.customerEmail);
+    setExternalId(draft.externalId);
+    setNotes(draft.notes);
+    setLocatorNumber(draft.locatorNumber);
+    setLocatorMode(draft.locatorMode);
+    setTabletPanel(draft.tabletPanel);
+    setDraftGeneration((n) => n + 1);
+  }, []);
+  const loadSaleDetail = useCallback(async (id: string) => {
+    const request = ++detailRequest.current.revision;
+    activeDetailId.current = id;
+    try {
+      const sale = await getJson<SaleDetail>(`/api/sales/${id}`);
+      if (detailRequest.current.revision === request) setDetail(sale);
+    } catch (error) {
+      if (detailRequest.current.revision === request)
+        setDetailError(
+          error instanceof Error
+            ? error.message
+            : "No pudimos consultar la venta.",
+        );
+    } finally {
+      if (detailRequest.current.revision === request) setDetailLoading(false);
+    }
+  }, []);
   const success = useCallback(
     (result: unknown) => {
       const sale = result as SaleDetail;
+      if (view === "detail" && activeDetailId.current !== sale.id) {
+        setRefresh((n) => n + 1);
+        setNotice(`Venta #${sale.number} actualizada.`);
+        return;
+      }
+      if (view === "detail" || view === "append") {
+        if (
+          view === "append" ||
+          (appendSale?.id === sale.id && sale.status === "cancelled")
+        ) {
+          if (savedDraft.current) {
+            restoreDraft(savedDraft.current.draft);
+            setReturnView(savedDraft.current.view);
+            savedDraft.current = null;
+          }
+          setAppendSale(null);
+        }
+        ++detailRequest.current.revision;
+        activeDetailId.current = sale.id;
+        setDetail(sale);
+        setDetailLoading(false);
+        setDetailError("");
+        setView("detail");
+        setLastSale((previous) => (previous?.id === sale.id ? sale : previous));
+        setPaymentOpen(false);
+        setCancelOpen(false);
+        setError("");
+        setNotice(`Venta #${sale.number} actualizada.`);
+        setRefresh((n) => n + 1);
+        const url = new URL(window.location.href);
+        url.searchParams.set("account", sale.id);
+        window.history.replaceState(null, "", url);
+        return;
+      }
       const nextCustomer =
         view === "new" &&
         sale.origin === "counter" &&
@@ -168,6 +267,8 @@ export function SalesManager({
         nextCustomer ? "/sales" : `/sales?account=${sale.id}`,
       );
       setDetail(sale);
+      activeDetailId.current = sale.id;
+      setReturnView("new");
       setView(nextCustomer ? "new" : "detail");
       if (nextCustomer) {
         setLastSale(sale);
@@ -180,6 +281,15 @@ export function SalesManager({
         setTableId("");
       }
       setLines([]);
+      setNotes("");
+      setCustomerId("");
+      setCustomerName("");
+      setCustomerEmail("");
+      setExternalId("");
+      setTableId("");
+      setOrigin("counter");
+      setChannel("counter");
+      setFulfillment("takeaway");
       setLocatorNumber(null);
       setLocatorMode("automatic");
       setDraftGeneration((n) => n + 1);
@@ -191,7 +301,7 @@ export function SalesManager({
       setError("");
       setRefresh((n) => n + 1);
     },
-    [view, setError],
+    [view, appendSale, restoreDraft, setError],
   );
   const operation = useOperation<Record<string, unknown>>(
     actorId,
@@ -237,25 +347,37 @@ export function SalesManager({
     };
   }, [origin, fulfillment, refresh, setError]);
   useEffect(() => {
-    if (!initialAccount) return;
+    if (!initialAccount) {
+      activeDetailId.current = "";
+      return;
+    }
     let live = true;
-    getJson<SaleDetail>(`/api/sales/${initialAccount}`)
-      .then((r) => {
-        if (live) setDetail(r);
-      })
-      .catch((e) => {
-        if (live) setError(e.message);
-      })
-      .finally(() => {
-        if (live) setLoading(false);
-      });
+    const requests = detailRequest.current;
+    void Promise.resolve().then(() => {
+      if (live) return loadSaleDetail(initialAccount);
+    });
     return () => {
       live = false;
+      ++requests.revision;
     };
-  }, [initialAccount, setError]);
+  }, [initialAccount, loadSaleDetail]);
+  // A new server navigation can change account without remounting the register.
+  // Reset only the queried detail before rendering, preserving the live workspace.
+  if (seenAccount !== initialAccount) {
+    setSeenAccount(initialAccount);
+    setDetail(null);
+    setDetailLoading(!!initialAccount);
+    setDetailError("");
+    setPaymentOpen(false);
+    setCancelOpen(false);
+    if (initialAccount) {
+      if (view !== "detail") setReturnView(view);
+      setView("detail");
+    } else if (view === "detail") setView(returnView);
+  }
   const total = cartTotal(lines),
     selectedTable = tables.find((t) => t.id === tableId),
-    isAppend = view === "append";
+    isAppend = workspaceView === "append";
   const customerIssue =
     !isAppend &&
     !customerId &&
@@ -285,24 +407,9 @@ export function SalesManager({
     valid = false;
   if (!isAppend && tableId && !selectedTable) valid = false;
   function newSale() {
-    setTabletPanel("products");
-    setToolsOpen(false);
-    setLocatorNumber(null);
-    setLocatorMode("automatic");
-    setDraftGeneration((n) => n + 1);
     window.history.replaceState(null, "", "/sales");
-    setDetail(null);
-    setLines([]);
-    setNotes("");
-    setCustomerId("");
-    setCustomerName("");
-    setCustomerEmail("");
-    setExternalId("");
-    setTableId("");
-    setOrigin("counter");
-    setChannel("counter");
-    setFulfillment("takeaway");
     setView("new");
+    setReturnView("new");
     setError("");
     setNotice("");
     operation.clearError();
@@ -456,10 +563,10 @@ export function SalesManager({
         notes,
       }),
     );
-    if (isAppend && detail) {
-      operation.submit(`/api/sales/${detail.id}/orders`, {
+    if (isAppend && appendSale) {
+      operation.submit(`/api/sales/${appendSale.id}/orders`, {
         requestId: crypto.randomUUID(),
-        revision: detail.revision,
+        revision: appendSale.revision,
         lines: linePayload,
         notes,
         locatorMode,
@@ -490,31 +597,42 @@ export function SalesManager({
     });
   }
   async function selectSale(id: string) {
-    setLocatorNumber(null);
-    setLocatorMode("automatic");
-    window.history.replaceState(null, "", `/sales?account=${id}`);
-    setLoading(true);
+    if (operation.locked || fulfillmentBusy) return;
+    if (view !== "detail") {
+      setReturnView(view);
+      modalOpener.current =
+        document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.set("account", id);
+    window.history.replaceState(null, "", url);
     setError("");
     setNotice("");
     setView("detail");
     setDetail(null);
-    try {
-      setDetail(await getJson<SaleDetail>(`/api/sales/${id}`));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "No pudimos abrir la cuenta.");
-    } finally {
-      setLoading(false);
-    }
+    setDetailLoading(true);
+    setDetailError("");
+    await loadSaleDetail(id);
+  }
+  function closeSaleDetail() {
+    if (operation.locked || fulfillmentBusy) return;
+    ++detailRequest.current.revision;
+    activeDetailId.current = "";
+    setDetailLoading(false);
+    setDetailError("");
+    setDetail(null);
+    setView(returnView);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("account");
+    window.history.replaceState(null, "", url);
   }
   async function refreshLocatorDetail() {
     setRefresh((n) => n + 1);
-    if (!detail) return;
-    try {
-      setDetail(await getJson<SaleDetail>(`/api/sales/${detail.id}`));
-    } catch {
-      setError(
-        "El localizador se actualizó, pero no pudimos refrescar la venta. Volvé a abrirla para consultar su estado actual.",
-      );
+    if (view === "detail" && activeDetailId.current) {
+      setDetailError("");
+      await loadSaleDetail(activeDetailId.current);
     }
   }
   async function refreshPrices() {
@@ -581,7 +699,7 @@ export function SalesManager({
       setLoading(false);
     }
   }
-  const showCart = view === "new" || view === "append";
+  const showCart = workspaceView === "new" || workspaceView === "append";
   const orderActions = (
     <>
       {!isAppend && (
@@ -709,7 +827,11 @@ export function SalesManager({
       </Dialog>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-xl font-extrabold tracking-tight text-brand">
+          <h1
+            data-pos-title
+            tabIndex={-1}
+            className="text-xl font-extrabold tracking-tight text-brand"
+          >
             Punto de venta
           </h1>
         </div>
@@ -731,6 +853,7 @@ export function SalesManager({
             key={branchId}
             actorId={actorId}
             onChanged={() => void refreshLocatorDetail()}
+            onOpenSale={(id) => void selectSale(id)}
           />
           <ReplenishmentPanel actorId={actorId} role={role} refresh={refresh} />
           <Button
@@ -745,14 +868,14 @@ export function SalesManager({
           {!showCart && (
             <Button onClick={newSale} disabled={locked}>
               <Plus size={17} />
-              Nueva venta
+              {lines.length ? "Continuar pedido" : "Nueva venta"}
             </Button>
           )}
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-3 border-b border-line">
         <button
-          disabled={locked}
+          disabled={locked || view === "append"}
           onClick={() => {
             if (view !== "new") newSale();
           }}
@@ -761,8 +884,10 @@ export function SalesManager({
           Nueva venta
         </button>
         <button
-          disabled={locked || lines.length > 0}
+          disabled={locked || view === "append"}
           onClick={() => {
+            setHistoryOpened(true);
+            setReturnView("history");
             setView("history");
             setNotice("");
           }}
@@ -774,7 +899,7 @@ export function SalesManager({
           <Button
             className="min-h-12"
             variant="ghost"
-            disabled={locked || lines.length > 0}
+            disabled={locked || view === "append"}
             onClick={() => void selectSale(lastSale.id)}
           >
             Última venta #{lastSale.number}
@@ -790,7 +915,7 @@ export function SalesManager({
           Ayuda de stock
         </Button>
       </div>
-      {!paymentOpen && !cancelOpen && (
+      {view !== "detail" && !paymentOpen && !cancelOpen && (
         <OperationNotice
           eventKey={operation.errorAttempt}
           error={operation.error}
@@ -817,294 +942,307 @@ export function SalesManager({
           Preparando selección…
         </p>
       )}
-      {showCart && (
-        <>
+      <div hidden={!showCart} className={showCart ? "contents" : "hidden"}>
+        <div
+          data-pos-workspace
+          className="grid min-h-0 gap-3 flex-1 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_440px] 2xl:grid-cols-[minmax(0,1fr)_480px]"
+        >
           <div
-            data-pos-workspace
-            className="grid min-h-0 gap-3 flex-1 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_440px] 2xl:grid-cols-[minmax(0,1fr)_480px]"
+            data-pos-catalogue
+            className={`${tabletPanel === "products" ? "flex" : "hidden"} min-h-0 min-w-0 flex-col gap-3 lg:flex`}
           >
-            <div
-              data-pos-catalogue
-              className={`${tabletPanel === "products" ? "flex" : "hidden"} min-h-0 min-w-0 flex-col gap-3 lg:flex`}
-            >
-              <div className="shrink-0">
-                {isAppend && detail ? (
-                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4">
-                    <div>
-                      <p className="text-sm font-bold text-brand">
-                        Nuevo pedido · {detail.tableName}
-                      </p>
-                      <p className="mt-1 text-xs text-muted">
-                        Venta #{detail.number} · saldo actual{" "}
-                        {money(detail.balanceDue)}
-                      </p>
-                    </div>
-                    <Button
-                      disabled={locked}
-                      variant="ghost"
-                      onClick={() => {
-                        setView("detail");
-                        setLines([]);
-                        setLocatorNumber(null);
-                        setLocatorMode("automatic");
-                        setNotes("");
-                      }}
-                    >
-                      <ArrowLeft size={15} />
-                      Volver a la cuenta
-                    </Button>
-                    <fieldset className="w-full min-w-0 border-t border-blue-100 pt-3">
-                      <legend className="px-1 text-xs font-semibold text-muted">
-                        Acciones
-                      </legend>
-                      <div className="mt-1 max-w-sm">{orderActions}</div>
-                    </fieldset>
+            <div className="shrink-0">
+              {isAppend && appendSale ? (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4">
+                  <div>
+                    <p className="text-sm font-bold text-brand">
+                      Nuevo pedido · {appendSale.tableName}
+                    </p>
+                    <p className="mt-1 text-xs text-muted">
+                      Venta #{appendSale.number} · saldo actual{" "}
+                      {money(appendSale.balanceDue)}
+                    </p>
                   </div>
-                ) : (
-                  <OrderControls
-                    origin={origin}
-                    fulfillment={fulfillment}
-                    locked={locked}
-                    originLocked={lines.length > 0}
-                    onOriginChange={changeOrigin}
-                    onFulfillmentChange={(value) => {
-                      setFulfillment(value);
-                      setTableId("");
+                  <Button
+                    disabled={locked}
+                    variant="ghost"
+                    onClick={() => {
+                      if (savedDraft.current) {
+                        restoreDraft(savedDraft.current.draft);
+                        setReturnView(savedDraft.current.view);
+                        savedDraft.current = null;
+                      }
+                      setDetail(appendSale);
+                      activeDetailId.current = appendSale.id;
+                      setAppendSale(null);
+                      setView("detail");
                     }}
-                    actions={orderActions}
-                  />
-                )}
-              </div>
-              {!isAppend &&
-                (origin !== "counter" || fulfillment === "dine_in") && (
-                  <section className="surface-panel grid shrink-0 gap-3 p-3 sm:grid-cols-2">
-                    {origin === "delivery" ? (
-                      <>
-                        <Control label="Plataforma" required>
-                          <select
-                            required
-                            value={channel}
-                            disabled={locked || lines.length > 0}
-                            className={selectClass}
-                            onChange={(e) =>
-                              setChannel(e.target.value as SaleChannel)
-                            }
-                          >
-                            <option value="pedidosya">PedidosYa</option>
-                            <option value="ubereats">Uber Eats</option>
-                          </select>
-                        </Control>
-                        <Control label="Número del pedido externo" required>
-                          <Input
-                            required
-                            value={externalId}
-                            disabled={locked}
-                            maxLength={80}
-                            placeholder="Ej. 2280061098"
-                            onChange={(e) => setExternalId(e.target.value)}
-                          />
-                        </Control>
-                      </>
-                    ) : origin === "table" ? (
-                      <Control label="Mesa" required>
-                        <select
-                          required
-                          className={selectClass}
-                          disabled={locked || lines.length > 0}
-                          value={tableId}
-                          onChange={(e) => setTableId(e.target.value)}
-                        >
-                          <option value="">Seleccionar mesa</option>
-                          {tables.map((t) => (
-                            <option key={t.id} value={t.id}>
-                              {t.name}
-                              {t.saleId ? " · Cuenta abierta" : ""}
-                            </option>
-                          ))}
-                        </select>
-                      </Control>
-                    ) : (
-                      <>
-                        {fulfillment === "dine_in" && (
-                          <Control label="Mesa de consumo (opcional)">
-                            <select
-                              className={selectClass}
-                              value={tableId}
-                              disabled={locked}
-                              onChange={(e) => setTableId(e.target.value)}
-                            >
-                              <option value="">Sin mesa asociada</option>
-                              {tables.map((t) => (
-                                <option key={t.id} value={t.id}>
-                                  {t.name}
-                                </option>
-                              ))}
-                            </select>
-                          </Control>
-                        )}
-                      </>
-                    )}
-                    {origin === "table" && selectedTable?.saleId && (
-                      <p className="text-sm text-amber-800 sm:col-span-2">
-                        Esta mesa ya tiene una cuenta.{" "}
-                        <Link
-                          className="font-bold underline"
-                          href={`/sales?account=${selectedTable.saleId}`}
-                        >
-                          Abrir venta #{selectedTable.saleNumber}
-                        </Link>
-                      </p>
-                    )}
-                  </section>
-                )}
-              <ProductPicker
-                key={channel}
-                channel={channel}
-                locked={locked || lines.length >= 50}
-                onAdd={configure}
-                refresh={catalogueRefresh}
-                onCatalogueLoaded={warmConfigurations}
-              />
-            </div>
-            <div
-              data-pos-order
-              className={`${tabletPanel === "order" ? "flex" : "hidden"} min-h-0 min-w-0 flex-col gap-2 lg:flex`}
-            >
-              <Button
-                variant="outline"
-                className="min-h-12 justify-start lg:hidden"
-                onClick={() => setTabletPanel("products")}
-              >
-                <ArrowLeft size={18} />
-                Seguir agregando productos
-              </Button>
-              <Cart
-                key={`${branchId}:${channel}:${draftGeneration}`}
-                onEdit={(index) =>
-                  configure(
-                    { id: lines[index].productId, name: lines[index].name },
-                    index,
-                  )
-                }
-                lines={lines}
-                onChange={setLines}
-                locked={locked}
-                allowPrice={role !== "staff" || channel !== "counter"}
-                total={total}
-              >
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="mb-1 min-h-12 w-full justify-start px-0 text-xs text-muted"
-                  disabled={locked}
-                  onClick={() => {
-                    setOrderNoteDraft(notes);
-                    setOrderNoteOpen(true);
-                  }}
-                >
-                  <MessageSquare size={16} />
-                  <span className="truncate">
-                    {notes ? `Nota: ${notes}` : "Agregar nota al pedido"}
-                  </span>
-                </Button>
-                {isAppend ? (
-                  <Button
-                    className="min-h-14 w-full text-base"
-                    disabled={locked || !valid}
-                    onClick={() => submit()}
                   >
-                    Guardar pedido
+                    <ArrowLeft size={15} />
+                    Volver a la cuenta
                   </Button>
-                ) : origin === "table" ? (
-                  <Button
-                    className="min-h-14 w-full text-base"
-                    disabled={locked || !valid}
-                    onClick={() => submit()}
-                  >
-                    Abrir cuenta
-                  </Button>
-                ) : (
-                  <div className="space-y-2">
-                    <Button
-                      className="min-h-14 w-full text-base"
-                      disabled={locked || !valid}
-                      onClick={() => {
-                        if (total && integer(total) === 0n) submit();
-                        else {
-                          operation.clearError();
-                          setPaymentOpen(true);
-                        }
-                      }}
-                    >
-                      {lines.length > 0 && total === "0.00"
-                        ? "Registrar sin cargo"
-                        : origin === "delivery"
-                          ? "Registrar con cobro"
-                          : "Cobrar"}
-                    </Button>
-                    {origin === "delivery" && (
-                      <Button
-                        className="w-full"
-                        variant="outline"
-                        disabled={locked || !valid}
-                        onClick={() => submit()}
-                      >
-                        Registrar pendiente de cobro
-                      </Button>
-                    )}
-                  </div>
-                )}
-              </Cart>
-              {lines.length > 0 && (
-                <div className="flex flex-wrap items-center justify-between gap-1">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={locked}
-                    onClick={refreshPrices}
-                  >
-                    <RotateCw size={14} />
-                    Actualizar precios
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={locked}
-                    onClick={() => setClearOpen(true)}
-                  >
-                    Vaciar pedido
-                  </Button>
+                  <fieldset className="w-full min-w-0 border-t border-blue-100 pt-3">
+                    <legend className="px-1 text-xs font-semibold text-muted">
+                      Acciones
+                    </legend>
+                    <div className="mt-1 max-w-sm">{orderActions}</div>
+                  </fieldset>
                 </div>
+              ) : (
+                <OrderControls
+                  origin={origin}
+                  fulfillment={fulfillment}
+                  locked={locked}
+                  originLocked={lines.length > 0}
+                  onOriginChange={changeOrigin}
+                  onFulfillmentChange={(value) => {
+                    setFulfillment(value);
+                    setTableId("");
+                  }}
+                  actions={orderActions}
+                />
               )}
             </div>
+            {!isAppend &&
+              (origin !== "counter" || fulfillment === "dine_in") && (
+                <section className="surface-panel grid shrink-0 gap-3 p-3 sm:grid-cols-2">
+                  {origin === "delivery" ? (
+                    <>
+                      <Control label="Plataforma" required>
+                        <select
+                          required
+                          value={channel}
+                          disabled={locked || lines.length > 0}
+                          className={selectClass}
+                          onChange={(e) =>
+                            setChannel(e.target.value as SaleChannel)
+                          }
+                        >
+                          <option value="pedidosya">PedidosYa</option>
+                          <option value="ubereats">Uber Eats</option>
+                        </select>
+                      </Control>
+                      <Control label="Número del pedido externo" required>
+                        <Input
+                          required
+                          value={externalId}
+                          disabled={locked}
+                          maxLength={80}
+                          placeholder="Ej. 2280061098"
+                          onChange={(e) => setExternalId(e.target.value)}
+                        />
+                      </Control>
+                    </>
+                  ) : origin === "table" ? (
+                    <Control label="Mesa" required>
+                      <select
+                        required
+                        className={selectClass}
+                        disabled={locked || lines.length > 0}
+                        value={tableId}
+                        onChange={(e) => setTableId(e.target.value)}
+                      >
+                        <option value="">Seleccionar mesa</option>
+                        {tables.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.name}
+                            {t.saleId ? " · Cuenta abierta" : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </Control>
+                  ) : (
+                    <>
+                      {fulfillment === "dine_in" && (
+                        <Control label="Mesa de consumo (opcional)">
+                          <select
+                            className={selectClass}
+                            value={tableId}
+                            disabled={locked}
+                            onChange={(e) => setTableId(e.target.value)}
+                          >
+                            <option value="">Sin mesa asociada</option>
+                            {tables.map((t) => (
+                              <option key={t.id} value={t.id}>
+                                {t.name}
+                              </option>
+                            ))}
+                          </select>
+                        </Control>
+                      )}
+                    </>
+                  )}
+                  {origin === "table" && selectedTable?.saleId && (
+                    <p className="text-sm text-amber-800 sm:col-span-2">
+                      Esta mesa ya tiene una cuenta.{" "}
+                      <Link
+                        className="font-bold underline"
+                        href={`/sales?account=${selectedTable.saleId}`}
+                        onClick={(event) => {
+                          if (
+                            !event.metaKey &&
+                            !event.ctrlKey &&
+                            !event.shiftKey &&
+                            !event.altKey
+                          ) {
+                            event.preventDefault();
+                            void selectSale(selectedTable.saleId!);
+                          }
+                        }}
+                      >
+                        Abrir venta #{selectedTable.saleNumber}
+                      </Link>
+                    </p>
+                  )}
+                </section>
+              )}
+            <ProductPicker
+              key={channel}
+              channel={channel}
+              locked={locked || lines.length >= 50}
+              onAdd={configure}
+              refresh={catalogueRefresh}
+              onCatalogueLoaded={warmConfigurations}
+            />
           </div>
-          {tabletPanel === "products" && (
-            <div className="sticky bottom-0 z-10 bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden">
+          <div
+            data-pos-order
+            className={`${tabletPanel === "order" ? "flex" : "hidden"} min-h-0 min-w-0 flex-col gap-2 lg:flex`}
+          >
+            <Button
+              variant="outline"
+              className="min-h-12 justify-start lg:hidden"
+              onClick={() => setTabletPanel("products")}
+            >
+              <ArrowLeft size={18} />
+              Seguir agregando productos
+            </Button>
+            <Cart
+              key={`${branchId}:${channel}:${draftGeneration}`}
+              onEdit={(index) =>
+                configure(
+                  { id: lines[index].productId, name: lines[index].name },
+                  index,
+                )
+              }
+              lines={lines}
+              onChange={setLines}
+              locked={locked}
+              allowPrice={role !== "staff" || channel !== "counter"}
+              total={total}
+            >
               <Button
-                data-pos-order-summary
-                className="min-h-16 w-full justify-between gap-4 rounded-xl px-5 text-base shadow-lg"
-                onClick={() => setTabletPanel("order")}
+                type="button"
+                variant="ghost"
+                className="mb-1 min-h-12 w-full justify-start px-0 text-xs text-muted"
+                disabled={locked}
+                onClick={() => {
+                  setOrderNoteDraft(notes);
+                  setOrderNoteOpen(true);
+                }}
               >
-                <span className="flex items-center gap-3">
-                  <ShoppingBag size={22} />
-                  <span>
-                    Ver pedido ·{" "}
-                    {lines.reduce((sum, line) => sum + line.quantity, 0)} unid.
-                  </span>
-                </span>
-                <span
-                  className="flex items-center gap-3"
-                  aria-live="polite"
-                  aria-atomic="true"
-                >
-                  {total === null ? "Revisar total" : money(total)}
-                  <ArrowRight size={20} />
+                <MessageSquare size={16} />
+                <span className="truncate">
+                  {notes ? `Nota: ${notes}` : "Agregar nota al pedido"}
                 </span>
               </Button>
-            </div>
-          )}
-        </>
-      )}
+              {isAppend ? (
+                <Button
+                  className="min-h-14 w-full text-base"
+                  disabled={locked || !valid}
+                  onClick={() => submit()}
+                >
+                  Guardar pedido
+                </Button>
+              ) : origin === "table" ? (
+                <Button
+                  className="min-h-14 w-full text-base"
+                  disabled={locked || !valid}
+                  onClick={() => submit()}
+                >
+                  Abrir cuenta
+                </Button>
+              ) : (
+                <div className="space-y-2">
+                  <Button
+                    className="min-h-14 w-full text-base"
+                    disabled={locked || !valid}
+                    onClick={() => {
+                      if (total && integer(total) === 0n) submit();
+                      else {
+                        operation.clearError();
+                        setPaymentOpen(true);
+                      }
+                    }}
+                  >
+                    {lines.length > 0 && total === "0.00"
+                      ? "Registrar sin cargo"
+                      : origin === "delivery"
+                        ? "Registrar con cobro"
+                        : "Cobrar"}
+                  </Button>
+                  {origin === "delivery" && (
+                    <Button
+                      className="w-full"
+                      variant="outline"
+                      disabled={locked || !valid}
+                      onClick={() => submit()}
+                    >
+                      Registrar pendiente de cobro
+                    </Button>
+                  )}
+                </div>
+              )}
+            </Cart>
+            {lines.length > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-1">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={locked}
+                  onClick={refreshPrices}
+                >
+                  <RotateCw size={14} />
+                  Actualizar precios
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={locked}
+                  onClick={() => setClearOpen(true)}
+                >
+                  Vaciar pedido
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+        {tabletPanel === "products" && (
+          <div className="sticky bottom-0 z-10 bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden">
+            <Button
+              data-pos-order-summary
+              className="min-h-16 w-full justify-between gap-4 rounded-xl px-5 text-base shadow-lg"
+              onClick={() => setTabletPanel("order")}
+            >
+              <span className="flex items-center gap-3">
+                <ShoppingBag size={22} />
+                <span>
+                  Ver pedido ·{" "}
+                  {lines.reduce((sum, line) => sum + line.quantity, 0)} unid.
+                </span>
+              </span>
+              <span
+                className="flex items-center gap-3"
+                aria-live="polite"
+                aria-atomic="true"
+              >
+                {total === null ? "Revisar total" : money(total)}
+                <ArrowRight size={20} />
+              </span>
+            </Button>
+          </div>
+        )}
+      </div>
       <Dialog open={stockHelpOpen} onOpenChange={setStockHelpOpen}>
         <DialogContent showCloseButton={false}>
           <DialogHeader>
@@ -1208,62 +1346,95 @@ export function SalesManager({
           </div>
         </DialogContent>
       </Dialog>
-      {view === "history" && (
-        <SaleHistory
-          locked={locked}
-          onSelect={(sale) => void selectSale(sale.id)}
+      {(historyOpened || workspaceView === "history") && (
+        <div hidden={workspaceView !== "history"}>
+          <SaleHistory
+            refresh={refresh}
+            locked={locked}
+            onSelect={(sale) => void selectSale(sale.id)}
+          />
+        </div>
+      )}
+      {view === "detail" && (
+        <SaleDetailDialog
+          actorId={actorId}
+          sale={detail}
+          loading={detailLoading}
+          error={detailError}
+          canCancel={role !== "staff"}
+          canAdd={!appendSale}
+          locked={operation.locked || fulfillmentBusy}
+          onBusy={setFulfillmentBusy}
+          onChanged={() => void refreshLocatorDetail()}
+          onOpenSale={(id) => void selectSale(id)}
+          onClose={closeSaleDetail}
+          onRetry={() => {
+            setDetailLoading(true);
+            setDetailError("");
+            void loadSaleDetail(activeDetailId.current);
+          }}
+          restoreFocus={() => {
+            if (modalOpener.current?.isConnected)
+              modalOpener.current.focus({ preventScroll: true });
+            else
+              document
+                .querySelector<HTMLElement>("[data-pos-title]")
+                ?.focus({ preventScroll: true });
+          }}
+          feedback={
+            !paymentOpen && !cancelOpen ? (
+              <OperationNotice
+                eventKey={operation.errorAttempt}
+                error={operation.error}
+                uncertain={operation.uncertain}
+                busy={operation.busy}
+                retry={operation.retry}
+              />
+            ) : null
+          }
+          onPay={() => {
+            operation.clearError();
+            setPaymentOpen(true);
+          }}
+          onAdd={() => {
+            if (!detail || appendSale) return;
+            savedDraft.current = {
+              view: returnView,
+              draft: {
+                lines,
+                origin,
+                channel,
+                fulfillment,
+                tableId,
+                customerId,
+                customerName,
+                customerEmail,
+                externalId,
+                notes,
+                locatorNumber,
+                locatorMode,
+                tabletPanel,
+              },
+            };
+            setAppendSale(detail);
+            setView("append");
+            setTabletPanel("products");
+            setLocatorNumber(null);
+            setLocatorMode("automatic");
+            setChannel("counter");
+            setLines([]);
+            setDraftGeneration((n) => n + 1);
+            setNotes("");
+            setNotice("");
+          }}
+          onCancel={() => {
+            operation.clearError();
+            setCancelReason("");
+            setRefundConfirmed(false);
+            setCancelOpen(true);
+          }}
         />
       )}
-      {view === "detail" &&
-        (loading ? (
-          <p role="status" className="py-16 text-center text-sm text-muted">
-            Cargando cuenta…
-          </p>
-        ) : detail ? (
-          <SaleDetailPanel
-            actorId={actorId}
-            sale={detail}
-            canCancel={role !== "staff"}
-            locked={locked}
-            onLocatorChanged={() => void refreshLocatorDetail()}
-            onPay={() => {
-              operation.clearError();
-              setPaymentOpen(true);
-            }}
-            onAdd={() => {
-              setView("append");
-              setTabletPanel("products");
-              setLocatorNumber(null);
-              setLocatorMode("automatic");
-              setChannel("counter");
-              setLines([]);
-              setDraftGeneration((n) => n + 1);
-              setNotes("");
-              setNotice("");
-            }}
-            onCancel={() => {
-              operation.clearError();
-              setCancelReason("");
-              setRefundConfirmed(false);
-              setCancelOpen(true);
-            }}
-            onBack={() => {
-              setView("history");
-              setNotice("");
-            }}
-          />
-        ) : (
-          <Button
-            disabled={locked}
-            variant="outline"
-            onClick={() => {
-              if (initialAccount) void selectSale(initialAccount);
-              else setView("history");
-            }}
-          >
-            Volver a consultar
-          </Button>
-        ))}
       {paymentOpen && (
         <PaymentDialog
           eventKey={operation.errorAttempt}
