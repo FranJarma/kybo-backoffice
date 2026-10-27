@@ -195,9 +195,7 @@ export function AppShell({
                 : "border-transparent",
             )}
           >
-            {g.label !== "Inicio" && (
-              <p className="eyebrow mb-1.5 px-3">{g.label}</p>
-            )}
+            <p className="eyebrow mb-1.5 px-3">{g.label}</p>
             <div className="space-y-0.5">
               {g.links.map(({ href, label, icon: Icon }) => (
                 <Link

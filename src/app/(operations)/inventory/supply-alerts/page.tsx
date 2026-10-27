@@ -1,6 +1,6 @@
 import { requireManagerPage } from "@/lib/page-access";
-import { SupplyAlertManager } from "@/components/inventory/supply-alert-manager";
+import { redirect } from "next/navigation";
 export default async function SupplyAlertsPage() {
-  const actor = await requireManagerPage();
-  return <SupplyAlertManager key={actor.branchId} actorId={actor.id} />;
+  await requireManagerPage();
+  redirect("/inventory/purchases");
 }

@@ -23,17 +23,22 @@ export function SupplyPolicyEditor({
   locked,
   onSave,
   onCancel,
+  fixedItemId,
 }: {
   policy?: SupplyPolicy;
   snapshot: SupplySnapshot;
   locked: boolean;
   onSave: (input: SupplyInput) => void;
   onCancel: () => void;
+  fixedItemId?: string;
 }) {
   const id = useId();
-  const [itemId, setItem] = useState(policy?.itemId ?? "");
+  const [itemId, setItem] = useState(policy?.itemId ?? fixedItemId ?? "");
   const [daily, setDaily] = useState(
-    policy?.dailyConsumption?.replace(/\.?0+$/, "").replace(".", ",") ?? "",
+    policy?.dailyConsumption
+      ?.replace(/(\.\d*?)0+$/, "$1")
+      .replace(/\.$/, "")
+      .replace(".", ",") ?? "",
   );
   const [lead, setLead] = useState(String(policy?.leadDays ?? 7));
   const [safety, setSafety] = useState(String(policy?.safetyDays ?? 3));
@@ -43,7 +48,7 @@ export function SupplyPolicyEditor({
   const item = snapshot.items.find((i) => i.id === itemId);
   return (
     <form
-      className="space-y-5 rounded-xl border border-line bg-white p-4 sm:p-6"
+      className="space-y-6 bg-white text-brand"
       onSubmit={(e) => {
         e.preventDefault();
         if (
@@ -52,6 +57,10 @@ export function SupplyPolicyEditor({
           !/^\d+$/.test(lead) ||
           !/^\d+$/.test(safety) ||
           !/^\d+$/.test(target) ||
+          Number(lead) < 1 ||
+          Number(lead) > 364 ||
+          Number(safety) > 364 ||
+          Number(target) > 365 ||
           Number(target) <= Number(lead) + Number(safety)
         ) {
           setError(
@@ -70,53 +79,44 @@ export function SupplyPolicyEditor({
         });
       }}
     >
-      <h2 className="text-lg font-semibold text-brand">
-        {policy ? "Editar compra anticipada" : "Agregar insumo de Bolivia"}
-      </h2>
-      <div className="grid gap-2">
-        <label htmlFor={`${id}-item`} className="text-sm font-medium">
-          Insumo
-        </label>
-        <SearchCombobox
-          id={`${id}-item`}
-          label="Insumo"
-          value={itemId}
-          selectedLabel={item?.name ?? policy?.itemName ?? ""}
-          options={snapshot.items}
-          disabled={locked || !!policy}
-          required
-          onChange={setItem}
-          onSearch={() => {}}
-        />
-      </div>
-      <label className="grid gap-2 text-sm font-medium">
-        Consumo diario estimado (
-        {item?.baseUnit === "unit"
-          ? "unid."
-          : (item?.baseUnit ?? "unidad base")}
-        )
-        <Input
-          className="min-h-12"
-          inputMode="decimal"
-          value={daily}
+      <h2 className="text-lg font-semibold text-brand">Reposición y compras</h2>
+      {!fixedItemId && (
+        <div className="grid gap-2">
+          <label htmlFor={`${id}-item`} className="text-sm font-medium">
+            Insumo
+          </label>
+          <SearchCombobox
+            id={`${id}-item`}
+            label="Insumo"
+            value={itemId}
+            selectedLabel={item?.name ?? policy?.itemName ?? ""}
+            options={snapshot.items}
+            disabled={locked || !!policy}
+            required
+            onChange={setItem}
+            onSearch={() => {}}
+          />
+        </div>
+      )}
+      <label className="flex min-h-12 items-center justify-between gap-3 text-sm font-semibold">
+        Recibir avisos de compra
+        <input
+          type="checkbox"
+          className="size-5 accent-blue-600"
+          checked={enabled}
           disabled={locked}
-          onChange={(e) => setDaily(e.target.value)}
-          placeholder="Usá coma para decimales"
+          onChange={(e) => setEnabled(e.target.checked)}
         />
       </label>
-      <p className="text-sm leading-relaxed text-muted-foreground">
-        Usá la unidad base del insumo. Vacío significa que falta estimar; cero
-        confirma que no se prevé consumo. Es una estimación manual, no un
-        promedio de ventas.
-      </p>
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-5 sm:grid-cols-2">
         {[
           {
-            label: "Plazo de llegada (días)",
+            label: "Tiempo que tarda en llegar (días)",
             value: lead,
             set: setLead,
             min: 1,
             max: 364,
+            help: "Desde que hacés el pedido al proveedor.",
           },
           {
             label: "Margen de seguridad (días)",
@@ -124,42 +124,87 @@ export function SupplyPolicyEditor({
             set: setSafety,
             min: 0,
             max: 364,
-          },
-          {
-            label: "Objetivo de cobertura (días)",
-            value: target,
-            set: setTarget,
-            min: 1,
-            max: 365,
+            help: "Tiempo extra para resolver demoras.",
           },
         ].map((field) => (
-          <label key={field.label} className="grid gap-2 text-sm font-medium">
+          <label
+            key={field.label}
+            className="grid content-start gap-2 text-sm font-medium"
+          >
             {field.label}
             <Input
-              type="number"
               className="min-h-12"
+              type="number"
               inputMode="numeric"
+              step={1}
               min={field.min}
               max={field.max}
-              step={1}
               required
-              disabled={locked}
               value={field.value}
+              disabled={locked}
               onChange={(e) => field.set(e.target.value)}
             />
+            <span className="text-xs leading-relaxed font-normal text-muted-foreground">
+              {field.help}
+            </span>
           </label>
         ))}
       </div>
-      <label className="flex min-h-12 items-center gap-3 text-sm">
-        <input
-          type="checkbox"
-          className="size-5"
-          checked={enabled}
-          disabled={locked}
-          onChange={(e) => setEnabled(e.target.checked)}
-        />
-        Avisos activados para este insumo
-      </label>
+      <div
+        className="space-y-2 rounded-r-lg border-l-4 border-blue-600 bg-blue-50 px-4 py-4"
+        role="status"
+      >
+        <p className="text-sm font-semibold">
+          Te avisamos cuando quede stock para{" "}
+          {Number(lead || 0) + Number(safety || 0)} días
+        </p>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          {lead || 0} días de entrega + {safety || 0} días de margen. Se aplica
+          a este insumo en la sucursal seleccionada.
+        </p>
+      </div>
+      <details open className="border-y border-line py-4">
+        <summary className="min-h-8 cursor-pointer text-sm font-semibold text-blue-700">
+          Cantidad a comprar
+        </summary>
+        <div className="mt-4 grid gap-5 sm:grid-cols-2">
+          <label className="grid content-start gap-2 text-sm font-medium">
+            Consumo diario estimado (
+            {item?.baseUnit === "unit"
+              ? "unid."
+              : (item?.baseUnit ?? "unidad base")}
+            )
+            <Input
+              className="min-h-12"
+              inputMode="decimal"
+              value={daily}
+              disabled={locked}
+              onChange={(e) => setDaily(e.target.value)}
+              placeholder="Usá coma para decimales"
+            />
+          </label>
+          <label className="grid content-start gap-2 text-sm font-medium">
+            Reponer para cubrir (días)
+            <Input
+              className="min-h-12"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={365}
+              step={1}
+              required
+              disabled={locked}
+              value={target}
+              onChange={(e) => setTarget(e.target.value)}
+            />
+          </label>
+        </div>
+        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+          Usá la unidad base del insumo. Vacío significa que falta estimar; cero
+          confirma que no se prevé consumo. Es una estimación manual, no un
+          promedio de ventas.
+        </p>
+      </details>
       {error && (
         <p role="alert" className="text-sm text-red-700">
           {error}
@@ -167,7 +212,7 @@ export function SupplyPolicyEditor({
       )}
       <div className="flex flex-wrap gap-3">
         <Button type="submit" className="min-h-14" disabled={locked}>
-          Guardar compra anticipada
+          Guardar configuración
         </Button>
         <Button
           type="button"

@@ -15,6 +15,7 @@ export async function CatalogPage({
       entity={entity}
       actorId={actor.id}
       canManagePaymentMethods={actor.role === "admin"}
+      canManagePurchases={actor.role === "admin" || actor.role === "manager"}
       ingredientsOnly={ingredientsOnly}
       definition={
         ingredientsOnly

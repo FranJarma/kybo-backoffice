@@ -112,9 +112,7 @@ test("central preparation requires assignment and confirms a real order from the
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.getByText(task.title, { exact: true }).click();
   await expect(confirm).toBeEnabled();
-  await expect(page.getByRole("dialog")).toContainText(
-    "140 unit · Depósito principal",
-  );
+  await expect(page.getByRole("dialog")).toContainText("140 unidades");
   await page.screenshot({
     path: ".next-e2e/central-preparation-tablet.png",
     fullPage: true,
@@ -269,6 +267,7 @@ for (const size of [
       await expect(page.getByRole("alert")).toHaveCount(0);
     }
     await page.getByText("Reponer vasos descartables", { exact: true }).click();
+    await page.getByText("Informar un impedimento", { exact: true }).click();
     await page.getByLabel("Motivo o impedimento").fill("Falta un paquete");
     await page.getByRole("button", { name: "Informar bloqueo" }).click();
     await expect(page.getByRole("alert")).toContainText("La tarea cambió");

@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Plus, RefreshCw, Truck, ArrowUpRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { OperationAlert } from "@/components/ui/operation-alert";
@@ -14,25 +14,34 @@ import { getJson, useOperation, date, today } from "./shared";
 import { PurchaseOrderEditor } from "./purchase-order-editor";
 import { PurchaseOrderDetail, orderStates } from "./purchase-order-detail";
 import { PurchasesManager } from "./purchases-manager";
+import { OperationPanel } from "@/components/ui/operation-panel";
+import type { PurchaseSeed } from "@/modules/supply-alerts/presentation";
 const endpoint = "/api/procurement/orders";
 export function PurchaseOrdersManager({
   actorId,
   timeZone,
   initialOrderId = "",
+  initialDraft,
+  embedded = false,
+  onBusy,
 }: {
   actorId: string;
   timeZone: string;
   initialOrderId?: string;
+  initialDraft?: PurchaseSeed[];
+  embedded?: boolean;
+  onBusy?: (busy: boolean) => void;
 }) {
   const [data, setData] = useState<OrderSnapshot | null>(null),
-    [selected, setSelected] = useState(initialOrderId),
-    [editing, setEditing] = useState(false),
+    [selected, setSelected] = useState(initialDraft ? "" : initialOrderId),
+    [editing, setEditing] = useState(!!initialDraft),
     [receiving, setReceiving] = useState<PurchaseOrder | null>(null),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [loading, setLoading] = useState(true),
     [filter, setFilter] = useState("open");
   const generation = useRef(0);
+  const formId = useId();
   const load = useCallback(async () => {
     const ticket = ++generation.current;
     setLoading(true);
@@ -99,6 +108,10 @@ export function PurchaseOrdersManager({
     saved,
   );
   const locked = loading || !!error || operation.locked || !data?.available;
+  useEffect(() => {
+    onBusy?.(operation.locked || editing || !!receiving);
+    return () => onBusy?.(false);
+  }, [operation.locked, editing, receiving, onBusy]);
   const order = data?.orders.find((o) => o.id === selected);
   if (receiving)
     return (
@@ -107,6 +120,7 @@ export function PurchaseOrdersManager({
         actorId={actorId}
         timeZone={timeZone}
         order={receiving}
+        embedded={embedded}
         onOrderReceived={() => void load()}
         onOrderClose={() => {
           setReceiving(null);
@@ -136,7 +150,13 @@ export function PurchaseOrdersManager({
     <div className="space-y-6 text-brand">
       <header className="page-heading">
         <div>
-          <h1 className="page-title">Pedidos a proveedores</h1>
+          {embedded ? (
+            <h2 className="text-lg font-semibold">
+              Pedidos y entregas pendientes
+            </h2>
+          ) : (
+            <h1 className="page-title">Pedidos a proveedores</h1>
+          )}
           <p className="page-description">
             Anotá lo que ya pediste, cuándo llega y cuánto falta recibir.
           </p>
@@ -151,32 +171,38 @@ export function PurchaseOrdersManager({
             <RefreshCw className="size-4" />
             Actualizar
           </Button>
-          <Button
-            className="min-h-12"
-            disabled={locked || editing}
-            onClick={() => {
-              setEditing(true);
-              setSelected("");
-              setNotice("");
-            }}
-          >
-            <Plus className="size-4" />
-            Nuevo pedido
-          </Button>
+          {!embedded && (
+            <Button
+              className="min-h-12"
+              disabled={locked || editing}
+              onClick={() => {
+                setEditing(true);
+                setSelected("");
+                setNotice("");
+              }}
+            >
+              <Plus className="size-4" />
+              Nuevo pedido
+            </Button>
+          )}
         </div>
       </header>
-      <OperationAlert
-        tone="error"
-        title="No pudimos consultar los pedidos"
-        message={error}
-      />
-      <OperationNotice
-        error={operation.error}
-        eventKey={operation.errorAttempt}
-        uncertain={operation.uncertain}
-        busy={operation.busy}
-        retry={operation.retry}
-      />
+      {!editing && !order && (
+        <OperationAlert
+          tone="error"
+          title="No pudimos consultar los pedidos"
+          message={error}
+        />
+      )}
+      {!editing && !order && (
+        <OperationNotice
+          error={operation.error}
+          eventKey={operation.errorAttempt}
+          uncertain={operation.uncertain}
+          busy={operation.busy}
+          retry={operation.retry}
+        />
+      )}
       {operation.status === 409 && (
         <p className="text-sm">
           El pedido pudo cambiar en otra pantalla. Actualizá antes de volver a
@@ -198,24 +224,92 @@ export function PurchaseOrdersManager({
         </p>
       )}
       {editing ? (
-        <PurchaseOrderEditor
-          timeZone={timeZone}
-          locked={locked}
-          onCancel={() => setEditing(false)}
-          onSave={(input) => operation.submit(endpoint, input)}
-        />
-      ) : order ? (
-        <PurchaseOrderDetail
-          key={`${order.id}:${order.revision}`}
-          order={order}
-          timeZone={timeZone}
-          locked={locked}
-          onBack={() => setSelected("")}
-          onReceive={() => setReceiving(order)}
-          onCommand={(command) =>
-            operation.submit(`${endpoint}/${order.id}`, command)
+        <OperationPanel
+          title="Preparar pedido"
+          label="Compras"
+          description="Elegí el proveedor, revisá las cantidades y confirmá la llegada estimada."
+          locked={operation.locked}
+          onClose={() => setEditing(false)}
+          footer={
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-12"
+                disabled={operation.locked}
+                onClick={() => setEditing(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                form={formId}
+                className="min-h-12 flex-1"
+                disabled={locked}
+              >
+                Guardar borrador
+              </Button>
+            </>
           }
-        />
+        >
+          {error && (
+            <p role="alert" className="text-sm text-red-700">
+              {error}
+            </p>
+          )}
+          <OperationNotice
+            error={operation.error}
+            eventKey={operation.errorAttempt}
+            uncertain={operation.uncertain}
+            busy={operation.busy}
+            retry={operation.retry}
+          />
+          <PurchaseOrderEditor
+            formId={formId}
+            initialLines={initialDraft}
+            timeZone={timeZone}
+            locked={locked}
+            onCancel={() => setEditing(false)}
+            onSave={(input) => operation.submit(endpoint, input)}
+          />
+        </OperationPanel>
+      ) : order ? (
+        <OperationPanel
+          title="Detalle del pedido"
+          label="Compras"
+          description="Seguí lo pedido y registrá cada entrega."
+          locked={operation.locked}
+          onClose={() => setSelected("")}
+        >
+          {error && (
+            <p role="alert" className="text-sm text-red-700">
+              {error}
+            </p>
+          )}
+          <OperationNotice
+            error={operation.error}
+            eventKey={operation.errorAttempt}
+            uncertain={operation.uncertain}
+            busy={operation.busy}
+            retry={operation.retry}
+          />
+          {notice && (
+            <p role="status" className="rounded-lg bg-blue-50 p-3 text-sm">
+              {notice}
+            </p>
+          )}
+          <PurchaseOrderDetail
+            key={`${order.id}:${order.revision}`}
+            order={order}
+            timeZone={timeZone}
+            locked={locked}
+            onBack={() => setSelected("")}
+            onReceive={() => setReceiving(order)}
+            onCommand={(command) =>
+              operation.submit(`${endpoint}/${order.id}`, command)
+            }
+          />
+        </OperationPanel>
       ) : (
         data?.available && (
           <>
@@ -256,11 +350,20 @@ export function PurchaseOrdersManager({
                     key={o.id}
                     className="flex flex-wrap items-center justify-between gap-4 p-5 sm:p-6"
                   >
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className="font-bold">{o.supplierName}</p>
                       <p className="mt-2 text-sm text-muted-foreground">
                         {o.lines.length} insumo{o.lines.length === 1 ? "" : "s"}{" "}
                         · {orderStates[o.state]}
+                      </p>
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        {o.lines
+                          .slice(0, 3)
+                          .map((l) => l.itemName)
+                          .join(" · ")}
+                        {o.lines.length > 3
+                          ? ` y ${o.lines.length - 3} más`
+                          : ""}
                       </p>
                       <p
                         className={`mt-2 text-sm ${o.expectedOn && o.expectedOn < today(timeZone) && !["received", "cancelled"].includes(o.state) ? "font-semibold text-red-700" : "text-muted-foreground"}`}
@@ -276,17 +379,31 @@ export function PurchaseOrdersManager({
                           : ""}
                       </p>
                     </div>
-                    <Button
-                      variant="outline"
-                      className="min-h-12"
-                      disabled={operation.locked}
-                      onClick={() => {
-                        setSelected(o.id);
-                        setNotice("");
-                      }}
-                    >
-                      Ver pedido <ArrowUpRight className="size-4" />
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                      {["ordered", "partially_received"].includes(o.state) && (
+                        <Button
+                          className="min-h-12"
+                          disabled={locked}
+                          onClick={() => {
+                            setSelected(o.id);
+                            setReceiving(o);
+                          }}
+                        >
+                          Registrar llegada
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        className="min-h-12"
+                        disabled={operation.locked}
+                        onClick={() => {
+                          setSelected(o.id);
+                          setNotice("");
+                        }}
+                      >
+                        Ver pedido <ArrowUpRight className="size-4" />
+                      </Button>
+                    </div>
                   </article>
                 ))
               )}

@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import type { TaskRow, Urgency } from "@/modules/daily-operations/types";
 import { quantity } from "@/lib/number-format";
+import { taskDueDate } from "@/modules/daily-operations/presentation";
 export const urgencyLabels: Record<Urgency, string> = {
   critical: "Crítica",
   high: "Alta",
@@ -30,9 +31,11 @@ export const stateLabels = {
 export function TaskList({
   tasks,
   onSelect,
+  timeZone = "America/Argentina/Buenos_Aires",
 }: {
   tasks: TaskRow[];
   onSelect: (task: TaskRow) => void;
+  timeZone?: string;
 }) {
   return (
     <div className="divide-y rounded-xl border bg-white">
@@ -49,10 +52,12 @@ export function TaskList({
           <button
             key={t.id}
             onClick={() => onSelect(t)}
-            className="flex min-h-24 w-full items-start gap-3 p-4 text-left transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:outline-primary sm:gap-5 sm:p-5"
+            className="flex min-h-24 w-full items-start gap-3 p-4 text-left transition-colors hover:bg-orange-50/40 focus-visible:outline-2 focus-visible:outline-primary sm:gap-4 sm:p-5"
           >
-            <span className="mt-1 hidden rounded-lg bg-muted p-3 sm:block">
-              <Icon className="size-5 text-brand" />
+            <span
+              className={`mt-1 hidden rounded-lg p-3 sm:block ${t.kind === "purchase" ? "bg-orange-50 text-orange-700" : "bg-blue-50 text-blue-700"}`}
+            >
+              <Icon className="size-5" />
             </span>
             <span className="min-w-0 flex-1 space-y-2">
               <span className="flex flex-wrap items-center gap-2 text-xs">
@@ -69,12 +74,22 @@ export function TaskList({
                 )}
               </span>
               <span className="block break-words text-base font-semibold text-brand">
-                {t.title}
+                {t.purchaseAlert?.itemName ?? t.title}
               </span>
               <span className="block text-sm text-muted-foreground">
-                {t.quantity ? `${quantity(t.quantity)} ${t.unit ?? ""} · ` : ""}
+                {t.kind === "purchase" && t.quantity ? "Comprar " : ""}
+                {t.quantity ? quantity(t.quantity, t.unit ?? undefined) : ""}
+                {t.quantity &&
+                (t.originName ||
+                  t.locationName ||
+                  t.purchaseAlert?.coverageDays)
+                  ? " · "
+                  : ""}
                 {t.originName ? `${t.originName} → ` : ""}
-                {t.locationName ?? "Sucursal"}
+                {t.locationName ??
+                  (t.purchaseAlert?.coverageDays
+                    ? `Stock para ${quantity(t.purchaseAlert.coverageDays)} días`
+                    : "")}
               </span>
               <span className="flex flex-wrap gap-x-5 gap-y-1 text-sm">
                 <span
@@ -88,12 +103,7 @@ export function TaskList({
                 </span>
                 {t.dueAt && (
                   <span className="text-muted-foreground">
-                    {new Date(t.dueAt).toLocaleString("es-AR", {
-                      day: "2-digit",
-                      month: "2-digit",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                    {taskDueDate(t.dueAt, timeZone)}
                   </span>
                 )}
               </span>

@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { CatalogRow } from "@/modules/catalog/types";
 import type { CreateOrderInput } from "@/modules/procurement/types";
+import type { PurchaseSeed } from "@/modules/supply-alerts/presentation";
+import { addDays } from "@/modules/supply-alerts/engine";
 import {
   decimal,
   exactDivision,
@@ -32,17 +34,49 @@ export function PurchaseOrderEditor({
   locked,
   onCancel,
   onSave,
+  initialLines = [],
+  formId,
 }: {
   timeZone: string;
   locked: boolean;
   onCancel: () => void;
   onSave: (input: CreateOrderInput) => void;
+  initialLines?: PurchaseSeed[];
+  formId?: string;
 }) {
   const [supplierId, setSupplierId] = useState(""),
     [orderedOn, setOrderedOn] = useState(today(timeZone)),
-    [expectedOn, setExpectedOn] = useState(""),
+    [expectedOn, setExpectedOn] = useState(
+      initialLines.length
+        ? addDays(
+            today(timeZone),
+            Math.max(...initialLines.map((l) => l.leadDays)),
+          )
+        : "",
+    ),
     [notes, setNotes] = useState(""),
-    [lines, setLines] = useState<Line[]>(() => [blank()]),
+    [lines, setLines] = useState<Line[]>(() =>
+      initialLines.length
+        ? initialLines.map((l) => ({
+            key: crypto.randomUUID(),
+            itemId: l.itemId,
+            item: {
+              id: l.itemId,
+              name: l.itemName,
+              baseUnit: l.baseUnit,
+              revision: 0,
+              archivedAt: null,
+              purchasable: true,
+              stockTracked: true,
+            },
+            presentationId: "",
+            quantity: l.quantity
+              .replace(/(\.\d*?)0+$/, "$1")
+              .replace(/\.$/, "")
+              .replace(".", ","),
+          }))
+        : [blank()],
+    ),
     [error, setError] = useState("");
   const change = (key: string, patch: Partial<Line>) =>
     setLines((old) => old.map((l) => (l.key === key ? { ...l, ...patch } : l)));
@@ -87,11 +121,18 @@ export function PurchaseOrderEditor({
   }
   return (
     <form
+      id={formId}
       onSubmit={submit}
-      className="space-y-6 rounded-xl border border-line bg-white p-5 sm:p-7"
+      className={
+        formId
+          ? "space-y-6 bg-white"
+          : "space-y-6 rounded-xl border border-line bg-white p-5 sm:p-7"
+      }
     >
       <div>
-        <h2 className="text-xl font-bold">Nuevo pedido a proveedor</h2>
+        {!formId && (
+          <h2 className="text-xl font-bold">Nuevo pedido a proveedor</h2>
+        )}
         <p className="mt-2 text-sm text-muted-foreground">
           Primero guardás el borrador. Confirmalo cuando el pedido esté acordado
           con el proveedor.
@@ -112,6 +153,7 @@ export function PurchaseOrderEditor({
                     ...l,
                     presentationId: "",
                     presentation: undefined,
+                    quantity: l.presentationId ? "" : l.quantity,
                   })),
                 );
               }}
@@ -171,6 +213,7 @@ export function PurchaseOrderEditor({
               <div className="grid gap-4 sm:grid-cols-2">
                 <SearchSelect
                   entity="items"
+                  initial={l.item}
                   label="Insumo"
                   value={l.itemId}
                   required
@@ -180,6 +223,7 @@ export function PurchaseOrderEditor({
                       item,
                       presentationId: "",
                       presentation: undefined,
+                      quantity: id === l.itemId ? l.quantity : "",
                     })
                   }
                   filter={(i) =>
@@ -195,7 +239,11 @@ export function PurchaseOrderEditor({
                     p.itemId === l.itemId && p.supplierId === supplierId
                   }
                   onChange={(id, presentation) =>
-                    change(l.key, { presentationId: id, presentation })
+                    change(l.key, {
+                      presentationId: id,
+                      presentation,
+                      quantity: id === l.presentationId ? l.quantity : "",
+                    })
                   }
                 />
               </div>
@@ -248,19 +296,21 @@ export function PurchaseOrderEditor({
           {error}
         </p>
       )}
-      <footer className="flex flex-wrap justify-end gap-3 border-t border-line pt-5">
-        <Button
-          type="button"
-          variant="outline"
-          disabled={locked}
-          onClick={onCancel}
-        >
-          Cancelar
-        </Button>
-        <Button className="min-h-12" disabled={locked}>
-          Guardar borrador
-        </Button>
-      </footer>
+      {!formId && (
+        <footer className="flex flex-wrap justify-end gap-3 border-t border-line pt-5">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={locked}
+            onClick={onCancel}
+          >
+            Cancelar
+          </Button>
+          <Button className="min-h-12" disabled={locked}>
+            Guardar borrador
+          </Button>
+        </footer>
+      )}
     </form>
   );
 }

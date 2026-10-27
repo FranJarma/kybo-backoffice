@@ -26,7 +26,9 @@ test.beforeAll(async () => {
   ).css;
 });
 for (const width of [600, 768, 1024])
-  test(`Bolivia estimates, urgency and edits at ${width}`, async ({ page }) => {
+  test(`purchase estimates, urgency and edits at ${width}`, async ({
+    page,
+  }) => {
     await page.setViewportSize({ width, height: 1024 });
     const policies = [
       {
@@ -98,7 +100,7 @@ for (const width of [600, 768, 1024])
     await page.goto("/__supply-fixture");
     await page.addScriptTag({ path: ".next-e2e/supply-ui.js" });
     await expect(
-      page.getByRole("heading", { name: "Compras de Bolivia", exact: true }),
+      page.getByRole("heading", { name: "Compras", exact: true }),
     ).toBeVisible();
     await expect(page.getByRole("article").first()).toContainText(
       "Perlas de mango",
@@ -106,42 +108,43 @@ for (const width of [600, 768, 1024])
     const cups = page
       .getByRole("article")
       .filter({ hasText: "Vasos descartables" });
-    await expect(cups).toContainText("10 días");
-    await expect(cups).toContainText("1.050 unid.");
-    await cups.getByText("Ver cálculo y condiciones", { exact: true }).click();
-    await expect(cups).toContainText("Pedido con fecha vigente: 0 unid.");
-    await expect(
-      cups.getByRole("link", { name: "Ver pedidos a proveedores" }),
-    ).toHaveAttribute("href", "/inventory/purchases");
+    await expect(cups).toContainText("1.050");
+    await cups
+      .getByRole("button", { name: "Ver detalle", exact: true })
+      .click();
+    await page.getByText("Ver cómo se calcula", { exact: true }).click();
+    await expect(page.getByRole("dialog")).toContainText("10 días");
     await page
-      .getByRole("button", { name: "Editar Vasos descartables", exact: true })
+      .getByRole("button", { name: "Configurar este insumo", exact: true })
       .click();
     await expect(
       page.getByLabel("Consumo diario estimado (unid.)", { exact: true }),
     ).toHaveValue("150");
     await page
-      .getByLabel("Objetivo de cobertura (días)", { exact: true })
+      .getByLabel("Reponer para cubrir (días)", { exact: true })
       .fill("10");
     await page
-      .getByRole("button", { name: "Guardar compra anticipada", exact: true })
+      .getByRole("button", { name: "Guardar configuración", exact: true })
       .click();
     await expect(page.getByRole("alert")).toContainText(
       "objetivo debe superar",
     );
     expect(sent).toHaveLength(0);
     await page
-      .getByLabel("Objetivo de cobertura (días)", { exact: true })
+      .getByLabel("Reponer para cubrir (días)", { exact: true })
       .fill("17");
     await page.screenshot({
       path: `.next-e2e/supply-edit-${width}.png`,
       fullPage: true,
     });
     await page
-      .getByRole("button", { name: "Guardar compra anticipada", exact: true })
+      .getByRole("button", { name: "Guardar configuración", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText(
-      "Regla de compra guardada",
-    );
+    await expect(
+      page.getByText("Configuración guardada para esta sucursal.", {
+        exact: true,
+      }),
+    ).toBeVisible();
     expect(sent).toEqual([
       expect.objectContaining({
         policy: expect.objectContaining({

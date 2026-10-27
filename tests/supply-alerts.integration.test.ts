@@ -205,6 +205,16 @@ it("reconciles one purchase per item, preserves assignment, and changes urgency 
     quantity: "3300.000000",
   });
   const view = await getDailyOperationSnapshot(ctx.db, manager, {});
+  expect(view.timeZone).toBe(ctx.mapping.initialBranch.timeZone);
+  expect(
+    view.tasks.find((t) => t.itemId === item.id && t.kind === "purchase")
+      ?.purchaseAlert,
+  ).toMatchObject({
+    itemId: item.id,
+    suggestedQuantity: "3300.000000",
+    leadDays: 7,
+    safetyDays: 3,
+  });
   const ranks = view.tasks.map(
     (t) => ({ critical: 0, high: 1, scheduled: 2 })[t.urgency],
   );

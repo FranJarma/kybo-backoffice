@@ -8,6 +8,15 @@ import {
   navigationIsActive,
 } from "../src/lib/navigation";
 describe("navegación por áreas", () => {
+  it("pone Inicio antes del día bajo Negocio e integra las compras", () => {
+    const entries = visibleNavigation({ role: "admin" });
+    expect(entries.slice(0, 2).map((n) => [n.id, n.area])).toEqual([
+      ["home", "Negocio"],
+      ["daily-operations", "Negocio"],
+    ]);
+    expect(entries.some((n) => n.id === "supply-alerts")).toBe(false);
+    expect(entries.find((n) => n.id === "purchases")?.label).toBe("Compras");
+  });
   it("da acceso a mínimos en inventario solo al encargado y administrador", () => {
     for (const role of ["manager", "admin"]) {
       const entry = visibleNavigation({ role }).find(

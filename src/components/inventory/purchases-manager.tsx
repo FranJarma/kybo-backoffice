@@ -160,12 +160,16 @@ export function PurchasesManager({
   order,
   onOrderClose,
   onOrderReceived,
+  embedded = false,
+  onBusy,
 }: {
   actorId: string;
   timeZone: string;
   order?: PurchaseOrder;
   onOrderClose?: () => void;
   onOrderReceived?: () => void;
+  embedded?: boolean;
+  onBusy?: (busy: boolean) => void;
 }) {
   const [rows, setRows] = useState<ReceiptSummary[]>([]),
     [total, setTotal] = useState(0),
@@ -346,6 +350,10 @@ export function PurchasesManager({
     onPaid,
   );
   const locked = receiptOperation.locked || paymentOperation.locked;
+  useEffect(() => {
+    onBusy?.(locked);
+    return () => onBusy?.(false);
+  }, [locked, onBusy]);
   const updateLine = (index: number, change: Partial<LineDraft>) =>
     setLines((current) =>
       current.map((row, i) => (i === index ? { ...row, ...change } : row)),
@@ -456,7 +464,7 @@ export function PurchasesManager({
     <div className="space-y-6">
       <header className="page-heading">
         <div className="min-w-0">
-          <h1 className="page-title">
+          <h1 className={embedded ? "text-lg font-semibold" : "page-title"}>
             {order ? "Recibir pedido" : "Recepciones"}
           </h1>
           <p className="page-description">

@@ -87,6 +87,7 @@ for (const width of [600, 768, 1024])
       }[],
     };
     const sent: Record<string, unknown>[] = [];
+    let failOrderRead = false;
     let receipt: Record<string, unknown> | null = null;
     await page.route("**/__procurement-fixture", (r) =>
       r.fulfill({
@@ -132,6 +133,11 @@ for (const width of [600, 768, 1024])
         }
         return r.fulfill({ json: { result: order } });
       }
+      if (failOrderRead)
+        return r.fulfill({
+          status: 503,
+          json: { error: "No pudimos actualizar los pedidos." },
+        });
       return r.fulfill({ json: { available: true, orders: [order] } });
     });
     await page.route("**/api/purchases**", (r) => {
@@ -196,6 +202,7 @@ for (const width of [600, 768, 1024])
     });
     await page.goto("http://127.0.0.1:3000/__procurement-fixture");
     await page.addScriptTag({ path: ".next-e2e/procurement-ui.js" });
+    await page.getByRole("button", { name: "Pedidos", exact: true }).click();
     await page.getByRole("button", { name: "Ver pedido", exact: true }).click();
     await expect(page.getByText("100 unid.").last()).toBeVisible();
     await page
@@ -205,6 +212,17 @@ for (const width of [600, 768, 1024])
       page.getByText("Pedido en camino", { exact: true }),
     ).toBeVisible();
     expect(sent[0]).toMatchObject({ action: "confirm", expectedRevision: 1 });
+    await page
+      .getByRole("button", { name: "Volver a pedidos", exact: true })
+      .click();
+    failOrderRead = true;
+    await page.getByRole("button", { name: "Actualizar", exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: "Registrar llegada", exact: true }),
+    ).toBeDisabled();
+    failOrderRead = false;
+    await page.getByRole("button", { name: "Actualizar", exact: true }).click();
+    await page.getByRole("button", { name: "Ver pedido", exact: true }).click();
     await page
       .getByRole("button", { name: "Registrar llegada", exact: true })
       .click();

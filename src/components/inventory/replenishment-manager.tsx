@@ -47,10 +47,10 @@ export function ReplenishmentManager({ actorId }: { actorId: string }) {
         </p>
       </header>
       <Link
-        href="/inventory/supply-alerts"
+        href="/inventory/items"
         className="inline-flex min-h-12 items-center rounded-lg border border-line bg-white px-4 text-sm font-semibold text-brand"
       >
-        Configurar compras anticipadas de Bolivia
+        Configurar anticipación por insumo
       </Link>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Button

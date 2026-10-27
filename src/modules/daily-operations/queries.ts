@@ -20,6 +20,7 @@ import { integer, six } from "../inventory/decimal";
 import { availableQuantity } from "../inventory/availability";
 import { dayFiltersSchema } from "./validation";
 import { supplyAvailable } from "../supply-alerts/policies";
+import { readSupplySnapshot } from "../supply-alerts/service";
 import type { DailySnapshot, StockRow, TaskRow } from "./types";
 export async function readStock(
   tx: Tx,
@@ -200,8 +201,16 @@ export async function getDailyOperationSnapshot(
             eq(stockTransfers.destinationBranchId, ctx.branchId),
           ),
         );
+      const supply =
+        ctx.role !== "staff" && !filters.history
+          ? await readSupplySnapshot(tx, ctx, now)
+          : null;
       const taskRows: TaskRow[] = records.map(({ task: t, name }) => ({
         ...t,
+        purchaseAlert:
+          t.kind === "purchase" && !t.documentId
+            ? (supply?.alerts.find((a) => a.itemId === t.itemId) ?? null)
+            : null,
         assignedToName: name,
         assigneeUnavailable:
           !!t.assignedTo &&
@@ -276,6 +285,7 @@ export async function getDailyOperationSnapshot(
       return {
         asOf: now.toISOString(),
         businessDate: today,
+        timeZone: ctx.timeZone,
         canManage: ctx.role !== "staff",
         tasks: visible.slice(filters.offset, filters.offset + 50),
         total: visible.length,
@@ -293,7 +303,7 @@ export async function getDailyOperationSnapshot(
           ...(supplyReady
             ? []
             : [
-                "Las compras anticipadas de Bolivia están pendientes de activación. Las tareas actuales siguen disponibles.",
+                "Las compras anticipadas están pendientes de activación. Las tareas actuales siguen disponibles.",
               ]),
         ],
         stock: await readStock(tx, ctx.branchId, today),

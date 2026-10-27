@@ -284,7 +284,11 @@ export function DailyOperationsManager({
             </span>
           </div>
           {data.tasks.length ? (
-            <TaskList tasks={data.tasks} onSelect={setSelected} />
+            <TaskList
+              tasks={data.tasks}
+              onSelect={setSelected}
+              timeZone={data.timeZone}
+            />
           ) : (
             <div className="rounded-xl border border-dashed p-8 text-center">
               <ClipboardList className="mx-auto mb-3 size-8 text-muted-foreground" />
@@ -326,11 +330,11 @@ export function DailyOperationsManager({
         {canManage && (
           <div className="flex flex-wrap gap-4">
             <Link
-              href="/inventory/supply-alerts"
+              href="/inventory/purchases"
               prefetch={false}
               className="flex min-h-12 items-center underline"
             >
-              Configurar compras de Bolivia
+              Ir a Compras
             </Link>
             <Link
               href="/inventory/replenishment"
@@ -349,6 +353,7 @@ export function DailyOperationsManager({
           people={data.people}
           canManage={canManage}
           disabled={!!error}
+          timeZone={data.timeZone}
           onClose={() => setSelected(null)}
           onRefresh={async (reconcile = false) => {
             try {

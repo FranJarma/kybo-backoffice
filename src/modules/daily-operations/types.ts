@@ -1,3 +1,4 @@
+import type { SupplyAlert } from "../supply-alerts/types";
 export type TaskState =
   | "pending"
   | "in_progress"
@@ -33,6 +34,7 @@ export type TaskRow = {
   createdAt: string;
   updatedAt: string;
   dependencyIds: string[];
+  purchaseAlert?: SupplyAlert | null;
 };
 export type StockRow = {
   itemId: string;
@@ -48,6 +50,7 @@ export type StockRow = {
 export type DailySnapshot = {
   asOf: string;
   businessDate: string;
+  timeZone?: string;
   tasks: TaskRow[];
   total: number;
   configurationWarnings: string[];

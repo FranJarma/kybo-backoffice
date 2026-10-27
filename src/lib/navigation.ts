@@ -1,20 +1,20 @@
 export type NavigationAccess = { role: string; catalogManager?: boolean };
 export const navigation = [
   {
-    id: "daily-operations",
-    area: "Operación",
-    label: "Operación del día",
-    href: "/operations/day",
-    icon: "ListChecks",
-    access: "all",
-  },
-  {
     id: "home",
-    area: "Inicio",
+    area: "Negocio",
     label: "Inicio",
     href: "/",
     icon: "House",
     access: "manager",
+  },
+  {
+    id: "daily-operations",
+    area: "Negocio",
+    label: "Operación del día",
+    href: "/operations/day",
+    icon: "ListChecks",
+    access: "all",
   },
   {
     id: "sales",
@@ -152,11 +152,12 @@ export const navigation = [
   {
     id: "supply-alerts",
     area: "Inventario y compras",
-    label: "Compras de Bolivia",
+    label: "Compras anticipadas",
     href: "/inventory/supply-alerts",
     icon: "ShoppingCart",
     access: "manager",
     parent: "inventory",
+    sidebar: false,
   },
   {
     id: "presentations",
