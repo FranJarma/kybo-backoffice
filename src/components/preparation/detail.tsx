@@ -92,6 +92,11 @@ export function PrepDetailDialog({
               : "Consultando estado…"}
           </DialogDescription>
         </DialogHeader>
+        {data?.task.locatorNumber != null && (
+          <p className="text-xl font-bold">
+            Localizador {data.task.locatorNumber}
+          </p>
+        )}
         {(detail.error || error) && (
           <OperationAlert
             eventKey={errorAttempt}

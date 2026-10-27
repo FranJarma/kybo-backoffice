@@ -101,6 +101,9 @@ export const preparationTasks = pgTable(
       foreignColumns: [preparationStations.id, preparationStations.branchId],
     }),
     index("preparation_order").on(t.orderId),
+    index("pickup_active_tasks")
+      .on(t.branchId, t.orderId)
+      .where(sql`${t.status} in ('pending','preparing','ready')`),
     index("preparation_assignee").on(t.assigneeId, t.status),
     uniqueIndex("preparation_order_station")
       .on(t.orderId, t.stationId)

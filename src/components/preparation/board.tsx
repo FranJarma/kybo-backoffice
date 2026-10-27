@@ -32,6 +32,8 @@ import { usePreparationFeed } from "./use-feed";
 import { PreparationSettings } from "./settings";
 import { PrepDetailDialog } from "./detail";
 import { PrepMetricsPanel } from "./metrics";
+import { SoundControl } from "@/components/notifications/sound-control";
+import { useReadySound } from "@/components/notifications/use-ready-sound";
 const columns = [
   {
     status: "pending",
@@ -86,20 +88,40 @@ export function PreparationBoard({
   if (origin) params.set("origin", origin);
   if (saleId) params.set("saleId", saleId);
   if (scope === "history") params.set("date", date);
-  const feed = usePreparationFeed(`/api/preparation?${params}`, refresh);
-  const success = useCallback((result: unknown) => {
-    const { task } = result as PrepDetail;
-    setNotice(
-      task.status === "preparing"
-        ? "Preparación confirmada."
-        : task.status === "ready"
-          ? "Tarea lista para entregar."
-          : task.status === "delivered"
-            ? "Entrega registrada."
-            : "Estado actualizado.",
+  const query = params.toString();
+  const feed = usePreparationFeed(`/api/preparation?${query}`, refresh);
+  const { confirmTask } = feed;
+  const { observe, notify, ...sound } = useReadySound(`preparation:${actorId}`);
+  useEffect(() => {
+    if (!feed.fresh || !feed.data) return;
+    observe(
+      `${mode}:${query}`,
+      mode === "board" && scope === "active"
+        ? feed.data.rows.map((task) => ({
+            id: task.id,
+            ready: task.status === "ready",
+          }))
+        : [],
     );
-    setRefresh((v) => v + 1);
-  }, []);
+  }, [feed.data, feed.fresh, mode, query, scope, observe]);
+  const success = useCallback(
+    (result: unknown) => {
+      const { task } = result as PrepDetail;
+      confirmTask(task);
+      if (task.status === "ready") notify(task.id);
+      setNotice(
+        task.status === "preparing"
+          ? "Preparación confirmada."
+          : task.status === "ready"
+            ? "Tarea lista para entregar."
+            : task.status === "delivered"
+              ? "Entrega registrada."
+              : "Estado actualizado.",
+      );
+      setRefresh((v) => v + 1);
+    },
+    [confirmTask, notify],
+  );
   const operation = useOperation<Record<string, unknown>>(
     actorId,
     "preparation",
@@ -206,15 +228,18 @@ export function PreparationBoard({
                   : "Conectando con la cola…")}
           </span>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setRefresh((v) => v + 1)}
-          disabled={operation.busy}
-        >
-          <RefreshCw size={14} />
-          Actualizar
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <SoundControl {...sound} />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setRefresh((v) => v + 1)}
+            disabled={operation.busy}
+          >
+            <RefreshCw size={14} />
+            Actualizar
+          </Button>
+        </div>
       </div>
       {!detail && (
         <OperationNotice

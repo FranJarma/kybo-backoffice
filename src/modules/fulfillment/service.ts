@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import type { Tx } from "@/db/types";
 import {
   saleLineFulfillments,
@@ -19,11 +19,13 @@ import {
   completionPortion,
   type LineProgress,
 } from "./quantities";
-import { settleReservation } from "../inventory/reservations";
-import { lockStock } from "../inventory/locking";
-import { postMovement } from "../inventory/ledger";
+import {
+  consumeReservations,
+  type ReservedConsumption,
+} from "../inventory/consume-reservations";
 import { integer, six } from "../inventory/decimal";
 import { AppError } from "@/lib/errors";
+import { returnDeliveredLocator } from "../pickup/lifecycle";
 export type LineQuantity = { saleLineId: string; quantity: number };
 function fail(message: string): never {
   throw new AppError("FULFILLMENT_CONFLICT", message, 409);
@@ -76,24 +78,34 @@ async function applyLines(
     fail(
       "Alguna línea no pertenece al pedido o conserva inventario histórico sin gestionar.",
     );
-  const allocations = await tx
-    .select()
-    .from(reservationAllocations)
-    .where(
-      inArray(
-        reservationAllocations.reservationId,
-        snapshots.map((s) => s.fulfillment.reservationId),
-      ),
-    )
-    .orderBy(
-      reservationAllocations.itemId,
-      reservationAllocations.locationId,
-      reservationAllocations.lotId,
-    );
-  await lockStock(tx, ctx, allocations, true);
-  for (const { fulfillment: row } of snapshots) {
-    const amount = lines.find((l) => l.saleLineId === row.saleLineId)!.quantity;
-    const transition = transitionLine(row as LineProgress, action, amount);
+  const transitions = snapshots.map(({ fulfillment: row }) => ({
+    row,
+    amount: lines.find((l) => l.saleLineId === row.saleLineId)!.quantity,
+    transition: transitionLine(
+      row as LineProgress,
+      action,
+      lines.find((l) => l.saleLineId === row.saleLineId)!.quantity,
+    ),
+  }));
+  const consuming = transitions.filter((t) => t.transition.consume);
+  const allocations = consuming.length
+    ? await tx
+        .select()
+        .from(reservationAllocations)
+        .where(
+          inArray(
+            reservationAllocations.reservationId,
+            consuming.map((t) => t.row.reservationId),
+          ),
+        )
+        .orderBy(
+          reservationAllocations.itemId,
+          reservationAllocations.locationId,
+          reservationAllocations.lotId,
+        )
+    : [];
+  const consumptions: ReservedConsumption[] = [];
+  for (const { row, amount, transition } of transitions) {
     if (transition.consume) {
       // Allocate each component proportionally; the last completion owns rounding residues.
       const remainingUnits =
@@ -143,42 +155,35 @@ async function applyLines(
           fail("La línea no tiene una reserva física disponible.");
       }
       if (consume.length) {
-        await settleReservation(tx, ctx, {
+        consumptions.push({
           reservationId: row.reservationId,
-          consume,
-          release: [],
-          operationId,
-        });
-        await postMovement(tx, ctx, {
-          operationId,
           documentId: row.documentId,
           action: action === "complete" ? "sale_consume" : "direct_dispatch",
-          legs: consume.map((a) => ({
-            ...a,
-            direction: "out",
-            incomingValue: null,
-          })),
-          reason: null,
+          consume,
         });
       }
     }
-    await tx
-      .update(saleLineFulfillments)
-      .set({
-        completed: transition.next.completed,
-        delivered: transition.next.delivered,
-        revision: row.revision + 1,
-      })
-      .where(eq(saleLineFulfillments.saleLineId, row.saleLineId));
-    await tx.insert(fulfillmentEvents).values({
+  }
+  await consumeReservations(tx, ctx, operationId, consumptions);
+  await tx.execute(
+    sql`update ${saleLineFulfillments} as f set completed = d.completed, delivered = d.delivered, revision = d.revision from (values ${sql.join(
+      transitions.map(
+        ({ row, transition }) =>
+          sql`(${row.saleLineId}::uuid, ${transition.next.completed}::integer, ${transition.next.delivered}::integer, ${row.revision + 1}::integer)`,
+      ),
+      sql`, `,
+    )}) as d(sale_line_id, completed, delivered, revision) where f.sale_line_id = d.sale_line_id and f.branch_id = ${ctx.branchId}::uuid`,
+  );
+  await tx.insert(fulfillmentEvents).values(
+    transitions.map(({ row, amount }) => ({
       operationId,
       branchId: ctx.branchId,
       saleLineId: row.saleLineId,
       action,
       quantity: amount,
       revision: row.revision + 1,
-    });
-  }
+    })),
+  );
 }
 export async function completePreparation(
   tx: Tx,
@@ -267,6 +272,7 @@ export async function deliverLines(
     "deliver",
     input.lines,
   );
+  await returnDeliveredLocator(tx, ctx, input.orderId);
   if (input.updateTasks === false) return;
   const tasks = await tx
     .select()

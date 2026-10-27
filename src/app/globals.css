@@ -120,6 +120,19 @@ a {
 [data-pos] button {
   touch-action: manipulation;
 }
+[data-pickup-controls] [data-slot="button"] {
+  min-height: 48px;
+  touch-action: manipulation;
+}
+[data-pickup-controls] [data-pickup-number] {
+  min-height: 64px;
+  font-size: 24px;
+  font-weight: 700;
+}
+[data-pickup-controls] [data-slot="dialog-close"] {
+  min-height: 48px;
+  min-width: 48px;
+}
 .page-heading {
   display: flex;
   align-items: flex-start;
@@ -310,4 +323,22 @@ a {
     overflow: visible;
     scrollbar-gutter: auto;
   }
+}
+
+/* Register controls remain finger-sized regardless of shared compact variants. */
+[data-pos] [data-slot="button"] {
+  min-height: 48px;
+}
+[data-pos] [data-pos-order-summary] {
+  min-height: 64px;
+}
+
+/* Transfer fields and actions stay comfortable to use on tablets. */
+[data-transfers] [data-slot="button"],
+[data-transfers] [data-slot="input"],
+[data-transfers] select {
+  min-height: 48px;
+}
+[data-transfers] [data-transfer-footer] [data-slot="button"] {
+  min-height: 56px;
 }

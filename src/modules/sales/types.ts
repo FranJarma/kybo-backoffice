@@ -62,6 +62,7 @@ export type SaleDetail = SaleSummary & {
   cancelReason: string | null;
   orders: {
     id: string;
+    locatorNumber?: number | null;
     sequence: number;
     totalAmount: string;
     notes: string | null;
@@ -75,6 +76,7 @@ export type SaleLookup = {
   categories?: { id: string; name: string }[];
   offset?: number;
   rows: {
+    email?: string | null;
     kind?: string;
     configured?: boolean;
     vatPending?: boolean;

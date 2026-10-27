@@ -164,6 +164,7 @@ it("inherits recipe waste and modifiers, consumes at preparation and dispatches 
     .values({ name: "Cash", kind: "cash" })
     .returning();
   const sale = await createSalesService(c.db).create(actor, {
+    locatorNumber: 1,
     requestId: crypto.randomUUID(),
     origin: "counter",
     channel: "counter",

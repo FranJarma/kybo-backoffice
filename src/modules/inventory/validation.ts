@@ -33,6 +33,8 @@ const receive = z
     supplierId: id,
     locationId: id,
     receivedOn: date,
+    purchaseOrderId: id.optional(),
+    expectedOrderRevision: z.number().int().positive().optional(),
     documentNumber: optionalText(120).transform(
       (v) => v?.toLocaleUpperCase("es-AR") ?? null,
     ),
@@ -50,6 +52,7 @@ const receive = z
       .array(
         z
           .object({
+            orderLineId: id.optional(),
             itemId: id,
             itemRevision: z.number().int().positive().optional(),
             presentationRevision: z.number().int().positive().optional(),

@@ -25,7 +25,7 @@ export function exactDivision(numerator: bigint, divisor: bigint): bigint {
 }
 export function decimal(
   input: unknown,
-  scale: 2 | 6,
+  scale: 2 | 6 | 9,
   required = true,
   positive = false,
 ): string | null {

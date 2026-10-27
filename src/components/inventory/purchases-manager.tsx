@@ -32,6 +32,7 @@ import {
   SCALE,
 } from "@/modules/inventory/decimal";
 import type { CatalogRow } from "@/modules/catalog/types";
+import type { PurchaseOrder } from "@/modules/procurement/types";
 import type {
   ReceiptDetail,
   ReceiptLineInput,
@@ -50,6 +51,8 @@ import {
 } from "./shared";
 
 type LineDraft = {
+  orderLineId?: string;
+  snapshotFactor?: string;
   itemId: string;
   item?: CatalogRow;
   presentationId: string;
@@ -71,9 +74,11 @@ const blankLine = (): LineDraft => ({
 });
 function basePreview(line: LineDraft) {
   const amount = integer(decimal(line.quantity, 6, true, true)!);
-  const factor = line.presentation
-    ? integer(String(line.presentation.baseQuantity))
-    : SCALE;
+  const factor = line.snapshotFactor
+    ? integer(line.snapshotFactor)
+    : line.presentation
+      ? integer(String(line.presentation.baseQuantity))
+      : SCALE;
   return safeQuantity(exactDivision(amount * factor, SCALE));
 }
 function Field({
@@ -152,23 +157,85 @@ function PaymentStatus({ receipt }: { receipt: ReceiptSummary }) {
 export function PurchasesManager({
   actorId,
   timeZone,
+  order,
+  onOrderClose,
+  onOrderReceived,
+  embedded = false,
+  onBusy,
 }: {
   actorId: string;
   timeZone: string;
+  order?: PurchaseOrder;
+  onOrderClose?: () => void;
+  onOrderReceived?: () => void;
+  embedded?: boolean;
+  onBusy?: (busy: boolean) => void;
 }) {
   const [rows, setRows] = useState<ReceiptSummary[]>([]),
     [total, setTotal] = useState(0),
     [search, setSearch] = useState("");
   const [loadError, setLoadError, loadErrorAttempt] = useErrorFeedback(),
     [detail, setDetail] = useState<ReceiptDetail | null>(null),
-    [view, setView] = useState<"list" | "draft" | "review" | "detail">("list");
-  const [supplierId, setSupplierId] = useState(""),
+    [view, setView] = useState<"list" | "draft" | "review" | "detail">(
+      order ? "draft" : "list",
+    );
+  const [supplierId, setSupplierId] = useState(order?.supplierId ?? ""),
     [locationId, setLocationId] = useState(""),
-    [supplier, setSupplier] = useState<CatalogRow | undefined>(),
+    [supplier, setSupplier] = useState<CatalogRow | undefined>(
+      order
+        ? {
+            id: order.supplierId,
+            name: order.supplierName,
+            revision: 1,
+            archivedAt: null,
+          }
+        : undefined,
+    ),
     [receivedOn, setReceivedOn] = useState(today(timeZone));
   const [documentNumber, setDocumentNumber] = useState(""),
     [notes, setNotes] = useState(""),
-    [lines, setLines] = useState<LineDraft[]>([blankLine()]);
+    [lines, setLines] = useState<LineDraft[]>(() =>
+      order
+        ? order.lines
+            .filter((l) => integer(l.pendingQuantity) > 0n)
+            .map((l) => ({
+              ...blankLine(),
+              itemId: l.itemId,
+              orderLineId: l.id,
+              snapshotFactor: l.conversionFactor,
+              item: {
+                id: l.itemId,
+                name: l.itemName,
+                baseUnit: l.baseUnit,
+                revision: 1,
+                archivedAt: null,
+              },
+              presentationId: l.presentationId ?? "",
+              presentation: l.presentationId
+                ? {
+                    id: l.presentationId,
+                    name: l.presentationName ?? "Presentación del pedido",
+                    baseQuantity: l.conversionFactor,
+                    revision: 1,
+                    archivedAt: null,
+                  }
+                : undefined,
+              // A partial pack receipt can leave a nonrepresentable pack fraction. Ask
+              // for an explicit quantity in that exceptional case instead of rounding.
+              quantity:
+                (integer(l.pendingQuantity) * SCALE) %
+                  integer(l.conversionFactor) ===
+                0n
+                  ? safeQuantity(
+                      exactDivision(
+                        integer(l.pendingQuantity) * SCALE,
+                        integer(l.conversionFactor),
+                      ),
+                    ).replace(".", ",")
+                  : "",
+            }))
+        : [blankLine()],
+    );
   const [payment, setPayment] = useState(false),
     [paymentMethodId, setPaymentMethodId] = useState(""),
     [paidOn, setPaidOn] = useState(today(timeZone)),
@@ -180,6 +247,21 @@ export function PurchasesManager({
   const [paymentTarget, setPaymentTarget] = useState<"supplier" | "shipping">(
     "supplier",
   );
+  useEffect(() => {
+    if (!order) return;
+    let active = true;
+    getJson<{ locations: { id: string; code: string }[] }>(
+      "/api/branches/current",
+    )
+      .then((data) => {
+        const depot = data.locations.find((l) => l.code === "DEPOSITO");
+        if (active && depot) setLocationId((current) => current || depot.id);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [order]);
   const refreshList = useCallback(async () => {
     try {
       const data = await getJson<{ rows: ReceiptSummary[]; total: number }>(
@@ -229,6 +311,7 @@ export function PurchasesManager({
       setPaidOn(today(timeZone));
       setView("detail");
       setRefreshWarning("");
+      onOrderReceived?.();
       void refreshList().then((ok) => {
         if (!ok)
           setRefreshWarning(
@@ -236,7 +319,7 @@ export function PurchasesManager({
           );
       });
     },
-    [refreshList, timeZone],
+    [refreshList, timeZone, onOrderReceived],
   );
   const receiptOperation = useOperation<ReceiveInput>(
     actorId,
@@ -267,6 +350,10 @@ export function PurchasesManager({
     onPaid,
   );
   const locked = receiptOperation.locked || paymentOperation.locked;
+  useEffect(() => {
+    onBusy?.(locked);
+    return () => onBusy?.(false);
+  }, [locked, onBusy]);
   const updateLine = (index: number, change: Partial<LineDraft>) =>
     setLines((current) =>
       current.map((row, i) => (i === index ? { ...row, ...change } : row)),
@@ -292,7 +379,14 @@ export function PurchasesManager({
     event.preventDefault();
     try {
       lines.forEach((line) => {
-        basePreview(line);
+        const base = basePreview(line);
+        const pending = order?.lines.find(
+          (l) => l.id === line.orderLineId,
+        )?.pendingQuantity;
+        if (pending && integer(base) > integer(pending))
+          throw new Error(
+            `La cantidad de ${line.item?.name} supera lo pendiente del pedido.`,
+          );
         if (line.unitPrice.trim()) decimal(line.unitPrice, 6);
         if (line.discount.trim()) decimal(line.discount, 2);
       });
@@ -316,6 +410,9 @@ export function PurchasesManager({
   function confirmReceipt() {
     const payload: ReceiveInput = {
       requestId: crypto.randomUUID(),
+      ...(order
+        ? { purchaseOrderId: order.id, expectedOrderRevision: order.revision }
+        : {}),
       supplierId,
       locationId,
       receivedOn,
@@ -337,6 +434,7 @@ export function PurchasesManager({
           }
         : {}),
       lines: lines.map((line): ReceiptLineInput => ({
+        ...(line.orderLineId ? { orderLineId: line.orderLineId } : {}),
         itemId: line.itemId,
         itemRevision: line.item?.revision,
         presentationRevision: line.presentation?.revision,
@@ -366,13 +464,20 @@ export function PurchasesManager({
     <div className="space-y-6">
       <header className="page-heading">
         <div className="min-w-0">
-          <h1 className="page-title">Compras</h1>
+          <h1 className={embedded ? "text-lg font-semibold" : "page-title"}>
+            {order ? "Recibir pedido" : "Recepciones"}
+          </h1>
           <p className="page-description">
-            Registrá lo que efectivamente llegó y revisá las cantidades antes de
-            confirmar.
+            {order
+              ? `Pedido de ${order.supplierName}. Ajustá las cantidades a lo que llegó y quitá los insumos que todavía no recibiste. El resto seguirá pendiente.`
+              : "Registrá lo que efectivamente llegó y revisá las cantidades antes de confirmar."}
           </p>
         </div>
-        {view === "list" ? (
+        {order ? (
+          <Button variant="outline" onClick={onOrderClose} disabled={locked}>
+            Volver al pedido
+          </Button>
+        ) : view === "list" ? (
           <Button type="button" onClick={begin} disabled={locked}>
             <Plus aria-hidden="true" /> Nueva recepción
           </Button>
@@ -657,6 +762,8 @@ export function PurchasesManager({
                       entity="suppliers"
                       label="Proveedor"
                       value={supplierId}
+                      initial={supplier}
+                      disabled={!!order}
                       onChange={(id, row) => {
                         setSupplierId(id);
                         setSupplier(row);
@@ -738,6 +845,8 @@ export function PurchasesManager({
                           entity="items"
                           label="Artículo"
                           value={line.itemId}
+                          initial={line.item}
+                          disabled={!!order}
                           onChange={(id, row) =>
                             updateLine(index, {
                               itemId: id,
@@ -752,6 +861,7 @@ export function PurchasesManager({
                           entity="presentations"
                           label="Presentación"
                           value={line.presentationId}
+                          initial={line.presentation}
                           onChange={(id, row) =>
                             updateLine(index, {
                               presentationId: id,
@@ -762,7 +872,7 @@ export function PurchasesManager({
                             row.itemId === line.itemId &&
                             row.supplierId === supplierId
                           }
-                          disabled={!line.itemId || !supplierId}
+                          disabled={!!order || !line.itemId || !supplierId}
                         />
                       </div>
                       <div className="grid gap-4 sm:grid-cols-2">
@@ -863,7 +973,7 @@ export function PurchasesManager({
                   type="button"
                   variant="outline"
                   className="w-full border-dashed bg-white"
-                  disabled={locked || lines.length >= 30}
+                  disabled={!!order || locked || lines.length >= 30}
                   onClick={() => setLines((old) => [...old, blankLine()])}
                 >
                   <Plus aria-hidden="true" /> Agregar renglón
@@ -927,7 +1037,7 @@ export function PurchasesManager({
                     variant="outline"
                     className="w-full"
                     disabled={locked}
-                    onClick={() => setView("list")}
+                    onClick={() => (order ? onOrderClose?.() : setView("list"))}
                   >
                     Cancelar
                   </Button>

@@ -187,7 +187,7 @@ export function ProductPicker({
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-3 2xl:grid-cols-4">
             {rows.map((row) => (
               <button
                 key={row.id}
@@ -203,12 +203,12 @@ export function ProductPicker({
                 className="flex min-h-36 min-w-0 touch-manipulation flex-col items-start rounded-xl border border-line bg-white p-3 text-left transition-colors active:border-orange-500 active:bg-orange-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue disabled:opacity-50"
               >
                 <span className="mb-2 flex w-full items-start justify-between gap-2">
-                  <span className="block w-14 shrink-0">
+                  <span className="block w-20 shrink-0 lg:w-14">
                     <ProductPhoto id={row.imageAssetId} name={row.name} />
                   </span>
                   <Plus size={20} className="mt-1 shrink-0 text-orange-600" />
                 </span>
-                <span className="text-sm font-bold leading-snug text-brand">
+                <span className="text-base font-bold leading-snug text-brand lg:text-sm">
                   {row.name}
                 </span>
                 {row.temporarilySoldOut ? (
@@ -225,7 +225,7 @@ export function ProductPicker({
                   </span>
                 ) : null}
                 <span
-                  className={`mt-auto pt-2 text-sm font-extrabold tabular-nums ${row.price == null ? "text-amber-700" : "text-brand"}`}
+                  className={`mt-auto pt-2 text-base font-extrabold tabular-nums lg:text-sm ${row.price == null ? "text-amber-700" : "text-brand"}`}
                 >
                   {row.vatPending
                     ? "IVA pendiente"

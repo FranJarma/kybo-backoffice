@@ -53,6 +53,7 @@ import { inventoryMovements } from "@/db/inventory-schema";
 import { stockMovements } from "@/db/stock-movement-schema";
 import { inventoryValuations } from "@/db/stock-schema";
 import { productFulfillmentVersions } from "@/db/product-fulfillment-schema";
+import { purchaseOrderLines } from "@/db/procurement-schema";
 import { catalogFinalPrice } from "@/modules/pricing/amounts";
 
 const tables = {
@@ -395,6 +396,18 @@ export function createCatalogService(db: AppDb) {
             .where(eq(recipeOptions.itemId, id))
             .limit(1);
           const unitChanged = values.baseUnit !== before.baseUnit;
+          // Orders take their unit snapshot under this same item lock. Keep
+          // historical document units stable even before the first receipt.
+          const procurement = await tx.execute(
+            sql`select to_regclass('public.purchase_order_lines') as name`,
+          );
+          const [purchaseUse] = procurement.rows[0]?.name
+            ? await tx
+                .select({ id: purchaseOrderLines.id })
+                .from(purchaseOrderLines)
+                .where(eq(purchaseOrderLines.itemId, id))
+                .limit(1)
+            : [];
           if (
             (unitChanged &&
               (used || recipeUse || modifierUse || overrideUse)) ||
@@ -404,7 +417,8 @@ export function createCatalogService(db: AppDb) {
             recipeOutput ||
             saleUse ||
             stockUse ||
-            productionUse
+            productionUse ||
+            purchaseUse
           )
             throw new AppError(
               unitChanged ? "UNIT_IN_USE" : "STOCK_TRACKING_IN_USE",

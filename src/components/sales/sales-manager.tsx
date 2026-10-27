@@ -5,20 +5,21 @@ import {
   type ComboSaleConfiguration,
 } from "./combo-configurator";
 
-import { paths } from "@/lib/navigation";
+import { CustomerPicker } from "./customer-picker";
+import { OrderControls } from "./order-controls";
 import { ProductConfigurator } from "./product-configurator";
 import type { PublicConfiguration } from "@/modules/recipes/configuration";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
-  Store,
-  Armchair,
-  Bike,
   Plus,
   RotateCw,
   ArrowLeft,
   Info,
   MessageSquare,
+  SlidersHorizontal,
+  ShoppingBag,
+  ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,16 +53,17 @@ import {
   appendCartLine,
   type CartLine,
 } from "./cart";
-import {
-  Control,
-  LookupSelect,
-  SalesScope,
-  OperationNotice,
-  selectClass,
-} from "./shared";
+import { Control, SalesScope, OperationNotice, selectClass } from "./shared";
 import { PaymentDialog, type PaymentDraft } from "./payment-dialog";
 import { SaleDetailPanel } from "./sale-detail";
 import { SaleHistory } from "./history";
+import { LocatorPicker } from "@/components/pickup/locator-picker";
+import { useLocators } from "@/components/pickup/use-locators";
+import {
+  locatorSelection,
+  nextAvailableLocator,
+} from "@/modules/pickup/selection";
+import { PickupActions } from "@/components/pickup/locator-manager";
 
 export function SalesManager({
   actorId,
@@ -76,6 +78,10 @@ export function SalesManager({
   initialAccount?: string;
   initialTable?: string;
 }) {
+  const [tabletPanel, setTabletPanel] = useState<"products" | "order">(
+    "products",
+  );
+  const [toolsOpen, setToolsOpen] = useState(false);
   const [view, setView] = useState<"new" | "history" | "detail" | "append">(
     initialAccount ? "detail" : "new",
   );
@@ -88,6 +94,8 @@ export function SalesManager({
     ),
     [tableId, setTableId] = useState(initialTable ?? ""),
     [customerId, setCustomerId] = useState(""),
+    [customerName, setCustomerName] = useState(""),
+    [customerEmail, setCustomerEmail] = useState(""),
     [externalId, setExternalId] = useState(""),
     [notes, setNotes] = useState("");
   const [lines, setLines] = useState<CartLine[]>([]),
@@ -102,7 +110,27 @@ export function SalesManager({
     [cancelReason, setCancelReason] = useState(""),
     [refundConfirmed, setRefundConfirmed] = useState(false);
   const [lastSale, setLastSale] = useState<SaleDetail | null>(null);
-  const [customerOpen, setCustomerOpen] = useState(false);
+  const [locatorNumber, setLocatorNumber] = useState<number | null>(null);
+  const [locatorMode, setLocatorMode] = useState<"automatic" | "manual">(
+    "automatic",
+  );
+  const { fleet: locatorFleet, error: locatorError } = useLocators(refresh);
+  const displayedLocator =
+    locatorMode === "automatic"
+      ? nextAvailableLocator(locatorFleet)
+      : locatorNumber;
+  const locatorState = locatorSelection(locatorFleet, locatorNumber);
+  const locatorIssue =
+    locatorMode === "automatic"
+      ? ""
+      : locatorError ||
+        (!locatorFleet
+          ? "Consultando la disponibilidad de localizadores…"
+          : !locatorState.valid
+            ? locatorNumber === null
+              ? "Elegí un localizador para continuar."
+              : `El localizador ${locatorNumber} ya está ocupado o no está disponible. Elegí otro.`
+            : "");
   const [clearOpen, setClearOpen] = useState(false);
   const [stockHelpOpen, setStockHelpOpen] = useState(false);
   const [orderNoteOpen, setOrderNoteOpen] = useState(false);
@@ -145,16 +173,20 @@ export function SalesManager({
         setLastSale(sale);
         setNotes("");
         setCustomerId("");
-        setCustomerOpen(false);
+        setCustomerName("");
+        setCustomerEmail("");
+        setTabletPanel("products");
         setExternalId("");
         setTableId("");
       }
       setLines([]);
+      setLocatorNumber(null);
+      setLocatorMode("automatic");
       setDraftGeneration((n) => n + 1);
       setPaymentOpen(false);
       setCancelOpen(false);
       setNotice(
-        `Venta #${sale.number} guardada.${nextCustomer ? " Lista la caja para el siguiente pedido." : " Los importes quedaron registrados."}`,
+        `Venta #${sale.number} guardada.${sale.orders.at(-1)?.locatorNumber != null ? ` Localizador ${sale.orders.at(-1)!.locatorNumber}.` : ""}${nextCustomer ? " Lista la caja para el siguiente pedido." : " Los importes quedaron registrados."}`,
       );
       setError("");
       setRefresh((n) => n + 1);
@@ -224,7 +256,16 @@ export function SalesManager({
   const total = cartTotal(lines),
     selectedTable = tables.find((t) => t.id === tableId),
     isAppend = view === "append";
-  let valid = !!lines.length && total !== null;
+  const customerIssue =
+    !isAppend &&
+    !customerId &&
+    customerName.trim() &&
+    customerEmail.trim() &&
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail.trim())
+      ? "Revisá el email del cliente o dejalo vacío."
+      : "";
+  let valid =
+    !!lines.length && total !== null && !locatorIssue && !customerIssue;
   for (const line of lines) {
     try {
       if (
@@ -244,12 +285,18 @@ export function SalesManager({
     valid = false;
   if (!isAppend && tableId && !selectedTable) valid = false;
   function newSale() {
+    setTabletPanel("products");
+    setToolsOpen(false);
+    setLocatorNumber(null);
+    setLocatorMode("automatic");
     setDraftGeneration((n) => n + 1);
     window.history.replaceState(null, "", "/sales");
     setDetail(null);
     setLines([]);
     setNotes("");
     setCustomerId("");
+    setCustomerName("");
+    setCustomerEmail("");
     setExternalId("");
     setTableId("");
     setOrigin("counter");
@@ -415,6 +462,8 @@ export function SalesManager({
         revision: detail.revision,
         lines: linePayload,
         notes,
+        locatorMode,
+        locatorNumber: locatorMode === "manual" ? locatorNumber : undefined,
       });
       return;
     }
@@ -425,13 +474,24 @@ export function SalesManager({
       fulfillment,
       tableId: tableId || undefined,
       customerId: customerId || undefined,
+      newCustomer:
+        !customerId && customerName.trim()
+          ? {
+              name: customerName.trim(),
+              email: customerEmail.trim() || undefined,
+            }
+          : undefined,
       externalId: origin === "delivery" ? externalId.trim() : undefined,
       notes,
       lines: linePayload,
       payments,
+      locatorMode,
+      locatorNumber: locatorMode === "manual" ? locatorNumber : undefined,
     });
   }
   async function selectSale(id: string) {
+    setLocatorNumber(null);
+    setLocatorMode("automatic");
     window.history.replaceState(null, "", `/sales?account=${id}`);
     setLoading(true);
     setError("");
@@ -444,6 +504,17 @@ export function SalesManager({
       setError(e instanceof Error ? e.message : "No pudimos abrir la cuenta.");
     } finally {
       setLoading(false);
+    }
+  }
+  async function refreshLocatorDetail() {
+    setRefresh((n) => n + 1);
+    if (!detail) return;
+    try {
+      setDetail(await getJson<SaleDetail>(`/api/sales/${detail.id}`));
+    } catch {
+      setError(
+        "El localizador se actualizó, pero no pudimos refrescar la venta. Volvé a abrirla para consultar su estado actual.",
+      );
     }
   }
   async function refreshPrices() {
@@ -511,10 +582,41 @@ export function SalesManager({
     }
   }
   const showCart = view === "new" || view === "append";
+  const orderActions = (
+    <>
+      {!isAppend && (
+        <CustomerPicker
+          key={draftGeneration}
+          id={customerId}
+          name={customerName}
+          email={customerEmail}
+          issue={customerIssue}
+          disabled={locked}
+          onChange={(id, name, email) => {
+            setCustomerId(id);
+            setCustomerName(name);
+            setCustomerEmail(email);
+          }}
+        />
+      )}
+      <LocatorPicker
+        value={displayedLocator}
+        automatic={locatorMode === "automatic"}
+        onAutomatic={() => setLocatorMode("automatic")}
+        onChange={(number) => {
+          setLocatorNumber(number);
+          setLocatorMode(number === null ? "automatic" : "manual");
+        }}
+        disabled={locked}
+        fleet={locatorFleet}
+        issue={locatorIssue}
+      />
+    </>
+  );
   return (
     <div
       data-pos
-      className="space-y-3 md:flex md:h-full md:min-h-0 md:flex-col [&>div:not([data-pos-workspace])]:shrink-0"
+      className="flex h-full min-h-0 flex-col gap-3 [&>div:not([data-pos-workspace])]:shrink-0"
     >
       <Dialog
         open={!!configuring}
@@ -611,7 +713,25 @@ export function SalesManager({
             Punto de venta
           </h1>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <Button
+          variant="outline"
+          className="min-h-12 xl:hidden"
+          aria-expanded={toolsOpen}
+          aria-controls="pos-tools"
+          onClick={() => setToolsOpen((open) => !open)}
+        >
+          <SlidersHorizontal size={18} />
+          Herramientas
+        </Button>
+        <div
+          id="pos-tools"
+          className={`${toolsOpen ? "flex" : "hidden"} w-full flex-wrap gap-2 rounded-xl border border-line bg-white p-3 xl:flex xl:w-auto xl:border-0 xl:bg-transparent xl:p-0`}
+        >
+          <PickupActions
+            key={branchId}
+            actorId={actorId}
+            onChanged={() => void refreshLocatorDetail()}
+          />
           <ReplenishmentPanel actorId={actorId} role={role} refresh={refresh} />
           <Button
             variant="ghost"
@@ -621,12 +741,6 @@ export function SalesManager({
           >
             <RotateCw size={17} />
             Actualizar carta
-          </Button>
-          <Button asChild variant="outline" className="min-h-12">
-            <Link href={paths["tables"]}>
-              <Armchair size={17} />
-              Mesas
-            </Link>
           </Button>
           {!showCart && (
             <Button onClick={newSale} disabled={locked}>
@@ -707,9 +821,12 @@ export function SalesManager({
         <>
           <div
             data-pos-workspace
-            className="grid min-h-0 gap-3 md:flex-1 md:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_440px] 2xl:grid-cols-[minmax(0,1fr)_480px]"
+            className="grid min-h-0 gap-3 flex-1 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_440px] 2xl:grid-cols-[minmax(0,1fr)_480px]"
           >
-            <div className="flex min-h-0 min-w-0 flex-col gap-3">
+            <div
+              data-pos-catalogue
+              className={`${tabletPanel === "products" ? "flex" : "hidden"} min-h-0 min-w-0 flex-col gap-3 lg:flex`}
+            >
               <div className="shrink-0">
                 {isAppend && detail ? (
                   <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4">
@@ -728,110 +845,39 @@ export function SalesManager({
                       onClick={() => {
                         setView("detail");
                         setLines([]);
+                        setLocatorNumber(null);
+                        setLocatorMode("automatic");
                         setNotes("");
                       }}
                     >
                       <ArrowLeft size={15} />
                       Volver a la cuenta
                     </Button>
+                    <fieldset className="w-full min-w-0 border-t border-blue-100 pt-3">
+                      <legend className="px-1 text-xs font-semibold text-muted">
+                        Acciones
+                      </legend>
+                      <div className="mt-1 max-w-sm">{orderActions}</div>
+                    </fieldset>
                   </div>
                 ) : (
-                  <div className="flex flex-wrap items-center gap-2">
-                    {(
-                      [
-                        {
-                          value: "counter",
-                          label: "Mostrador",
-                          hint: "Cobrar antes de preparar",
-                          icon: Store,
-                        },
-                        {
-                          value: "table",
-                          label: "Mesa",
-                          hint: "Cuenta abierta, cobro al final",
-                          icon: Armchair,
-                        },
-                        {
-                          value: "delivery",
-                          label: "Delivery",
-                          hint: "PedidosYa y Uber Eats",
-                          icon: Bike,
-                        },
-                      ] as const
-                    ).map(({ value, label, icon: Icon }) => (
-                      <button
-                        key={value}
-                        disabled={locked || lines.length > 0}
-                        onClick={() => changeOrigin(value)}
-                        aria-label={label}
-                        aria-pressed={origin === value}
-                        className={`flex min-h-12 items-center justify-center gap-2 rounded-xl border px-4 py-2 text-center ${origin === value ? "border-orange-300 bg-orange-50/70" : "border-line bg-white hover:border-slate-300"} disabled:cursor-default`}
-                      >
-                        <span
-                          className={
-                            origin === value ? "text-orange-700" : "text-muted"
-                          }
-                        >
-                          <Icon size={21} />
-                        </span>
-                        <span>
-                          <span className="block text-xs font-extrabold text-brand sm:text-sm">
-                            {label}
-                          </span>
-                        </span>
-                      </button>
-                    ))}
-                    {origin === "counter" && (
-                      <div className="flex gap-1 rounded-xl bg-white p-1">
-                        {[
-                          { id: "takeaway", label: "Para llevar" },
-                          { id: "dine_in", label: "En el local" },
-                        ].map((option) => (
-                          <Button
-                            key={option.id}
-                            variant={
-                              fulfillment === option.id ? "secondary" : "ghost"
-                            }
-                            className="min-h-12"
-                            aria-pressed={fulfillment === option.id}
-                            disabled={locked}
-                            onClick={() => {
-                              setFulfillment(option.id);
-                              setTableId("");
-                            }}
-                          >
-                            {option.label}
-                          </Button>
-                        ))}
-                      </div>
-                    )}
-                    <Button
-                      variant="ghost"
-                      className="min-h-12"
-                      disabled={locked}
-                      aria-expanded={customerOpen}
-                      onClick={() => setCustomerOpen((v) => !v)}
-                    >
-                      {customerId ? "Cambiar cliente" : "Cliente ocasional"}
-                    </Button>
-                  </div>
+                  <OrderControls
+                    origin={origin}
+                    fulfillment={fulfillment}
+                    locked={locked}
+                    originLocked={lines.length > 0}
+                    onOriginChange={changeOrigin}
+                    onFulfillmentChange={(value) => {
+                      setFulfillment(value);
+                      setTableId("");
+                    }}
+                    actions={orderActions}
+                  />
                 )}
               </div>
               {!isAppend &&
-                (customerOpen ||
-                  origin !== "counter" ||
-                  fulfillment === "dine_in") && (
+                (origin !== "counter" || fulfillment === "dine_in") && (
                   <section className="surface-panel grid shrink-0 gap-3 p-3 sm:grid-cols-2">
-                    {customerOpen && (
-                      <LookupSelect
-                        kind="customers"
-                        label="Cliente"
-                        value={customerId}
-                        disabled={locked}
-                        onChange={setCustomerId}
-                        empty="Consumidor ocasional"
-                      />
-                    )}
                     {origin === "delivery" ? (
                       <>
                         <Control label="Plataforma" required>
@@ -857,20 +903,6 @@ export function SalesManager({
                             placeholder="Ej. 2280061098"
                             onChange={(e) => setExternalId(e.target.value)}
                           />
-                        </Control>
-                        <Control label="Entrega" required>
-                          <select
-                            required
-                            value={fulfillment}
-                            disabled={locked}
-                            className={selectClass}
-                            onChange={(e) => setFulfillment(e.target.value)}
-                          >
-                            <option value="delivery">
-                              Envío de la plataforma
-                            </option>
-                            <option value="pickup">Retiro en el local</option>
-                          </select>
                         </Control>
                       </>
                     ) : origin === "table" ? (
@@ -934,7 +966,18 @@ export function SalesManager({
                 onCatalogueLoaded={warmConfigurations}
               />
             </div>
-            <div className="flex min-h-0 min-w-0 flex-col gap-2">
+            <div
+              data-pos-order
+              className={`${tabletPanel === "order" ? "flex" : "hidden"} min-h-0 min-w-0 flex-col gap-2 lg:flex`}
+            >
+              <Button
+                variant="outline"
+                className="min-h-12 justify-start lg:hidden"
+                onClick={() => setTabletPanel("products")}
+              >
+                <ArrowLeft size={18} />
+                Seguir agregando productos
+              </Button>
               <Cart
                 key={`${branchId}:${channel}:${draftGeneration}`}
                 onEdit={(index) =>
@@ -1035,6 +1078,31 @@ export function SalesManager({
               )}
             </div>
           </div>
+          {tabletPanel === "products" && (
+            <div className="sticky bottom-0 z-10 bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden">
+              <Button
+                data-pos-order-summary
+                className="min-h-16 w-full justify-between gap-4 rounded-xl px-5 text-base shadow-lg"
+                onClick={() => setTabletPanel("order")}
+              >
+                <span className="flex items-center gap-3">
+                  <ShoppingBag size={22} />
+                  <span>
+                    Ver pedido ·{" "}
+                    {lines.reduce((sum, line) => sum + line.quantity, 0)} unid.
+                  </span>
+                </span>
+                <span
+                  className="flex items-center gap-3"
+                  aria-live="polite"
+                  aria-atomic="true"
+                >
+                  {total === null ? "Revisar total" : money(total)}
+                  <ArrowRight size={20} />
+                </span>
+              </Button>
+            </div>
+          )}
         </>
       )}
       <Dialog open={stockHelpOpen} onOpenChange={setStockHelpOpen}>
@@ -1127,6 +1195,8 @@ export function SalesManager({
               disabled={locked}
               onClick={() => {
                 setLines([]);
+                setLocatorNumber(null);
+                setLocatorMode("automatic");
                 setDraftGeneration((n) => n + 1);
                 setNotes("");
                 operation.clearError();
@@ -1155,12 +1225,16 @@ export function SalesManager({
             sale={detail}
             canCancel={role !== "staff"}
             locked={locked}
+            onLocatorChanged={() => void refreshLocatorDetail()}
             onPay={() => {
               operation.clearError();
               setPaymentOpen(true);
             }}
             onAdd={() => {
               setView("append");
+              setTabletPanel("products");
+              setLocatorNumber(null);
+              setLocatorMode("automatic");
               setChannel("counter");
               setLines([]);
               setDraftGeneration((n) => n + 1);
@@ -1210,6 +1284,7 @@ export function SalesManager({
           }
           exact={view !== "detail" && origin === "counter"}
           locked={operation.locked}
+          checkoutIssue={view === "detail" ? "" : locatorIssue || customerIssue}
           busy={operation.busy}
           error={operation.error}
           uncertain={operation.uncertain}

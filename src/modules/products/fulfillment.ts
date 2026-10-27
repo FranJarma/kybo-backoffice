@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import type { Tx } from "@/db/types";
 import {
@@ -13,7 +13,8 @@ import { requireCatalogManagement } from "../branches/context";
 import { loadConfiguration } from "../recipes/configuration";
 import { resolveComposition } from "../recipes/composition";
 import type { OperationalContext } from "../operations/types";
-import type { Selection } from "../modifiers/types";
+import type { Selection, ResolvedComposition } from "../modifiers/types";
+import type { SaleChannel } from "../sales/types";
 import { convertToBase } from "../items/units";
 import {
   integer,
@@ -130,6 +131,7 @@ export async function resolveFulfillment(
     quantity: string;
     expectedVersionId: string;
     selections: Selection[];
+    channel?: SaleChannel;
   },
 ) {
   const [enabled] = await tx
@@ -152,53 +154,89 @@ export async function resolveFulfillment(
       eq(productFulfillmentVersions.id, productFulfillments.versionId),
     )
     .where(eq(productFulfillments.productId, input.productId));
-  if (!version || version.version.id !== input.expectedVersionId)
-    fail("Cambió la configuración del producto. Actualizá el pedido.");
+  return resolveFulfillmentComposition(tx, version?.version, input);
+}
+
+/** The caller holds the product and branch-product SHARE locks for this catalog version. */
+export async function resolveFulfillmentComposition(
+  tx: Tx,
+  version: typeof productFulfillmentVersions.$inferSelect | undefined | null,
+  input: {
+    productId: string;
+    quantity: string;
+    expectedVersionId: string;
+    selections: Selection[];
+    channel?: SaleChannel;
+  },
+) {
+  if (
+    !version ||
+    version.productId !== input.productId ||
+    version.id !== input.expectedVersionId
+  )
+    return fail("Cambió la configuración del producto. Actualizá el pedido.");
   const quantity = integer(convertToBase(input.quantity, "unit", "unit"));
   if (quantity <= 0n) fail("Cantidad inválida.");
   let components: { itemId: string; quantity: string }[];
-  if (version.version.mode === "direct") {
+  let composition: ResolvedComposition = {
+    components: [],
+    modifiers: [],
+    surcharge: "0.00",
+  };
+  if (version.mode === "direct") {
     if (input.selections.length)
       fail("La venta directa no admite modificadores.");
     components = [
       {
-        itemId: version.version.itemId!,
+        itemId: version.itemId!,
         quantity: safeQuantity(
-          exactDivision(integer(version.version.quantity!) * quantity, SCALE),
+          exactDivision(integer(version.quantity!) * quantity, SCALE),
         ),
       },
     ];
   } else {
-    const config = await loadConfiguration(
-      tx,
-      version.version.recipeVersionId!,
-    );
+    const config = await loadConfiguration(tx, version.recipeVersionId!);
     if (config.model !== "configurable")
       fail("Convertí la receta anterior antes de habilitar su inventario.");
-    components = resolveComposition(config, input.selections).components.map(
-      (c) => ({
-        itemId: c.itemId,
-        quantity: safeQuantity(
-          exactDivision(integer(c.quantity) * quantity, SCALE),
-        ),
-      }),
-    );
+    composition = resolveComposition(config, input.selections, input.channel);
+    components = composition.components.map((c) => ({
+      itemId: c.itemId,
+      quantity: safeQuantity(
+        exactDivision(integer(c.quantity) * quantity, SCALE),
+      ),
+    }));
   }
-  for (const c of [...components].sort((a, b) =>
-    a.itemId.localeCompare(b.itemId),
-  )) {
-    const [item] = await tx
-      .select()
-      .from(items)
-      .where(eq(items.id, c.itemId))
-      .for("share");
+  const componentItems = components.length
+    ? await tx
+        .select()
+        .from(items)
+        .where(
+          inArray(
+            items.id,
+            components.map((c) => c.itemId),
+          ),
+        )
+        .orderBy(asc(items.id))
+        .for("share")
+    : [];
+  for (const c of components) {
+    const item = componentItems.find((i) => i.id === c.itemId);
+    const snapshot = composition.components.find((i) => i.itemId === c.itemId);
     if (
       !item ||
       item.archivedAt ||
       item.class === "unclassified" ||
-      (version.version.mode === "recipe" && !item.recipeUsable)
+      (version.mode === "recipe" &&
+        (!item.recipeUsable || snapshot?.baseUnit !== item.baseUnit))
     )
-      fail("La composición incluye un artículo no habilitado.");
+      return fail("La composición incluye un artículo no habilitado.");
+    if (version.mode === "direct")
+      composition.components.push({
+        ...c,
+        name: item.name,
+        baseUnit: item.baseUnit,
+        archived: false,
+      });
   }
-  return { version: version.version, components };
+  return { version, components, composition };
 }

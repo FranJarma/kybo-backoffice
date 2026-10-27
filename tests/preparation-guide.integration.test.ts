@@ -106,6 +106,7 @@ it("conserva la guía del pedido confirmado y hereda la guía al editar recetas 
     .from(productFulfillments)
     .where(eq(productFulfillments.productId, product.id));
   const sale = await createSalesService(ctx.db).create(actor, {
+    locatorNumber: 1,
     requestId: randomUUID(),
     origin: "counter",
     channel: "counter",

@@ -29,6 +29,7 @@ export type PrepTask = {
   saleId: string;
   saleNumber: number;
   sequence: number;
+  locatorNumber?: number | null;
   origin: SaleOrigin;
   channel: SaleChannel;
   tableName: string | null;

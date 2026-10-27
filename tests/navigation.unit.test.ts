@@ -8,6 +8,37 @@ import {
   navigationIsActive,
 } from "../src/lib/navigation";
 describe("navegación por áreas", () => {
+  it("pone Inicio antes del día bajo Negocio e integra las compras", () => {
+    const entries = visibleNavigation({ role: "admin" });
+    expect(entries.slice(0, 2).map((n) => [n.id, n.area])).toEqual([
+      ["home", "Negocio"],
+      ["daily-operations", "Negocio"],
+    ]);
+    expect(entries.some((n) => n.id === "supply-alerts")).toBe(false);
+    expect(entries.find((n) => n.id === "purchases")?.label).toBe("Compras");
+  });
+  it("da acceso a mínimos en inventario solo al encargado y administrador", () => {
+    for (const role of ["manager", "admin"]) {
+      const entry = visibleNavigation({ role }).find(
+        (n) => n.href === "/inventory/replenishment",
+      );
+      expect(entry).toMatchObject({
+        label: "Mínimos de reposición",
+        area: "Inventario y compras",
+        parent: "inventory",
+      });
+    }
+    expect(
+      visibleNavigation({ role: "staff", catalogManager: true }).some(
+        (n) => n.href === "/inventory/replenishment",
+      ),
+    ).toBe(false);
+    expect(
+      breadcrumbs("/inventory/replenishment", { role: "manager" }).map(
+        (b) => b.label,
+      ),
+    ).toEqual(["Inicio", "Inventario y compras", "Mínimos de reposición"]);
+  });
   it("reserva sucursales y ubicaciones al administrador aunque el encargado gestione catálogo", () => {
     expect(
       visibleNavigation({ role: "admin" }).some((n) => n.id === "branches"),
@@ -77,6 +108,7 @@ describe("navegación por áreas", () => {
   });
   it("personal no recibe enlaces restringidos", () => {
     expect(visibleNavigation({ role: "staff" }).map((n) => n.id)).toEqual([
+      "daily-operations",
       "sales",
       "tables",
       "kitchen",

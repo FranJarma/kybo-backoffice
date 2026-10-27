@@ -169,6 +169,34 @@
       "when": 1792420000000,
       "tag": "0023_costing_iibb",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1792660000000,
+      "tag": "0024_order_pickup",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792670000000,
+      "tag": "0025_daily_operations",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1792760000000,
+      "tag": "0026_supply_alerts",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1792770000000,
+      "tag": "0027_purchase_orders",
+      "breakpoints": true
     }
   ]
 }

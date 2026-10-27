@@ -78,49 +78,7 @@ export function createTransferService(db: AppDb) {
         { id, ...meta },
         async (tx, ctx, operationId) => {
           manager(ctx);
-          const transfer = await lockTransfer(
-            tx,
-            ctx,
-            id,
-            "origin",
-            meta.expectedRevision,
-          );
-          if (transfer.state !== "confirmed")
-            invalid("Solo puede anularse un traslado antes del despacho.");
-          const rows = await tx
-            .select()
-            .from(transferAllocations)
-            .where(eq(transferAllocations.transferId, id));
-          const [origin] = await tx
-            .select({ reservationId: stockReservations.id })
-            .from(stockDocuments)
-            .innerJoin(
-              stockReservations,
-              eq(stockReservations.documentId, stockDocuments.id),
-            )
-            .where(
-              and(
-                eq(stockDocuments.transferId, id),
-                eq(stockDocuments.branchId, ctx.branchId),
-              ),
-            );
-          if (!origin) invalid("Falta la reserva del traslado.");
-          await settleReservation(tx, ctx, {
-            operationId,
-            reservationId: origin.reservationId,
-            consume: [],
-            release: rows.map((r) => ({
-              itemId: r.itemId,
-              lotId: r.lotId,
-              locationId: transfer.originLocationId,
-              quantity: r.quantity,
-            })),
-          });
-          await tx
-            .update(stockTransfers)
-            .set({ state: "cancelled", revision: transfer.revision + 1 })
-            .where(eq(stockTransfers.id, id));
-          return { id, revision: transfer.revision + 1 };
+          return cancelTransferInTransaction(tx, ctx, operationId, id, meta);
         },
       );
     },
@@ -201,16 +159,14 @@ export function createTransferService(db: AppDb) {
               ],
             });
           }
-          await tx
-            .insert(transferResolutions)
-            .values({
-              operationId,
-              allocationId: row.id,
-              kind: input.kind,
-              quantity: input.quantity,
-              value: value === null ? null : six(value),
-              reason: input.reason,
-            });
+          await tx.insert(transferResolutions).values({
+            operationId,
+            allocationId: row.id,
+            kind: input.kind,
+            quantity: input.quantity,
+            value: value === null ? null : six(value),
+            reason: input.reason,
+          });
           row.resolved = six(integer(row.resolved) + q);
           row.settledValue = six(integer(row.settledValue) + (value ?? 0n));
           await tx
@@ -243,61 +199,7 @@ export function createTransferService(db: AppDb) {
         input,
         async (tx, ctx, operationId) => {
           manager(ctx);
-          const [destination] = await tx
-            .select()
-            .from(locations)
-            .where(eq(locations.id, input.destinationLocationId))
-            .for("share");
-          if (
-            !destination ||
-            destination.archivedAt ||
-            destination.id === input.originLocationId
-          )
-            invalid("Elegí otra ubicación de destino activa.");
-          const [destinationBranch] = await tx
-            .select()
-            .from(branches)
-            .where(eq(branches.id, destination.branchId))
-            .for("share");
-          if (!destinationBranch || destinationBranch.archivedAt)
-            invalid("La sucursal de destino no está activa.");
-          const [transfer] = await tx
-            .insert(stockTransfers)
-            .values({
-              originBranchId: ctx.branchId,
-              destinationBranchId: destination.branchId,
-              originLocationId: input.originLocationId,
-              destinationLocationId: destination.id,
-              reason: input.reason,
-            })
-            .returning();
-          const [document] = await tx
-            .insert(stockDocuments)
-            .values({
-              branchId: ctx.branchId,
-              kind: "transfer",
-              transferId: transfer.id,
-            })
-            .returning();
-          const reservation = await reserveStock(tx, ctx, {
-            operationId,
-            documentId: document.id,
-            demands: input.demands.map((d) => ({
-              ...d,
-              locationId: input.originLocationId,
-            })),
-          });
-          await tx
-            .insert(transferAllocations)
-            .values(
-              reservation.allocations.map((a) => ({
-                transferId: transfer.id,
-                itemId: a.itemId,
-                lotId: a.lotId,
-                quantity: a.quantity,
-              })),
-            );
-          return { id: transfer.id, revision: transfer.revision };
+          return confirmTransferInTransaction(tx, ctx, operationId, input);
         },
       );
     },
@@ -316,111 +218,7 @@ export function createTransferService(db: AppDb) {
         { id, ...meta },
         async (tx, ctx, operationId) => {
           manager(ctx);
-          const transfer = await lockTransfer(
-            tx,
-            ctx,
-            id,
-            "origin",
-            meta.expectedRevision,
-          );
-          if (transfer.state !== "confirmed")
-            invalid("El traslado ya fue despachado o anulado.");
-          const rows = await tx
-            .select()
-            .from(transferAllocations)
-            .where(eq(transferAllocations.transferId, id))
-            .orderBy(transferAllocations.itemId, transferAllocations.lotId)
-            .for("update");
-          await lockStock(
-            tx,
-            ctx,
-            rows.map((r) => ({
-              itemId: r.itemId,
-              locationId: transfer.originLocationId,
-            })),
-            true,
-          );
-          const [origin] = await tx
-            .select({
-              documentId: stockDocuments.id,
-              reservationId: stockReservations.id,
-            })
-            .from(stockDocuments)
-            .innerJoin(
-              stockReservations,
-              eq(stockReservations.documentId, stockDocuments.id),
-            )
-            .where(
-              and(
-                eq(stockDocuments.transferId, id),
-                eq(stockDocuments.branchId, ctx.branchId),
-              ),
-            );
-          if (!origin) invalid("Falta la reserva del traslado.");
-          const allocations = rows.map((r) => ({
-            itemId: r.itemId,
-            lotId: r.lotId,
-            locationId: transfer.originLocationId,
-            quantity: r.quantity,
-          }));
-          await settleReservation(tx, ctx, {
-            reservationId: origin.reservationId,
-            consume: allocations,
-            release: [],
-            operationId,
-          });
-          const sameBranch =
-            transfer.originBranchId === transfer.destinationBranchId;
-          for (const [index, row] of rows.entries()) {
-            const [movement] = await postMovement(tx, ctx, {
-              operationId,
-              documentId: origin.documentId,
-              action: "transfer",
-              reason: transfer.reason,
-              legs: [
-                {
-                  ...allocations[index],
-                  direction: "out",
-                  incomingValue: null,
-                },
-              ],
-            });
-            const dispatchValue =
-              movement.value === null ? null : six(-integer(movement.value));
-            if (sameBranch)
-              await postMovement(tx, ctx, {
-                operationId,
-                documentId: origin.documentId,
-                action: "transfer",
-                reason: transfer.reason,
-                legs: [
-                  {
-                    ...allocations[index],
-                    locationId: transfer.destinationLocationId,
-                    direction: "in",
-                    incomingValue: dispatchValue,
-                  },
-                ],
-              });
-            await tx
-              .update(transferAllocations)
-              .set({
-                dispatchValue,
-                received: sameBranch ? row.quantity : "0.000000",
-                settledValue: sameBranch
-                  ? (dispatchValue ?? "0.000000")
-                  : "0.000000",
-              })
-              .where(eq(transferAllocations.id, row.id));
-          }
-          await tx
-            .update(stockTransfers)
-            .set({
-              state: sameBranch ? "received" : "in_transit",
-              revision: transfer.revision + 1,
-            })
-            .where(eq(stockTransfers.id, id));
-          return { id, revision: transfer.revision + 1 };
+          return dispatchTransferInTransaction(tx, ctx, operationId, id, meta);
         },
       );
     },
@@ -541,4 +339,232 @@ export function createTransferService(db: AppDb) {
       );
     },
   };
+}
+
+export async function dispatchTransferInTransaction(
+  tx: Tx,
+  ctx: OperationalContext,
+  operationId: string,
+  id: string,
+  meta: CommandMeta,
+) {
+  const transfer = await lockTransfer(
+    tx,
+    ctx,
+    id,
+    "origin",
+    meta.expectedRevision,
+  );
+  if (ctx.role === "staff" && transfer.destinationBranchId !== ctx.branchId)
+    throw new AppError("FORBIDDEN", "Solo traslados internos asignados.", 403);
+  if (transfer.state !== "confirmed")
+    invalid("El traslado ya fue despachado o anulado.");
+  const rows = await tx
+    .select()
+    .from(transferAllocations)
+    .where(eq(transferAllocations.transferId, id))
+    .orderBy(transferAllocations.itemId, transferAllocations.lotId)
+    .for("update");
+  await lockStock(
+    tx,
+    ctx,
+    rows.map((r) => ({
+      itemId: r.itemId,
+      locationId: transfer.originLocationId,
+    })),
+    true,
+  );
+  const [origin] = await tx
+    .select({
+      documentId: stockDocuments.id,
+      reservationId: stockReservations.id,
+    })
+    .from(stockDocuments)
+    .innerJoin(
+      stockReservations,
+      eq(stockReservations.documentId, stockDocuments.id),
+    )
+    .where(
+      and(
+        eq(stockDocuments.transferId, id),
+        eq(stockDocuments.branchId, ctx.branchId),
+      ),
+    );
+  if (!origin) invalid("Falta la reserva del traslado.");
+  const allocations = rows.map((r) => ({
+    itemId: r.itemId,
+    lotId: r.lotId,
+    locationId: transfer.originLocationId,
+    quantity: r.quantity,
+  }));
+  await settleReservation(tx, ctx, {
+    reservationId: origin.reservationId,
+    consume: allocations,
+    release: [],
+    operationId,
+  });
+  const sameBranch = transfer.originBranchId === transfer.destinationBranchId;
+  for (const [index, row] of rows.entries()) {
+    const [movement] = await postMovement(tx, ctx, {
+      operationId,
+      documentId: origin.documentId,
+      action: "transfer",
+      reason: transfer.reason,
+      legs: [
+        {
+          ...allocations[index],
+          direction: "out",
+          incomingValue: null,
+        },
+      ],
+    });
+    const dispatchValue =
+      movement.value === null ? null : six(-integer(movement.value));
+    if (sameBranch)
+      await postMovement(tx, ctx, {
+        operationId,
+        documentId: origin.documentId,
+        action: "transfer",
+        reason: transfer.reason,
+        legs: [
+          {
+            ...allocations[index],
+            locationId: transfer.destinationLocationId,
+            direction: "in",
+            incomingValue: dispatchValue,
+          },
+        ],
+      });
+    await tx
+      .update(transferAllocations)
+      .set({
+        dispatchValue,
+        received: sameBranch ? row.quantity : "0.000000",
+        settledValue: sameBranch ? (dispatchValue ?? "0.000000") : "0.000000",
+      })
+      .where(eq(transferAllocations.id, row.id));
+  }
+  await tx
+    .update(stockTransfers)
+    .set({
+      state: sameBranch ? "received" : "in_transit",
+      revision: transfer.revision + 1,
+    })
+    .where(eq(stockTransfers.id, id));
+  return { id, revision: transfer.revision + 1 };
+}
+
+export async function cancelTransferInTransaction(
+  tx: Tx,
+  ctx: OperationalContext,
+  operationId: string,
+  id: string,
+  meta: CommandMeta,
+) {
+  manager(ctx);
+  const transfer = await lockTransfer(
+    tx,
+    ctx,
+    id,
+    "origin",
+    meta.expectedRevision,
+  );
+  if (transfer.state !== "confirmed")
+    invalid("Solo puede anularse un traslado antes del despacho.");
+  const rows = await tx
+    .select()
+    .from(transferAllocations)
+    .where(eq(transferAllocations.transferId, id));
+  const [origin] = await tx
+    .select({ reservationId: stockReservations.id })
+    .from(stockDocuments)
+    .innerJoin(
+      stockReservations,
+      eq(stockReservations.documentId, stockDocuments.id),
+    )
+    .where(
+      and(
+        eq(stockDocuments.transferId, id),
+        eq(stockDocuments.branchId, ctx.branchId),
+      ),
+    );
+  if (!origin) invalid("Falta la reserva del traslado.");
+  await settleReservation(tx, ctx, {
+    operationId,
+    reservationId: origin.reservationId,
+    consume: [],
+    release: rows.map((r) => ({
+      itemId: r.itemId,
+      lotId: r.lotId,
+      locationId: transfer.originLocationId,
+      quantity: r.quantity,
+    })),
+  });
+  await tx
+    .update(stockTransfers)
+    .set({ state: "cancelled", revision: transfer.revision + 1 })
+    .where(eq(stockTransfers.id, id));
+  return { id, revision: transfer.revision + 1 };
+}
+
+export async function confirmTransferInTransaction(
+  tx: Tx,
+  ctx: OperationalContext,
+  operationId: string,
+  input: z.infer<typeof confirmSchema>,
+) {
+  manager(ctx);
+  const [destination] = await tx
+    .select()
+    .from(locations)
+    .where(eq(locations.id, input.destinationLocationId))
+    .for("share");
+  if (
+    !destination ||
+    destination.archivedAt ||
+    destination.id === input.originLocationId
+  )
+    invalid("Elegí otra ubicación de destino activa.");
+  const [destinationBranch] = await tx
+    .select()
+    .from(branches)
+    .where(eq(branches.id, destination.branchId))
+    .for("share");
+  if (!destinationBranch || destinationBranch.archivedAt)
+    invalid("La sucursal de destino no está activa.");
+  const [transfer] = await tx
+    .insert(stockTransfers)
+    .values({
+      originBranchId: ctx.branchId,
+      destinationBranchId: destination.branchId,
+      originLocationId: input.originLocationId,
+      destinationLocationId: destination.id,
+      reason: input.reason,
+    })
+    .returning();
+  const [document] = await tx
+    .insert(stockDocuments)
+    .values({
+      branchId: ctx.branchId,
+      kind: "transfer",
+      transferId: transfer.id,
+    })
+    .returning();
+  const reservation = await reserveStock(tx, ctx, {
+    operationId,
+    documentId: document.id,
+    demands: input.demands.map((d) => ({
+      ...d,
+      locationId: input.originLocationId,
+    })),
+  });
+  await tx.insert(transferAllocations).values(
+    reservation.allocations.map((a) => ({
+      transferId: transfer.id,
+      itemId: a.itemId,
+      lotId: a.lotId,
+      quantity: a.quantity,
+    })),
+  );
+  return { id: transfer.id, revision: transfer.revision };
 }

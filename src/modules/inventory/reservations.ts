@@ -13,6 +13,7 @@ import {
 import { stockDocuments } from "@/db/inventory-document-schema";
 import type { OperationalContext, StockAllocation } from "../operations/types";
 import { lockStock } from "./locking";
+import { assertStockAvailable } from "./stock-shortages";
 import { allocateFefo } from "./availability";
 import { businessDate } from "../operations/business-date";
 import { integer, six } from "./decimal";
@@ -65,6 +66,7 @@ export async function reserveStock(
   );
   const tracked = await lockStock(tx, ctx, ordered);
   ordered = ordered.filter((d) => tracked.has(d.itemId));
+  await assertStockAvailable(tx, ctx, ordered, tracked);
   const [reservation] = await tx
     .insert(stockReservations)
     .values({

@@ -2,11 +2,19 @@ export type NavigationAccess = { role: string; catalogManager?: boolean };
 export const navigation = [
   {
     id: "home",
-    area: "Inicio",
+    area: "Negocio",
     label: "Inicio",
     href: "/",
     icon: "House",
     access: "manager",
+  },
+  {
+    id: "daily-operations",
+    area: "Negocio",
+    label: "Operación del día",
+    href: "/operations/day",
+    icon: "ListChecks",
+    access: "all",
   },
   {
     id: "sales",
@@ -131,6 +139,25 @@ export const navigation = [
     icon: "ShoppingCart",
     access: "manager",
     parent: "inventory",
+  },
+  {
+    id: "replenishment",
+    area: "Inventario y compras",
+    label: "Mínimos de reposición",
+    href: "/inventory/replenishment",
+    icon: "ListChecks",
+    access: "manager",
+    parent: "inventory",
+  },
+  {
+    id: "supply-alerts",
+    area: "Inventario y compras",
+    label: "Compras anticipadas",
+    href: "/inventory/supply-alerts",
+    icon: "ShoppingCart",
+    access: "manager",
+    parent: "inventory",
+    sidebar: false,
   },
   {
     id: "presentations",

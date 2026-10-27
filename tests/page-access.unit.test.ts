@@ -33,6 +33,12 @@ describe("acceso directo a páginas", () => {
     mocks.actor.role = "manager";
     await expect(requireManagerPage()).resolves.toBe(mocks.actor);
   });
+  it("rechaza el acceso directo del personal a mínimos aunque gestione catálogo", async () => {
+    mocks.actor.catalogManager = true;
+    const { default: ReplenishmentPage } =
+      await import("../src/app/(operations)/inventory/replenishment/page");
+    await expect(ReplenishmentPage()).rejects.toThrow("redirect:/sales");
+  });
   it("consulta la autorización real del catálogo antes de mostrarlo", async () => {
     mocks.read.mockRejectedValue(new AppError("FORBIDDEN", "denied", 403));
     await expect(requireCatalogPage()).rejects.toThrow("redirect:/sales");

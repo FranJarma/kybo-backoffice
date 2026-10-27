@@ -91,6 +91,7 @@ beforeAll(async () => {
     .values({ name: "Cash", kind: "cash" })
     .returning();
   input = {
+    locatorNumber: 1,
     payments: [{ collector: "local", methodId: method.id, amount: "21400" }],
     requestId: crypto.randomUUID(),
     origin: "counter",
@@ -208,6 +209,7 @@ it("cancels unprepared combo reservations without consuming stock", async () => 
   const service = createSalesService(c.db),
     sale = await service.create(actor, {
       ...input,
+      locatorNumber: 2,
       requestId: crypto.randomUUID(),
     });
   const before = await c.db.select().from(stockMovements);
@@ -246,6 +248,8 @@ it("keeps individual product pricing and fulfillment unchanged", async () => {
     .where(eq(saleLines.lineKind, "combo_component"));
   const sale = await createSalesService(c.db).create(actor, {
     ...input,
+    customerName: "  Martina  ",
+    locatorNumber: 3,
     requestId: crypto.randomUUID(),
     lines: [
       {
@@ -261,6 +265,11 @@ it("keeps individual product pricing and fulfillment unchanged", async () => {
       { ...(input.payments as Record<string, unknown>[])[0], amount: "8000" },
     ],
   });
+  expect(sale.customerId).toBeNull();
+  expect(sale.customerName).toBe("Martina");
+  expect(
+    (await createSalesService(c.db).get(actor, sale.id)).customerName,
+  ).toBe("Martina");
   expect(sale.totalAmount).toBe("8000.00");
   expect(sale.orders[0].lines).toHaveLength(1);
   expect(sale.orders[0].lines[0].lineKind).toBe("individual");

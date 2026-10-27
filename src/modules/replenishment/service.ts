@@ -176,148 +176,148 @@ export async function getReplenishmentSnapshot(
   now = new Date(),
 ): Promise<ReplenishmentSnapshot> {
   const ctx = await requireOperationalContext(db, actor, actor.branchId ?? "");
-  return db.transaction(
-    async (tx) => {
-      // Explicit projections never expose item costs to staff. All stock reads share one snapshot.
-      const policies = await tx
-        .select({
-          id: replenishmentPolicies.id,
-          revision: replenishmentPolicies.revision,
-          itemId: items.id,
-          itemName: items.name,
-          baseUnit: items.baseUnit,
-          locationId: locations.id,
-          locationName: locations.name,
-          minimumQuantity: replenishmentPolicies.minimumQuantity,
-          targetQuantity: replenishmentPolicies.targetQuantity,
-          preparationMinutes: replenishmentPolicies.preparationMinutes,
-          enabled: replenishmentPolicies.enabled,
-        })
-        .from(replenishmentPolicies)
-        .innerJoin(items, eq(items.id, replenishmentPolicies.itemId))
-        .innerJoin(
-          locations,
-          and(
-            eq(locations.id, replenishmentPolicies.locationId),
-            eq(locations.branchId, replenishmentPolicies.branchId),
-          ),
-        )
-        .where(
-          and(
-            eq(replenishmentPolicies.branchId, ctx.branchId),
-            eq(items.stockTracked, true),
-            isNull(items.archivedAt),
-            isNull(locations.archivedAt),
-          ),
-        )
-        .orderBy(asc(locations.name), asc(items.name));
-      const [branchLocations, catalog] = await Promise.all([
-        tx
-          .select({ id: locations.id, name: locations.name })
-          .from(locations)
-          .where(
-            and(
-              eq(locations.branchId, ctx.branchId),
-              isNull(locations.archivedAt),
-            ),
-          )
-          .orderBy(asc(locations.name)),
-        tx
-          .select({ id: items.id, name: items.name, baseUnit: items.baseUnit })
-          .from(items)
-          .where(and(eq(items.stockTracked, true), isNull(items.archivedAt)))
-          .orderBy(asc(items.name)),
-      ]);
-      const itemIds = [
-        ...new Set(policies.filter((p) => p.enabled).map((p) => p.itemId)),
-      ];
-      const base = {
-        policies,
-        locations: branchLocations,
-        items: catalog,
-        asOf: now.toISOString(),
-      };
-      if (!itemIds.length) return { ...base, alerts: [] };
-      const [lots, preparation, activeProduction] = await Promise.all([
-        tx
-          .select({
-            id: inventoryLots.id,
-            itemId: inventoryLots.itemId,
-            locationId: locations.id,
-            locationName: locations.name,
-            receivedOn: inventoryLots.receivedOn,
-            expiresOn: inventoryLots.expiresOn,
-            blocked: inventoryLots.blocked,
-            locationBlocked: lotLocationBalances.blocked,
-            quantity: lotLocationBalances.quantity,
-            reserved: lotLocationBalances.reserved,
-          })
-          .from(lotLocationBalances)
-          .innerJoin(
-            inventoryLots,
-            eq(inventoryLots.id, lotLocationBalances.lotId),
-          )
-          .innerJoin(
-            locations,
-            and(
-              eq(locations.id, lotLocationBalances.locationId),
-              eq(locations.branchId, lotLocationBalances.branchId),
-            ),
-          )
-          .where(
-            and(
-              eq(lotLocationBalances.branchId, ctx.branchId),
-              inArray(inventoryLots.itemId, itemIds),
-              isNull(locations.archivedAt),
-            ),
-          ),
-        tx
-          .selectDistinct({ itemId: recipes.outputItemId })
-          .from(recipes)
-          .innerJoin(recipeVersions, eq(recipeVersions.recipeId, recipes.id))
-          .where(
-            and(
-              eq(recipes.kind, "preparation"),
-              inArray(recipes.outputItemId, itemIds),
-            ),
-          ),
-        tx
-          .select({
-            id: productionOrders.id,
-            itemId: productionOrders.outputItemId,
-            locationId: productionOrders.locationId,
-            plannedQuantity: productionOrders.plannedQuantity,
-            state: productionOrders.state,
-            assignedToName: user.name,
-            startedAt: productionOrders.startedAt,
-          })
-          .from(productionOrders)
-          .leftJoin(user, eq(user.id, productionOrders.assignedTo))
-          .where(
-            and(
-              eq(productionOrders.branchId, ctx.branchId),
-              inArray(productionOrders.outputItemId, itemIds),
-              inArray(productionOrders.state, ["planned", "confirmed"]),
-            ),
-          )
-          .orderBy(asc(productionOrders.createdAt)),
-      ]);
-      return {
-        ...base,
-        alerts: buildReplenishmentAlerts({
-          policies,
-          lots,
-          preparationItemIds: preparation.flatMap((p) =>
-            p.itemId ? [p.itemId] : [],
-          ),
-          activeProduction: activeProduction.map((order) => ({
-            ...order,
-            startedAt: order.startedAt?.toISOString() ?? null,
-          })),
-          today: businessDate(now, ctx.timeZone),
-        }),
-      };
-    },
-    { isolationLevel: "repeatable read", accessMode: "read only" },
-  );
+  return db.transaction(async (tx) => readReplenishmentSnapshot(tx, ctx, now), {
+    isolationLevel: "repeatable read",
+    accessMode: "read only",
+  });
+}
+
+export async function readReplenishmentSnapshot(
+  tx: Tx,
+  ctx: OperationalContext,
+  now: Date,
+): Promise<ReplenishmentSnapshot> {
+  // Explicit projections never expose item costs to staff. All stock reads share one snapshot.
+  const policies = await tx
+    .select({
+      id: replenishmentPolicies.id,
+      revision: replenishmentPolicies.revision,
+      itemId: items.id,
+      itemName: items.name,
+      baseUnit: items.baseUnit,
+      locationId: locations.id,
+      locationName: locations.name,
+      minimumQuantity: replenishmentPolicies.minimumQuantity,
+      targetQuantity: replenishmentPolicies.targetQuantity,
+      preparationMinutes: replenishmentPolicies.preparationMinutes,
+      enabled: replenishmentPolicies.enabled,
+    })
+    .from(replenishmentPolicies)
+    .innerJoin(items, eq(items.id, replenishmentPolicies.itemId))
+    .innerJoin(
+      locations,
+      and(
+        eq(locations.id, replenishmentPolicies.locationId),
+        eq(locations.branchId, replenishmentPolicies.branchId),
+      ),
+    )
+    .where(
+      and(
+        eq(replenishmentPolicies.branchId, ctx.branchId),
+        eq(items.stockTracked, true),
+        isNull(items.archivedAt),
+        isNull(locations.archivedAt),
+      ),
+    )
+    .orderBy(asc(locations.name), asc(items.name));
+  const [branchLocations, catalog] = await Promise.all([
+    tx
+      .select({ id: locations.id, name: locations.name })
+      .from(locations)
+      .where(
+        and(eq(locations.branchId, ctx.branchId), isNull(locations.archivedAt)),
+      )
+      .orderBy(asc(locations.name)),
+    tx
+      .select({ id: items.id, name: items.name, baseUnit: items.baseUnit })
+      .from(items)
+      .where(and(eq(items.stockTracked, true), isNull(items.archivedAt)))
+      .orderBy(asc(items.name)),
+  ]);
+  const itemIds = [
+    ...new Set(policies.filter((p) => p.enabled).map((p) => p.itemId)),
+  ];
+  const base = {
+    policies,
+    locations: branchLocations,
+    items: catalog,
+    asOf: now.toISOString(),
+  };
+  if (!itemIds.length) return { ...base, alerts: [] };
+  const [lots, preparation, activeProduction] = await Promise.all([
+    tx
+      .select({
+        id: inventoryLots.id,
+        itemId: inventoryLots.itemId,
+        locationId: locations.id,
+        locationName: locations.name,
+        receivedOn: inventoryLots.receivedOn,
+        expiresOn: inventoryLots.expiresOn,
+        blocked: inventoryLots.blocked,
+        locationBlocked: lotLocationBalances.blocked,
+        quantity: lotLocationBalances.quantity,
+        reserved: lotLocationBalances.reserved,
+      })
+      .from(lotLocationBalances)
+      .innerJoin(inventoryLots, eq(inventoryLots.id, lotLocationBalances.lotId))
+      .innerJoin(
+        locations,
+        and(
+          eq(locations.id, lotLocationBalances.locationId),
+          eq(locations.branchId, lotLocationBalances.branchId),
+        ),
+      )
+      .where(
+        and(
+          eq(lotLocationBalances.branchId, ctx.branchId),
+          inArray(inventoryLots.itemId, itemIds),
+          isNull(locations.archivedAt),
+        ),
+      ),
+    tx
+      .selectDistinct({ itemId: recipes.outputItemId })
+      .from(recipes)
+      .innerJoin(recipeVersions, eq(recipeVersions.recipeId, recipes.id))
+      .where(
+        and(
+          eq(recipes.kind, "preparation"),
+          inArray(recipes.outputItemId, itemIds),
+        ),
+      ),
+    tx
+      .select({
+        id: productionOrders.id,
+        itemId: productionOrders.outputItemId,
+        locationId: productionOrders.locationId,
+        plannedQuantity: productionOrders.plannedQuantity,
+        state: productionOrders.state,
+        assignedToName: user.name,
+        startedAt: productionOrders.startedAt,
+      })
+      .from(productionOrders)
+      .leftJoin(user, eq(user.id, productionOrders.assignedTo))
+      .where(
+        and(
+          eq(productionOrders.branchId, ctx.branchId),
+          inArray(productionOrders.outputItemId, itemIds),
+          inArray(productionOrders.state, ["planned", "confirmed"]),
+        ),
+      )
+      .orderBy(asc(productionOrders.createdAt)),
+  ]);
+  return {
+    ...base,
+    alerts: buildReplenishmentAlerts({
+      policies,
+      lots,
+      preparationItemIds: preparation.flatMap((p) =>
+        p.itemId ? [p.itemId] : [],
+      ),
+      activeProduction: activeProduction.map((order) => ({
+        ...order,
+        startedAt: order.startedAt?.toISOString() ?? null,
+      })),
+      today: businessDate(now, ctx.timeZone),
+    }),
+  };
 }

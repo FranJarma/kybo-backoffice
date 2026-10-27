@@ -78,6 +78,11 @@ const formTabClassName =
 const ItemSuppliersTab = dynamic(() =>
   import("@/components/items/suppliers-tab").then((m) => m.ItemSuppliersTab),
 );
+const ItemPurchaseSettings = dynamic(() =>
+  import("@/components/items/purchase-settings").then(
+    (m) => m.ItemPurchaseSettings,
+  ),
+);
 const ProductRecipeTab = dynamic(() =>
   import("@/components/products/recipe-tab").then((m) => m.ProductRecipeTab),
 );
@@ -231,12 +236,14 @@ export function CatalogManager({
   ingredientsOnly = false,
   actorId = "",
   canManagePaymentMethods = false,
+  canManagePurchases = false,
 }: {
   entity: Entity;
   definition: EntityDefinition;
   ingredientsOnly?: boolean;
   actorId?: string;
   canManagePaymentMethods?: boolean;
+  canManagePurchases?: boolean;
 }) {
   const [rows, setRows] = useState<CatalogRow[]>([]),
     [total, setTotal] = useState(0),
@@ -283,7 +290,9 @@ export function CatalogManager({
   >("product");
   const [recipeOpened, setRecipeOpened] = useState(false);
   const [recipeBusy, setRecipeBusy] = useState(false);
-  const [itemTab, setItemTab] = useState<"details" | "suppliers">("details");
+  const [itemTab, setItemTab] = useState<"details" | "suppliers" | "purchases">(
+    "details",
+  );
   const [suppliersOpened, setSuppliersOpened] = useState(false);
   const [suppliersBusy, setSuppliersBusy] = useState(false);
   const [manualCode, setManualCode] = useState(false);
@@ -1296,7 +1305,10 @@ export function CatalogManager({
                           ? "Datos del ingrediente"
                           : "Datos del artículo",
                       ],
-                      ["suppliers", "Proveedores y compras"],
+                      ["suppliers", "Proveedores"],
+                      ...(canManagePurchases
+                        ? [["purchases", "Reposición y compras"] as const]
+                        : []),
                     ] as const
                   ).map(([tab, label]) => (
                     <button
@@ -1311,7 +1323,7 @@ export function CatalogManager({
                       disabled={
                         saving ||
                         suppliersBusy ||
-                        (tab === "suppliers" && !editing)
+                        (tab !== "details" && !editing)
                       }
                       onClick={() => {
                         setItemTab(tab);
@@ -1346,6 +1358,22 @@ export function CatalogManager({
                       revision={editing.revision}
                       actorId={actorId}
                       onBusy={setSuppliersBusy}
+                    />
+                  </div>
+                )}
+                {editing && canManagePurchases && itemTab === "purchases" && (
+                  <div
+                    role="tabpanel"
+                    id={`${formId}-panel-purchases`}
+                    aria-labelledby={`${formId}-tab-purchases`}
+                    className="min-h-0 flex-1 overflow-y-auto"
+                  >
+                    <ItemPurchaseSettings
+                      key={editing.id}
+                      itemId={editing.id}
+                      actorId={actorId}
+                      onBusy={setSuppliersBusy}
+                      onCancel={() => setItemTab("details")}
                     />
                   </div>
                 )}

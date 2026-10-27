@@ -1,8 +1,10 @@
 import { loadCombo } from "../combos/service";
+import { resolveSaleCustomer } from "./customer";
+import { assignLocator } from "../pickup/service";
 import { lookupProducts } from "./product-lookup";
 import { canSellProduct } from "../products/availability";
 import { requireOperationalContext } from "../branches/context";
-import { resolveFulfillment } from "../products/fulfillment";
+import { resolveFulfillmentComposition } from "../products/fulfillment";
 import {
   productFulfillments,
   productFulfillmentVersions,
@@ -11,13 +13,21 @@ import { branchProducts } from "@/db/branch-schema";
 import { reserveOrder } from "./reservation";
 import { cancelStock } from "../fulfillment/cancellation";
 import { businessDate as branchBusinessDate } from "../operations/business-date";
-import { loadConfiguration } from "@/modules/recipes/configuration";
-import { resolveComposition } from "@/modules/recipes/composition";
 import { saleLineComponents, saleLineModifiers } from "@/db/modifier-schema";
-import { items } from "@/db/business-schema";
 import type { ResolvedComposition } from "@/modules/modifiers/types";
 import { randomUUID } from "node:crypto";
-import { and, asc, count, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNull,
+  or,
+  sql,
+} from "drizzle-orm";
 import { z } from "zod";
 import type { AppDb } from "@/db/client";
 import type { Actor } from "@/lib/access";
@@ -59,12 +69,13 @@ import {
   type PaymentInput,
 } from "./validation";
 import { lockTable, salesTransaction } from "./tables";
-import { saleDetail, summaries } from "./queries";
+import { saleDetail, saleDetailFromRows, summaries } from "./queries";
 import {
   publishOrder,
   cancelSaleTasks,
 } from "@/modules/preparation/publication";
 import type { SaleChannel, SaleList, SaleLookup } from "./types";
+import type { OperationalContext } from "../operations/types";
 
 async function replaySaleDetail(tx: Tx, id: string, branchId: string) {
   // Every mutation locks this header. Keep it stable across the detail queries.
@@ -95,18 +106,11 @@ async function lockSale(
 }
 async function prepareIndividualLines(
   tx: Tx,
-  actor: Actor,
+  ctx: OperationalContext,
   channel: SaleChannel,
   lines: LineInput[],
   included = false,
 ) {
-  const ctx = await requireOperationalContext(tx, actor, actor.branchId ?? "");
-  await tx.insert(recipeGraphLock).values({ id: 1 }).onConflictDoNothing();
-  await tx
-    .select()
-    .from(recipeGraphLock)
-    .where(eq(recipeGraphLock.id, 1))
-    .for("update");
   const catalog = new Map<
     string,
     {
@@ -115,54 +119,69 @@ async function prepareIndividualLines(
       recipeVersionId: string | null;
       vatRate: string | null;
       pricingRevision: number;
+      fulfillment: typeof productFulfillmentVersions.$inferSelect | null;
     }
   >();
-  for (const id of [...new Set(lines.map((l) => l.productId))].sort()) {
+  const productIds = [...new Set(lines.map((l) => l.productId))].sort();
+  // Take catalog locks in a separate statement: a joined SELECT can retain
+  // pre-update prices/fulfillment from its snapshot after waiting on a lock.
+  await tx
+    .select({ id: products.id })
+    .from(products)
+    .where(inArray(products.id, productIds))
+    .orderBy(asc(products.id))
+    .for("share");
+  const catalogRows = await tx
+    .select({
+      product: products,
+      local: branchProducts,
+      price: productPrices.amount,
+      fulfillment: productFulfillmentVersions,
+    })
+    .from(products)
+    .innerJoin(
+      branchProducts,
+      and(
+        eq(branchProducts.productId, products.id),
+        eq(branchProducts.branchId, ctx.branchId),
+      ),
+    )
+    .leftJoin(
+      productPrices,
+      and(
+        eq(productPrices.productId, products.id),
+        eq(productPrices.channel, channel),
+      ),
+    )
+    .leftJoin(
+      productFulfillments,
+      eq(productFulfillments.productId, products.id),
+    )
+    .leftJoin(
+      productFulfillmentVersions,
+      eq(productFulfillmentVersions.id, productFulfillments.versionId),
+    )
+    .where(inArray(products.id, productIds))
+    .orderBy(asc(products.id))
+    .for("share", { of: branchProducts });
+  for (const id of productIds) {
     // Catalog updates also lock product before editing prices. SHARE prevents stale acceptance.
-    const [product] = await tx
-      .select()
-      .from(products)
-      .where(eq(products.id, id))
-      .for("share");
+    const row = catalogRows.find((r) => r.product.id === id);
+    const product = row?.product;
     if (!product || product.archivedAt || product.kind !== "individual")
-      invalid("Elegí productos individuales activos.");
-    const [local] = await tx
-      .select()
-      .from(branchProducts)
-      .where(
-        and(
-          eq(branchProducts.productId, id),
-          eq(branchProducts.branchId, ctx.branchId),
-        ),
-      )
-      .for("share");
+      return invalid("Elegí productos individuales activos.");
+    const local = row!.local;
     if (!canSellProduct(product, local, channel))
       invalid(
         "El producto está agotado o no está disponible en este canal y sucursal.",
       );
-    const [price] = await tx
-      .select()
-      .from(productPrices)
-      .where(
-        and(
-          eq(productPrices.productId, id),
-          eq(productPrices.channel, channel),
-        ),
-      );
-    const [version] = await tx
-      .select({ recipeVersionId: productFulfillmentVersions.recipeVersionId })
-      .from(productFulfillments)
-      .innerJoin(
-        productFulfillmentVersions,
-        eq(productFulfillmentVersions.id, productFulfillments.versionId),
-      )
-      .where(eq(productFulfillments.productId, id));
     catalog.set(id, {
       name: product.name,
-      price: price?.amount ?? null,
-      recipeVersionId: version?.recipeVersionId ?? null,
+      price: row!.price,
+      recipeVersionId: row!.fulfillment?.recipeVersionId ?? null,
       vatRate: product.vatRate,
       pricingRevision: product.revision,
+      fulfillment: row!.fulfillment,
     });
   }
   let total = 0n;
@@ -186,53 +205,23 @@ async function prepareIndividualLines(
       line.expectedComboVersionId
     )
       return invalid("Configuración individual inválida.");
-    const physical = await resolveFulfillment(tx, ctx, {
-      productId: line.productId,
-      quantity: "1.000000",
-      expectedVersionId: line.expectedFulfillmentVersionId,
-      selections: line.modifiers,
-    });
-    let composition: ResolvedComposition = {
-      components: [],
-      modifiers: [],
-      surcharge: "0.00",
-    };
+    const physical = await resolveFulfillmentComposition(
+      tx,
+      product.fulfillment,
+      {
+        productId: line.productId,
+        quantity: "1.000000",
+        expectedVersionId: line.expectedFulfillmentVersionId,
+        selections: line.modifiers,
+        channel,
+      },
+    );
+    const composition = physical.composition;
     if (product.recipeVersionId) {
-      const config = await loadConfiguration(tx, product.recipeVersionId);
-      if (
-        (config.model === "configurable" ||
-          line.expectedRecipeVersionId !== undefined) &&
-        line.expectedRecipeVersionId !== product.recipeVersionId
-      )
+      if (line.expectedRecipeVersionId !== product.recipeVersionId)
         conflict("Cambió la receta. Revisá las opciones.");
-      composition = resolveComposition(config, line.modifiers, channel);
-      for (const c of [...composition.components].sort((a, b) =>
-        a.itemId.localeCompare(b.itemId),
-      )) {
-        const [i] = await tx
-          .select()
-          .from(items)
-          .where(eq(items.id, c.itemId))
-          .for("share");
-        if (!i || i.archivedAt || i.baseUnit !== c.baseUnit)
-          conflict("Un insumo cambió. Revisá el pedido.");
-      }
     } else if (line.modifiers.length || line.expectedRecipeVersionId)
       conflict("El producto no tiene esa receta.");
-    if (physical.version.mode === "direct") {
-      for (const component of physical.components) {
-        const [item] = await tx
-          .select()
-          .from(items)
-          .where(eq(items.id, component.itemId));
-        composition.components.push({
-          ...component,
-          name: item.name,
-          baseUnit: item.baseUnit,
-          archived: false,
-        });
-      }
-    }
     snapshots.push(composition);
     const configuredPrice =
       product.price === null
@@ -281,7 +270,7 @@ async function prepareIndividualLines(
       recipeVersionId: product.recipeVersionId,
     });
   }
-  return { values, snapshots, totalAmount: moneyBound(total) };
+  return { values, snapshots, totalAmount: moneyBound(total), ctx };
 }
 async function prepareLines(
   tx: Tx,
@@ -289,8 +278,6 @@ async function prepareLines(
   channel: SaleChannel,
   lines: LineInput[],
 ) {
-  if (!lines.some((l) => l.expectedComboVersionId || l.comboChoices))
-    return prepareIndividualLines(tx, actor, channel, lines);
   const ctx = await requireOperationalContext(tx, actor, actor.branchId ?? "");
   await tx.insert(recipeGraphLock).values({ id: 1 }).onConflictDoNothing();
   await tx
@@ -298,15 +285,15 @@ async function prepareLines(
     .from(recipeGraphLock)
     .where(eq(recipeGraphLock.id, 1))
     .for("update");
+  if (!lines.some((l) => l.expectedComboVersionId || l.comboChoices))
+    return prepareIndividualLines(tx, ctx, channel, lines);
   const values: Omit<typeof saleLines.$inferInsert, "orderId" | "branchId">[] =
     [];
   const snapshots: ResolvedComposition[] = [];
   let total = 0n;
   for (const line of lines) {
     if (!line.expectedComboVersionId) {
-      const individual = await prepareIndividualLines(tx, actor, channel, [
-        line,
-      ]);
+      const individual = await prepareIndividualLines(tx, ctx, channel, [line]);
       values.push({ ...individual.values[0], position: values.length });
       snapshots.push(individual.snapshots[0]);
       total += integer(individual.totalAmount);
@@ -388,7 +375,7 @@ async function prepareLines(
         invalid("El pedido supera la cantidad máxima de componentes.");
       const child = await prepareIndividualLines(
         tx,
-        actor,
+        ctx,
         channel,
         [
           {
@@ -450,7 +437,7 @@ async function prepareLines(
   }
   if (values.filter((v) => v.lineKind !== "combo").length > 500)
     invalid("Demasiados componentes en el pedido.");
-  return { values, snapshots, totalAmount: moneyBound(total) };
+  return { values, snapshots, totalAmount: moneyBound(total), ctx };
 }
 async function preparePayments(
   tx: Tx,
@@ -506,26 +493,36 @@ async function insertOrder(
   prepared: Awaited<ReturnType<typeof prepareLines>>,
   notes: string,
   operationId: string,
+  locatorNumber?: number | null,
+  locatorMode?: "automatic" | "manual",
 ) {
   const id = randomUUID();
-  const ctx = await requireOperationalContext(tx, actor, actor.branchId ?? "");
-  await tx.insert(saleOrders).values({
-    id,
-    saleId,
+  const ctx = prepared.ctx;
+  const [order] = await tx
+    .insert(saleOrders)
+    .values({
+      id,
+      saleId,
+      branchId: ctx.branchId,
+      sequence,
+      totalAmount: prepared.totalAmount,
+      notes: notes || null,
+      actorId: actor.id,
+    })
+    .returning();
+  const lines = prepared.values.map((value) => ({
+    ...value,
+    id: ("id" in value ? value.id : undefined) ?? randomUUID(),
+    orderId: id,
     branchId: ctx.branchId,
-    sequence,
-    totalAmount: prepared.totalAmount,
-    notes: notes || null,
-    actorId: actor.id,
-  });
-  for (const [position, value] of prepared.values.entries()) {
-    const [line] = await tx
-      .insert(saleLines)
-      .values({ ...value, orderId: id, branchId: ctx.branchId })
-      .returning();
+  }));
+  const insertedLines = await tx.insert(saleLines).values(lines).returning();
+  const components: (typeof saleLineComponents.$inferInsert)[] = [];
+  const modifiers: (typeof saleLineModifiers.$inferInsert)[] = [];
+  for (const [position, line] of lines.entries()) {
     const snapshot = prepared.snapshots[position];
     for (const c of snapshot.components)
-      await tx.insert(saleLineComponents).values({
+      components.push({
         saleLineId: line.id,
         itemId: c.itemId,
         name: c.name,
@@ -533,14 +530,33 @@ async function insertOrder(
         quantity: c.quantity,
       });
     for (const m of snapshot.modifiers)
-      await tx.insert(saleLineModifiers).values({
+      modifiers.push({
         ...m,
         saleLineId: line.id,
         recipeVersionId: line.recipeVersionId!,
       });
   }
+  if (components.length) await tx.insert(saleLineComponents).values(components);
+  const insertedModifiers = modifiers.length
+    ? await tx.insert(saleLineModifiers).values(modifiers).returning()
+    : [];
   await reserveOrder(tx, ctx, id, operationId);
+  const assignedLocator = await assignLocator(
+    tx,
+    actor,
+    id,
+    locatorNumber,
+    true,
+    locatorMode === "automatic",
+  );
   await publishOrder(tx, actor, id);
+  return {
+    order,
+    lines: insertedLines,
+    modifiers: insertedModifiers,
+    locators:
+      assignedLocator == null ? [] : [{ orderId: id, number: assignedLocator }],
+  };
 }
 const listSchema = z
   .object({
@@ -621,17 +637,7 @@ export function createSalesService(db: AppDb) {
                 "La mesa tiene una cuenta abierta. Agregá el pedido a esa cuenta.",
               );
           }
-          let customerName: string | null = null;
-          if (input.customerId) {
-            const [customer] = await tx
-              .select()
-              .from(customers)
-              .where(eq(customers.id, input.customerId))
-              .for("share");
-            if (!customer || customer.archivedAt)
-              invalid("Elegí un cliente activo.");
-            customerName = customer.name;
-          }
+          const customer = await resolveSaleCustomer(tx, actor, input);
           const lines = await prepareLines(
             tx,
             actor,
@@ -650,26 +656,29 @@ export function createSalesService(db: AppDb) {
             invalid("Cobrá el total antes de confirmar la venta de mostrador.");
           const now = new Date(),
             closed = paid === total;
-          await tx.insert(sales).values({
-            id,
-            branchId: ctx.branchId,
-            origin: input.origin,
-            channel: input.channel,
-            fulfillment: input.fulfillment,
-            status: closed ? "closed" : "open",
-            tableId: table?.id ?? null,
-            tableName: table?.name ?? null,
-            customerId: input.customerId ?? null,
-            customerName,
-            externalId: input.externalId?.toUpperCase() ?? null,
-            notes: input.notes || null,
-            totalAmount: lines.totalAmount,
-            paidAmount: payments.totalAmount,
-            businessDate: branchBusinessDate(now, ctx.timeZone),
-            actorId: actor.id,
-            closedAt: closed ? now : null,
-          });
-          await insertOrder(
+          const [sale] = await tx
+            .insert(sales)
+            .values({
+              id,
+              branchId: ctx.branchId,
+              origin: input.origin,
+              channel: input.channel,
+              fulfillment: input.fulfillment,
+              status: closed ? "closed" : "open",
+              tableId: table?.id ?? null,
+              tableName: table?.name ?? null,
+              customerId: customer.id,
+              customerName: customer.name,
+              externalId: input.externalId?.toUpperCase() ?? null,
+              notes: input.notes || null,
+              totalAmount: lines.totalAmount,
+              paidAmount: payments.totalAmount,
+              businessDate: branchBusinessDate(now, ctx.timeZone),
+              actorId: actor.id,
+              closedAt: closed ? now : null,
+            })
+            .returning();
+          const order = await insertOrder(
             tx,
             actor,
             id,
@@ -677,17 +686,30 @@ export function createSalesService(db: AppDb) {
             lines,
             input.notes,
             input.requestId,
+            input.locatorNumber,
+            input.locatorMode,
           );
-          if (payments.values.length)
-            await tx.insert(salePayments).values(
-              payments.values.map((p) => ({
-                ...p,
-                saleId: id,
-                actorId: actor.id,
-              })),
-            );
+          const insertedPayments = payments.values.length
+            ? await tx
+                .insert(salePayments)
+                .values(
+                  payments.values.map((p) => ({
+                    ...p,
+                    saleId: id,
+                    actorId: actor.id,
+                  })),
+                )
+                .returning()
+            : [];
           await audit(tx, actor, "sales", id, "create", input);
-          return saleDetail(tx, id);
+          return saleDetailFromRows(
+            sale,
+            [order.order],
+            order.lines,
+            order.modifiers,
+            insertedPayments,
+            order.locators,
+          );
         }),
       );
     },
@@ -733,6 +755,8 @@ export function createSalesService(db: AppDb) {
           lines,
           input.notes,
           input.requestId,
+          input.locatorNumber,
+          input.locatorMode,
         );
         await tx
           .update(sales)
@@ -956,7 +980,12 @@ export function createSalesService(db: AppDb) {
           const table = kind === "customers" ? customers : paymentMethods;
           const filter = and(
             isNull(table.archivedAt),
-            ilike(table.name, term(q)),
+            kind === "customers"
+              ? or(
+                  ilike(customers.name, term(q)),
+                  ilike(customers.email, term(q)),
+                )
+              : ilike(table.name, term(q)),
           );
           const [{ total }] = await tx
             .select({ total: count() })
@@ -966,6 +995,7 @@ export function createSalesService(db: AppDb) {
             .select({
               id: table.id,
               name: table.name,
+              ...(kind === "customers" ? { email: customers.email } : {}),
               kind:
                 kind === "payment-methods"
                   ? paymentMethods.kind
