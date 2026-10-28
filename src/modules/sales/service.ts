@@ -76,6 +76,30 @@ import {
 } from "@/modules/preparation/publication";
 import type { SaleChannel, SaleList, SaleLookup } from "./types";
 import type { OperationalContext } from "../operations/types";
+import { lockCashSession, recordCashMovement } from "../cash/integration";
+
+async function recordSalePayments(
+  tx: Tx,
+  ctx: OperationalContext,
+  payments: (typeof salePayments.$inferSelect)[],
+  saleNumber: number,
+) {
+  for (const payment of payments) {
+    if (payment.collector !== "local") continue;
+    const refund = payment.kind === "refund";
+    await recordCashMovement(tx, ctx, {
+      kind: refund ? "refund" : "collection",
+      amount: cents(integer(payment.amount) * (refund ? -1n : 1n)),
+      sourceType: "sale-payment",
+      sourceId: payment.id,
+      methodKind: payment.methodKind ?? "other",
+      methodName: payment.methodName ?? "Otro medio",
+      concept: `${refund ? "Devolución" : "Cobro"} de venta #${saleNumber}`,
+      reference: payment.reference,
+      occurredAt: payment.createdAt,
+    });
+  }
+}
 
 async function replaySaleDetail(tx: Tx, id: string, branchId: string) {
   // Every mutation locks this header. Keep it stable across the detail queries.
@@ -470,6 +494,12 @@ async function preparePayments(
     const method = p.methodId ? methods.get(p.methodId) : undefined;
     if (p.collector === "local" && !method)
       invalid("Elegí el medio de pago del cobro local.");
+    if (
+      p.collector === "local" &&
+      method?.kind === "card" &&
+      !p.reference.trim()
+    )
+      invalid("Ingresá el número de comprobante del cobro con tarjeta.");
     total += integer(p.amount);
     return {
       kind: "collection",
@@ -573,15 +603,16 @@ export function createSalesService(db: AppDb) {
   return {
     async create(actor: Actor | null, raw: unknown) {
       salesAccess(actor);
-      const ctx = await requireOperationalContext(
-        db,
-        actor,
-        actor.branchId ?? "",
-      );
+      await requireOperationalContext(db, actor, actor.branchId ?? "");
       const input = parse(createSchema, raw),
         id = randomUUID();
       return salesTransaction(() =>
         db.transaction(async (tx) => {
+          const ctx = await requireOperationalContext(
+            tx,
+            actor,
+            actor.branchId ?? "",
+          );
           const old = await claim(
             tx,
             actor,
@@ -591,6 +622,8 @@ export function createSalesService(db: AppDb) {
             id,
           );
           if (old) return replaySaleDetail(tx, old, ctx.branchId);
+          if (input.payments.some((payment) => payment.collector === "local"))
+            await lockCashSession(tx, ctx);
           if (input.origin === "delivery") {
             if (
               input.channel === "counter" ||
@@ -701,6 +734,7 @@ export function createSalesService(db: AppDb) {
                 )
                 .returning()
             : [];
+          await recordSalePayments(tx, ctx, insertedPayments, sale.number);
           await audit(tx, actor, "sales", id, "create", input);
           return saleDetailFromRows(
             sale,
@@ -773,14 +807,15 @@ export function createSalesService(db: AppDb) {
     },
     async pay(actor: Actor | null, id: string, raw: unknown) {
       salesAccess(actor);
-      const ctx = await requireOperationalContext(
-        db,
-        actor,
-        actor.branchId ?? "",
-      );
+      await requireOperationalContext(db, actor, actor.branchId ?? "");
       parse(uuid, id);
       const input = parse(paySchema, raw);
       return db.transaction(async (tx) => {
+        const ctx = await requireOperationalContext(
+          tx,
+          actor,
+          actor.branchId ?? "",
+        );
         const old = await claim(
           tx,
           actor,
@@ -790,6 +825,8 @@ export function createSalesService(db: AppDb) {
           id,
         );
         if (old) return replaySaleDetail(tx, old, ctx.branchId);
+        if (input.payments.some((payment) => payment.collector === "local"))
+          await lockCashSession(tx, ctx);
         const sale = await lockSale(tx, id, input.revision, ctx.branchId);
         if (sale.status !== "open") conflict("La cuenta ya está cobrada.");
         const payments = await preparePayments(
@@ -800,13 +837,17 @@ export function createSalesService(db: AppDb) {
         const paid = integer(sale.paidAmount) + integer(payments.totalAmount),
           total = integer(sale.totalAmount);
         if (paid > total) invalid("El cobro supera el saldo pendiente.");
-        await tx.insert(salePayments).values(
-          payments.values.map((p) => ({
-            ...p,
-            saleId: id,
-            actorId: actor.id,
-          })),
-        );
+        const insertedPayments = await tx
+          .insert(salePayments)
+          .values(
+            payments.values.map((p) => ({
+              ...p,
+              saleId: id,
+              actorId: actor.id,
+            })),
+          )
+          .returning();
+        await recordSalePayments(tx, ctx, insertedPayments, sale.number);
         await tx
           .update(sales)
           .set({
@@ -829,6 +870,9 @@ export function createSalesService(db: AppDb) {
       parse(uuid, id);
       const input = parse(cancelSchema, raw);
       return db.transaction(async (tx) => {
+        const ctx = await requireOperationalContext(tx, a, a.branchId ?? "");
+        if (ctx.role === "staff")
+          invalid("Se requiere un encargado.", "FORBIDDEN", 403);
         const old = await claim(
           tx,
           a,
@@ -838,6 +882,9 @@ export function createSalesService(db: AppDb) {
           id,
         );
         if (old) return replaySaleDetail(tx, old, ctx.branchId);
+        // Serialize even before reading payments: a concurrent collection can
+        // otherwise add a local refund obligation while this sale is locked.
+        await lockCashSession(tx, ctx, { requireOpen: false });
         const sale = await lockSale(tx, id, input.revision, ctx.branchId);
         if (integer(sale.paidAmount) > 0n && !input.refundConfirmed)
           invalid(
@@ -852,21 +899,26 @@ export function createSalesService(db: AppDb) {
               eq(salePayments.kind, "collection"),
             ),
           );
-        if (payments.length)
-          await tx.insert(salePayments).values(
-            payments.map((p) => ({
-              saleId: id,
-              kind: "refund",
-              collector: p.collector,
-              methodId: p.methodId,
-              methodName: p.methodName,
-              methodKind: p.methodKind,
-              amount: p.amount,
-              reference: p.reference,
-              originalPaymentId: p.id,
-              actorId: a.id,
-            })),
-          );
+        if (payments.length) {
+          const refunds = await tx
+            .insert(salePayments)
+            .values(
+              payments.map((p) => ({
+                saleId: id,
+                kind: "refund",
+                collector: p.collector,
+                methodId: p.methodId,
+                methodName: p.methodName,
+                methodKind: p.methodKind,
+                amount: p.amount,
+                reference: p.reference,
+                originalPaymentId: p.id,
+                actorId: a.id,
+              })),
+            )
+            .returning();
+          await recordSalePayments(tx, ctx, refunds, sale.number);
+        }
         await tx
           .update(sales)
           .set({

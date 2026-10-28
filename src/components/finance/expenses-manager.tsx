@@ -194,6 +194,7 @@ export function ExpensesManager({ initialMonth }: { initialMonth: string }) {
     }
   }
   const summary = current?.summary;
+  const automaticEntries = current?.automaticEntries ?? [];
   return (
     <div ref={root} className="mx-auto max-w-7xl space-y-7 pb-10">
       <OperationAlert title="Gastos del negocio" message={notice} />
@@ -330,7 +331,8 @@ export function ExpensesManager({ initialMonth }: { initialMonth: string }) {
                     {
                       label: "Real registrado",
                       value: money(
-                        summary!.actualPending || !entries.length
+                        summary!.actualPending ||
+                          (!entries.length && !automaticEntries.length)
                           ? null
                           : summary!.actualTotal,
                       ),
@@ -461,8 +463,9 @@ export function ExpensesManager({ initialMonth }: { initialMonth: string }) {
                   </div>
                   <p className="mt-4 text-xs leading-relaxed text-muted">
                     Los campos con * son obligatorios. Podés dejar presupuesto y
-                    real pendientes. El importe real se completa cuando lo
-                    conozcas y se exige para cerrar el mes.
+                    real pendientes. Completá aquí los importes que todavía no
+                    registraste en Caja; los gastos del día se incorporan abajo
+                    automáticamente y no hace falta volver a cargarlos.
                   </p>
                   {!entries.length && (
                     <p className="py-12 text-center text-sm text-muted">
@@ -587,6 +590,63 @@ export function ExpensesManager({ initialMonth }: { initialMonth: string }) {
                       </div>
                     ))}
                   </fieldset>
+                  {automaticEntries.length > 0 && (
+                    <section
+                      aria-label="Gastos registrados en Caja"
+                      className="my-6 rounded-lg border border-line bg-surface p-4"
+                    >
+                      <h3 className="text-sm font-semibold text-brand">
+                        Gastos registrados en Caja
+                      </h3>
+                      <p className="mt-2 text-xs leading-relaxed text-muted">
+                        Ya están incluidos en el real del mes. Se consultan aquí
+                        sin volver a cargarlos.
+                        {closed &&
+                          " Este cierre conserva una copia; una revisión toma los registros disponibles en ese momento."}
+                      </p>
+                      <div className="mt-4 overflow-x-auto">
+                        <table className="w-full min-w-96 text-left text-sm">
+                          <thead>
+                            <tr className="border-b border-line">
+                              <th className="py-2">Jornada</th>
+                              <th>Gasto</th>
+                              <th>Origen del dinero</th>
+                              <th className="text-right">Real</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {automaticEntries.map((entry) => (
+                              <tr
+                                key={entry.sourceId}
+                                className="border-b border-line last:border-0"
+                              >
+                                <td className="py-3 pr-3 whitespace-nowrap">
+                                  {entry.businessDate
+                                    .split("-")
+                                    .reverse()
+                                    .join("/")}
+                                </td>
+                                <td className="py-3 pr-3">
+                                  <span className="block">{entry.concept}</span>
+                                  <span className="text-xs text-muted">
+                                    {expenseCategories[entry.category]}
+                                  </span>
+                                </td>
+                                <td className="py-3 pr-3">
+                                  {entry.fundingSource === "cash"
+                                    ? "Efectivo de Caja"
+                                    : "Fondos externos"}
+                                </td>
+                                <td className="py-3 text-right tabular-nums">
+                                  {money(entry.actual)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </section>
+                  )}
                   <p className="border-t border-line pt-4 text-xs leading-relaxed text-muted">
                     Importes en pesos, con coma decimal. Vacío significa
                     pendiente; 0 confirma que no hubo gasto. No repitas
@@ -663,7 +723,7 @@ export function ExpensesManager({ initialMonth }: { initialMonth: string }) {
                             busy ||
                             dirty ||
                             !current.period ||
-                            !entries.length ||
+                            (!entries.length && !automaticEntries.length) ||
                             summary!.actualPending > 0
                           }
                           onClick={() => {
@@ -674,7 +734,11 @@ export function ExpensesManager({ initialMonth }: { initialMonth: string }) {
                           Cerrar mes
                         </Button>
                         <Button
-                          disabled={busy || !dirty}
+                          disabled={
+                            busy ||
+                            (!dirty &&
+                              (!!current.period || !automaticEntries.length))
+                          }
                           onClick={() => void submit("save")}
                         >
                           {busy ? "Guardando…" : "Guardar mes"}
@@ -731,7 +795,15 @@ export function ExpensesManager({ initialMonth }: { initialMonth: string }) {
                                 <tbody>
                                   {close.entries.map((e, i) => (
                                     <tr key={i}>
-                                      <td className="py-2">{e.concept}</td>
+                                      <td className="py-2">
+                                        {e.concept}
+                                        {"source" in e &&
+                                          e.source === "cash" && (
+                                            <span className="ml-2 text-xs text-muted">
+                                              Caja
+                                            </span>
+                                          )}
+                                      </td>
                                       <td>{money(e.budget)}</td>
                                       <td>{money(e.actual)}</td>
                                     </tr>

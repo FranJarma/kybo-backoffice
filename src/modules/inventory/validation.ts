@@ -73,6 +73,7 @@ const payment = z
   .object({
     requestId,
     target: z.enum(["supplier", "shipping"]).optional(),
+    source: z.enum(["cash", "external"]).optional(),
     paymentMethodId: id,
     paidOn: date,
     amount: amount(true, true),

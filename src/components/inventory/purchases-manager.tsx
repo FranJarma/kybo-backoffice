@@ -25,6 +25,7 @@ import { FieldCaption } from "@/components/ui/field-caption";
 import { OperationAlert } from "@/components/ui/operation-alert";
 import { useErrorFeedback } from "@/components/ui/use-error-feedback";
 import {
+  cents,
   decimal,
   exactDivision,
   integer,
@@ -72,6 +73,49 @@ const blankLine = (): LineDraft => ({
   lotCode: "",
   expiresOn: "",
 });
+function AdvanceReceiptPreview({
+  order,
+  lines,
+  shipping,
+}: {
+  order: PurchaseOrder;
+  lines: LineDraft[];
+  shipping: ReturnType<typeof blankShipping>;
+}) {
+  const financial = order.financial;
+  if (!financial || integer(financial.availableAmount) <= 0n) return null;
+  const credit = integer(financial.availableAmount),
+    preview = shippingPreview(lines, shipping);
+  if (preview.total === null)
+    return (
+      <div className="rounded-lg bg-blue-50 p-4 text-sm">
+        <p className="font-semibold">
+          Anticipo disponible: {money(financial.availableAmount)}
+        </p>
+        <p className="mt-2 text-xs leading-5 text-muted">
+          El costo está pendiente. El anticipo se conserva sin aplicar hasta
+          conocer el importe de la mercadería.
+        </p>
+      </div>
+    );
+  const payable =
+      preview.total + (shipping.recipient === "supplier" ? preview.cost : 0n),
+    applied = credit < payable ? credit : payable;
+  return (
+    <div className="space-y-2 rounded-lg bg-blue-50 p-4 text-sm">
+      <p>
+        Anticipo a aplicar: <strong>{money(cents(applied))}</strong>
+      </p>
+      <p>
+        Crédito restante: <strong>{money(cents(credit - applied))}</strong>
+      </p>
+      <p className="text-xs leading-5 text-muted">
+        Este dinero ya está pagado. La recepción no genera otra salida por el
+        anticipo.
+      </p>
+    </div>
+  );
+}
 function basePreview(line: LineDraft) {
   const amount = integer(decimal(line.quantity, 6, true, true)!);
   const factor = line.snapshotFactor
@@ -237,6 +281,9 @@ export function PurchasesManager({
         : [blankLine()],
     );
   const [payment, setPayment] = useState(false),
+    [paymentSource, setPaymentSource] = useState<"cash" | "external">(
+      "external",
+    ),
     [paymentMethodId, setPaymentMethodId] = useState(""),
     [paidOn, setPaidOn] = useState(today(timeZone)),
     [amount, setAmount] = useState(""),
@@ -456,6 +503,7 @@ export function PurchasesManager({
       requestId: crypto.randomUUID(),
       paidOn,
       paymentMethodId,
+      source: paymentSource,
       amount,
       reference: reference.trim() || null,
     });
@@ -1177,6 +1225,13 @@ export function PurchasesManager({
                   <h3 className="text-lg font-bold text-brand">
                     Confirmar ingreso
                   </h3>
+                  {order && (
+                    <AdvanceReceiptPreview
+                      order={order}
+                      lines={lines}
+                      shipping={shipping}
+                    />
+                  )}
                   <div className="rounded-lg bg-surface p-4">
                     <p className="text-xs text-muted">Costo de la recepción</p>
                     <p className="mt-1 font-semibold text-brand">
@@ -1343,6 +1398,28 @@ export function PurchasesManager({
                   Registrar un pago deja constancia administrativa; no procesa
                   el cobro ni cambia el stock.
                 </p>
+                {!!detail.advanceApplications?.length && (
+                  <div className="space-y-3 rounded-lg bg-blue-50 p-4 text-sm">
+                    <p className="font-semibold">
+                      Anticipo aplicado:{" "}
+                      {money(detail.advanceAppliedAmount ?? "0.00")}
+                    </p>
+                    <p className="text-xs text-muted">
+                      El dinero ya estaba pagado; esta aplicación no registra
+                      otra salida.
+                    </p>
+                    {detail.advanceApplications.map((a) => (
+                      <p key={a.id}>
+                        {money(a.amount)} ·{" "}
+                        {a.source === "external"
+                          ? "Fuera de caja"
+                          : "Efectivo del cajón"}{" "}
+                        · {a.paymentMethodName} · {date(a.paidOn)}
+                        {a.reference ? ` · ${a.reference}` : ""}
+                      </p>
+                    ))}
+                  </div>
+                )}
                 {detail.payments.length ? (
                   <ul className="divide-y divide-line text-sm">
                     {detail.payments.map((item) => (
@@ -1356,6 +1433,13 @@ export function PurchasesManager({
                         <div className="min-w-0">
                           <p className="font-semibold text-brand">
                             {item.paymentMethodName}
+                            {item.source && (
+                              <span className="block text-xs font-normal text-muted">
+                                {item.source === "cash"
+                                  ? "Efectivo del cajón"
+                                  : "Pagado fuera de caja"}
+                              </span>
+                            )}
                             <span className="block text-xs font-normal text-muted">
                               {item.target === "shipping"
                                 ? detail.shippingSupplierName
@@ -1512,8 +1596,29 @@ export function PurchasesManager({
                         label="Medio de pago"
                         value={paymentMethodId}
                         onChange={setPaymentMethodId}
+                        filter={
+                          paymentSource === "cash"
+                            ? (r) => r.kind === "cash"
+                            : undefined
+                        }
                         required
                       />
+                      <label className="space-y-2 text-sm font-medium">
+                        Origen del dinero
+                        <select
+                          className="form-control"
+                          value={paymentSource}
+                          onChange={(e) => {
+                            setPaymentSource(
+                              e.target.value as "cash" | "external",
+                            );
+                            setPaymentMethodId("");
+                          }}
+                        >
+                          <option value="external">Fuera de caja</option>
+                          <option value="cash">Efectivo del cajón</option>
+                        </select>
+                      </label>
                       <Field
                         label="Fecha de pago"
                         type="date"

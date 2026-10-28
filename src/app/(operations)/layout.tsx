@@ -41,6 +41,7 @@ export default async function OperationsLayout({
   return (
     <AppShell
       role={actor.role}
+      actorId={actor.id}
       catalogManager={actor.catalogManager}
       name={profile?.name ?? "Equipo Kybo"}
       dateLabel={dateLabel}

@@ -247,6 +247,9 @@ test("configures VAT and fees, charges final prices and preserves the historical
   dialog = page.getByRole("dialog");
   await expect(dialog.getByText(/Comisión/i)).toHaveCount(0);
   await dialog.getByRole("button", { name: methodName, exact: true }).tap();
+  await dialog
+    .getByRole("textbox", { name: "Número de comprobante", exact: true })
+    .fill("000321");
   const response = page.waitForResponse(
     (r) => r.url().endsWith("/api/sales") && r.request().method() === "POST",
   );

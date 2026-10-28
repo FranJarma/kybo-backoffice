@@ -13,7 +13,10 @@ import {
 } from "drizzle-orm/pg-core";
 import { branches } from "./branch-schema";
 import { user } from "./auth-schema";
-import type { ExpenseEntry } from "@/modules/overheads/types";
+import type {
+  ExpenseEntry,
+  ExpenseSnapshotEntry,
+} from "@/modules/overheads/types";
 export const expensePeriods = pgTable(
   "expense_periods",
   {
@@ -55,7 +58,7 @@ export const expenseClosures = pgTable(
       .notNull()
       .references(() => expensePeriods.id),
     sequence: integer("sequence").notNull(),
-    entries: jsonb("entries").$type<ExpenseEntry[]>().notNull(),
+    entries: jsonb("entries").$type<ExpenseSnapshotEntry[]>().notNull(),
     expectedUnits: integer("expected_units"),
     actualUnits: integer("actual_units").notNull(),
     iibbRate: numeric("iibb_rate", { precision: 5, scale: 2 }),

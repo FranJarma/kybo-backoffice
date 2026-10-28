@@ -12,6 +12,7 @@ import { AppError } from "@/lib/errors";
 import { requireOperationalContext } from "../branches/context";
 import { integer, safeQuantity } from "../inventory/decimal";
 import type { PurchaseOrder, OrderSnapshot } from "./types";
+import { orderFinancials } from "./advances";
 export async function procurementAvailable(tx: Tx) {
   const result = await tx.execute(
     sql`select to_regclass('public.purchase_orders') as name`,
@@ -46,6 +47,7 @@ async function readOrders(
     .limit(100);
   if (!headers.length) return [];
   const ids = headers.map((h) => h.id);
+  const financials = await orderFinancials(tx, ids);
   const rows = await tx
     .select()
     .from(lines)
@@ -70,6 +72,7 @@ async function readOrders(
     .where(inArray(allocations.orderId, ids));
   return headers.map((row) => ({
     ...row,
+    financial: financials.get(row.id),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     lines: rows

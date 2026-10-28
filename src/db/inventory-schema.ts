@@ -75,6 +75,11 @@ export const purchaseReceipts = pgTable(
       t.documentNumber,
     ),
     uniqueIndex("receipt_branch").on(t.id, t.branchId),
+    uniqueIndex("purchase_receipt_financial_scope").on(
+      t.id,
+      t.branchId,
+      t.supplierId,
+    ),
     check(
       "receipt_total_positive",
       sql`${t.totalAmount} is null or ${t.totalAmount} >= 0`,
@@ -156,6 +161,7 @@ export const purchasePayments = pgTable(
       length: 160,
     }).notNull(),
     target: text("target").notNull().default("supplier"),
+    source: text("source").$type<"cash" | "external">(),
     amount: amount("amount").notNull(),
     paidOn: date("paid_on").notNull(),
     reference: varchar("reference", { length: 160 }),
@@ -170,6 +176,10 @@ export const purchasePayments = pgTable(
     index("payments_receipt").on(t.receiptId),
     check("payment_amount_positive", sql`${t.amount} > 0`),
     check("payment_target_valid", sql`${t.target} in ('supplier','shipping')`),
+    check(
+      "purchase_payment_source",
+      sql`${t.source} is null or ${t.source} in ('cash','external')`,
+    ),
   ],
 );
 export const stockBalances = pgTable(

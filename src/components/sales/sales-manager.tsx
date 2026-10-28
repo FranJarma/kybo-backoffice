@@ -1,5 +1,6 @@
 "use client";
 import { useErrorFeedback } from "@/components/ui/use-error-feedback";
+import { CashStatusGate } from "@/components/cash/status-gate";
 import {
   ComboConfigurator,
   type ComboSaleConfiguration,
@@ -736,6 +737,7 @@ export function SalesManager({
       data-pos
       className="flex h-full min-h-0 flex-col gap-3 [&>div:not([data-pos-workspace])]:shrink-0"
     >
+      <CashStatusGate key={branchId} branchId={branchId} />
       <Dialog
         open={!!configuring}
         onOpenChange={(open) => {

@@ -28,6 +28,7 @@ export type ReceiveInput = {
   };
 };
 export type PaymentInput = {
+  source?: "cash" | "external";
   target?: "supplier" | "shipping";
   requestId: string;
   paymentMethodId: string;
@@ -121,6 +122,7 @@ export type ReceiptLine = {
   expiresOn: string | null;
 };
 export type PurchasePayment = {
+  source?: "cash" | "external" | null;
   target: string;
   id: string;
   paymentMethodName: string;
@@ -130,6 +132,16 @@ export type PurchasePayment = {
   createdAt: string;
 };
 export type ReceiptDetail = ReceiptSummary & {
+  advanceAppliedAmount?: string;
+  advanceApplications?: {
+    id: string;
+    advanceId: string;
+    amount: string;
+    paidOn: string;
+    paymentMethodName: string;
+    source: "cash" | "external";
+    reference: string | null;
+  }[];
   notes: string | null;
   lines: ReceiptLine[];
   payments: PurchasePayment[];

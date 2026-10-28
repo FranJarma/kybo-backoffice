@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { useEffect, useState } from "react";
 import { AppShell } from "../../src/components/app-shell";
+import { CashManager } from "../../src/components/cash/manager";
 
 function Fixture() {
   const [layout, setLayout] = useState({
@@ -25,6 +26,11 @@ function Fixture() {
     <AppShell
       key={layout.key}
       role="admin"
+      actorId={
+        new URLSearchParams(location.search).has("cached-shell")
+          ? undefined
+          : "header-operator"
+      }
       name="Francisco"
       dateLabel="27 de octubre"
       branches={[
@@ -43,6 +49,9 @@ function Fixture() {
           <input className="form-control" defaultValue="" />
         </label>
       </section>
+      {new URLSearchParams(location.search).get("path") === "/finance/cash" ? (
+        <CashManager branchId="test-branch" actorId="header-operator" />
+      ) : null}
     </AppShell>
   );
 }

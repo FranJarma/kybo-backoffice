@@ -7,6 +7,9 @@ export default defineConfig([
   globalIgnores([
     ".next/**",
     ".next-e2e/**",
+    ".superpowers/**",
+    ".local/**",
+    ".pnpm-store/**",
     "drizzle/**",
     "next-env.d.ts",
     "playwright-report/**",

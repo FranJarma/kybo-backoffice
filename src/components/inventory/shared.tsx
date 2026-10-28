@@ -51,6 +51,8 @@ function branchHeaders(): Record<string, string> {
   return branchId ? { "X-Kybo-Branch-Id": branchId } : {};
 }
 type OperationKind =
+  | "cash"
+  | "purchase-advance"
   | "purchase-orders"
   | "supply-alerts"
   | "transfer-batch"
@@ -74,66 +76,72 @@ type OperationKind =
   | "preparation-settings"
   | "table";
 const urlFor = (kind: OperationKind, url: string) =>
-  kind === "purchase-orders"
-    ? url === "/api/procurement/orders" ||
-      /^\/api\/procurement\/orders\/[0-9a-f-]{36}$/.test(url)
-    : kind === "supply-alerts"
-      ? url === "/api/inventory/supply-alerts"
-      : kind === "transfer-batch"
-        ? url === "/api/transfers/batch"
-        : kind === "pickup"
-          ? /^\/api\/pickup\/orders\/[0-9a-f-]{36}$/.test(url)
-          : kind === "replenishment"
-            ? url === "/api/inventory/replenishment"
-            : kind === "item-sourcing"
-              ? /^\/api\/items\/[0-9a-f-]{36}\/suppliers$/.test(url)
-              : kind === "reservation"
-                ? url === "/api/inventory/reservations"
-                : kind === "recall"
-                  ? url === "/api/inventory/recalls"
-                  : kind === "production-order"
-                    ? url === "/api/production/orders" ||
-                      /^\/api\/production\/orders\/[0-9a-f-]{36}$/.test(url)
-                    : kind === "transfer"
-                      ? url === "/api/transfers" ||
-                        /^\/api\/transfers\/[0-9a-f-]{36}\/(dispatch|receive|resolve|cancel)$/.test(
-                          url,
-                        )
-                      : kind === "internal-use"
-                        ? url === "/api/inventory/internal-use"
-                        : kind === "fulfillment"
-                          ? /^\/api\/fulfillment\/(complete|deliver|return)$/.test(
+  kind === "cash"
+    ? url === "/api/cash"
+    : kind === "purchase-advance"
+      ? /^\/api\/procurement\/orders\/[0-9a-f-]{36}\/advances$/.test(url)
+      : kind === "purchase-orders"
+        ? url === "/api/procurement/orders" ||
+          /^\/api\/procurement\/orders\/[0-9a-f-]{36}$/.test(url)
+        : kind === "supply-alerts"
+          ? url === "/api/inventory/supply-alerts"
+          : kind === "transfer-batch"
+            ? url === "/api/transfers/batch"
+            : kind === "pickup"
+              ? /^\/api\/pickup\/orders\/[0-9a-f-]{36}$/.test(url)
+              : kind === "replenishment"
+                ? url === "/api/inventory/replenishment"
+                : kind === "item-sourcing"
+                  ? /^\/api\/items\/[0-9a-f-]{36}\/suppliers$/.test(url)
+                  : kind === "reservation"
+                    ? url === "/api/inventory/reservations"
+                    : kind === "recall"
+                      ? url === "/api/inventory/recalls"
+                      : kind === "production-order"
+                        ? url === "/api/production/orders" ||
+                          /^\/api\/production\/orders\/[0-9a-f-]{36}$/.test(url)
+                        : kind === "transfer"
+                          ? url === "/api/transfers" ||
+                            /^\/api\/transfers\/[0-9a-f-]{36}\/(dispatch|receive|resolve|cancel)$/.test(
                               url,
                             )
-                          : kind === "stock-resolution"
-                            ? /^\/api\/stock-resolutions\/[0-9a-f-]{36}$/.test(
-                                url,
-                              )
-                            : kind === "preparation"
-                              ? /^\/api\/preparation\/[0-9a-f-]{36}$/.test(url)
-                              : kind === "preparation-settings"
-                                ? /^\/api\/preparation\/settings\/(stations|routes)$/.test(
+                          : kind === "internal-use"
+                            ? url === "/api/inventory/internal-use"
+                            : kind === "fulfillment"
+                              ? /^\/api\/fulfillment\/(complete|deliver|return)$/.test(
+                                  url,
+                                )
+                              : kind === "stock-resolution"
+                                ? /^\/api\/stock-resolutions\/[0-9a-f-]{36}$/.test(
                                     url,
                                   )
-                                : kind === "sale"
-                                  ? url === "/api/sales" ||
-                                    /^\/api\/sales\/[0-9a-f-]{36}\/(orders|payments|cancel)$/.test(
+                                : kind === "preparation"
+                                  ? /^\/api\/preparation\/[0-9a-f-]{36}$/.test(
                                       url,
                                     )
-                                  : kind === "table"
-                                    ? url === "/api/sales/tables"
-                                    : kind === "recipe"
-                                      ? url === "/api/recipes"
-                                      : kind === "production"
-                                        ? url === "/api/production"
-                                        : kind === "receipt"
-                                          ? url === "/api/purchases"
-                                          : kind === "adjustment"
-                                            ? url ===
-                                              "/api/inventory/adjustments"
-                                            : /^\/api\/purchases\/[0-9a-f-]{36}\/payments$/.test(
-                                                url,
-                                              );
+                                  : kind === "preparation-settings"
+                                    ? /^\/api\/preparation\/settings\/(stations|routes)$/.test(
+                                        url,
+                                      )
+                                    : kind === "sale"
+                                      ? url === "/api/sales" ||
+                                        /^\/api\/sales\/[0-9a-f-]{36}\/(orders|payments|cancel)$/.test(
+                                          url,
+                                        )
+                                      : kind === "table"
+                                        ? url === "/api/sales/tables"
+                                        : kind === "recipe"
+                                          ? url === "/api/recipes"
+                                          : kind === "production"
+                                            ? url === "/api/production"
+                                            : kind === "receipt"
+                                              ? url === "/api/purchases"
+                                              : kind === "adjustment"
+                                                ? url ===
+                                                  "/api/inventory/adjustments"
+                                                : /^\/api\/purchases\/[0-9a-f-]{36}\/payments$/.test(
+                                                    url,
+                                                  );
 function validPending<T>(
   kind: OperationKind,
   value: unknown,
@@ -153,8 +161,9 @@ export function useOperation<T>(
   actorId: string,
   kind: OperationKind,
   onSuccess: (result: unknown) => void,
+  explicitBranchId?: string,
 ) {
-  const branchId = currentBranchId();
+  const branchId = explicitBranchId ?? currentBranchId();
   const storageKey = `kybo:pending:${actorId}:${branchId}:${kind}`;
   const [pending, setPending] = useState<Pending<T> | null>(null);
   const [uncertain, setUncertain] = useState(false);
@@ -251,6 +260,16 @@ export function useOperation<T>(
       let result: unknown;
       try {
         result = await response.json();
+        if (
+          kind === "cash" &&
+          (!result ||
+            typeof result !== "object" ||
+            !("branchId" in result) ||
+            result.branchId !== branchId ||
+            !("totals" in result) ||
+            !("capabilities" in result))
+        )
+          throw Error("La respuesta no confirma la operación de Caja.");
         sessionStorage.removeItem(storageKey);
       } catch {
         setPending(operation);
@@ -292,6 +311,7 @@ export function useOperation<T>(
     errorAttempt,
     status,
     uncertain,
+    pending,
     locked: !ready || uncertain || busy,
     clearError: () => setError(""),
   };

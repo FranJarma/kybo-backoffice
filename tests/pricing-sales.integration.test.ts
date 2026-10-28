@@ -70,7 +70,12 @@ it("charges a final price, snapshots VAT and each fee, and keeps history unchang
     ],
     payments: [
       { collector: "local", methodId: cash.id, amount: "5000" },
-      { collector: "local", methodId: card.id, amount: "5000" },
+      {
+        collector: "local",
+        methodId: card.id,
+        amount: "5000",
+        reference: "000321",
+      },
     ],
   };
   const sale = await saleService.create(actor, input);

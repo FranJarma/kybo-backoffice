@@ -47,6 +47,11 @@ export const purchaseOrders = pgTable(
   },
   (t) => [
     uniqueIndex("purchase_order_branch").on(t.id, t.branchId),
+    uniqueIndex("purchase_order_financial_scope").on(
+      t.id,
+      t.branchId,
+      t.supplierId,
+    ),
     index("purchase_order_queue").on(t.branchId, t.state, t.expectedOn),
     check(
       "purchase_order_state",
