@@ -95,6 +95,7 @@ export function PaymentDialog({
         const method = methods.find((m) => m.id === row.methodId);
         if (
           !method ||
+          (method.kind === "card" && !row.reference.trim()) ||
           (method.kind === "cash" &&
             !cashChange(received[row.key] ?? "", row.amount).valid)
         )
@@ -110,6 +111,12 @@ export function PaymentDialog({
   const missingMethod = rows.some(
     (row) =>
       row.collector === "local" && !methods.some((m) => m.id === row.methodId),
+  );
+  const missingReceipt = rows.some(
+    (row) =>
+      row.collector === "local" &&
+      methods.find((method) => method.id === row.methodId)?.kind === "card" &&
+      !row.reference.trim(),
   );
   const change = (index: number, values: Partial<PaymentDraft>) =>
     setRows((current) =>
@@ -129,13 +136,15 @@ export function PaymentDialog({
       ? `El importe supera el saldo por ${money(cents(-remaining))}.`
       : missingMethod
         ? "Elegí un medio de pago para continuar."
-        : remaining > 0n
-          ? `Quedan ${money(cents(remaining))} ${exact ? "por completar" : "pendientes; la cuenta seguirá abierta"}.`
-          : !valid
-            ? "Revisá los importes del cobro."
-            : split
-              ? "Los pagos cubren el total."
-              : "Todo listo para confirmar.";
+        : missingReceipt
+          ? "Completá el número de comprobante de cada cobro con tarjeta."
+          : remaining > 0n
+            ? `Quedan ${money(cents(remaining))} ${exact ? "por completar" : "pendientes; la cuenta seguirá abierta"}.`
+            : !valid
+              ? "Revisá los importes del cobro."
+              : split
+                ? "Los pagos cubren el total."
+                : "Todo listo para confirmar.";
   return (
     <Dialog
       open
@@ -213,6 +222,7 @@ export function PaymentDialog({
                             collector: e.target
                               .value as PaymentDraft["collector"],
                             methodId: "",
+                            reference: "",
                           })
                         }
                       >
@@ -290,7 +300,14 @@ export function PaymentDialog({
                               type="button"
                               key={m.id}
                               aria-pressed={selected}
-                              onClick={() => change(i, { methodId: m.id })}
+                              onClick={() =>
+                                change(i, {
+                                  methodId: m.id,
+                                  ...(m.id !== row.methodId
+                                    ? { reference: "" }
+                                    : {}),
+                                })
+                              }
                               className={`relative flex min-h-24 flex-col items-start justify-center gap-3 rounded-xl border px-4 py-4 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue ${selected ? "border-blue bg-blue-50 text-brand ring-1 ring-blue" : "border-line bg-white text-brand hover:border-blue/50 hover:bg-surface"}`}
                             >
                               <Icon
@@ -396,25 +413,58 @@ export function PaymentDialog({
                       </p>
                     </div>
                   )}
-                  <details className="group">
-                    <summary className="flex min-h-12 cursor-pointer list-none items-center gap-1 text-sm text-muted hover:text-brand">
-                      <ChevronRight
-                        size={16}
-                        className="transition-transform group-open:rotate-90"
-                      />
-                      Agregar referencia (opcional)
-                    </summary>
-                    <Control label={`Referencia ${i + 1}`}>
-                      <Input
-                        value={row.reference}
-                        maxLength={120}
-                        placeholder="Número de operación o comprobante"
-                        onChange={(e) =>
-                          change(i, { reference: e.target.value })
+                  {row.collector === "local" && method?.kind === "card" ? (
+                    <div className="space-y-2">
+                      <Control
+                        label={
+                          split
+                            ? `Número de comprobante del pago ${i + 1}`
+                            : "Número de comprobante"
                         }
-                      />
-                    </Control>
-                  </details>
+                        required
+                      >
+                        <Input
+                          autoFocus
+                          required
+                          autoComplete="off"
+                          aria-label={
+                            split
+                              ? `Número de comprobante del pago ${i + 1}`
+                              : "Número de comprobante"
+                          }
+                          value={row.reference}
+                          maxLength={120}
+                          placeholder="Ej. 000123"
+                          onChange={(event) =>
+                            change(i, { reference: event.target.value })
+                          }
+                        />
+                      </Control>
+                      <p className="text-xs text-muted">
+                        Copiá el número del ticket del posnet.
+                      </p>
+                    </div>
+                  ) : (
+                    <details className="group">
+                      <summary className="flex min-h-12 cursor-pointer list-none items-center gap-1 text-sm text-muted hover:text-brand">
+                        <ChevronRight
+                          size={16}
+                          className="transition-transform group-open:rotate-90"
+                        />
+                        Agregar referencia (opcional)
+                      </summary>
+                      <Control label={`Referencia ${i + 1}`} optional>
+                        <Input
+                          value={row.reference}
+                          maxLength={120}
+                          placeholder="Número de operación o comprobante"
+                          onChange={(e) =>
+                            change(i, { reference: e.target.value })
+                          }
+                        />
+                      </Control>
+                    </details>
+                  )}
                 </div>
               );
             })}
@@ -484,7 +534,7 @@ export function PaymentDialog({
                     collector,
                     methodId: collector === "local" ? methodId : undefined,
                     amount,
-                    reference,
+                    reference: reference.trim(),
                   })),
                 )
               }

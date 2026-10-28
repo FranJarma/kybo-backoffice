@@ -8,9 +8,13 @@ import { FieldCaption } from "./field-caption";
 function Label({
   className,
   required = false,
+  optional = false,
   children,
   ...props
-}: React.ComponentProps<typeof LabelPrimitive.Root> & { required?: boolean }) {
+}: React.ComponentProps<typeof LabelPrimitive.Root> & {
+  required?: boolean;
+  optional?: boolean;
+}) {
   return (
     <LabelPrimitive.Root
       data-slot="label"
@@ -20,7 +24,13 @@ function Label({
       )}
       {...props}
     >
-      {required ? <FieldCaption required>{children}</FieldCaption> : children}
+      {required || optional ? (
+        <FieldCaption required={required} optional={optional}>
+          {children}
+        </FieldCaption>
+      ) : (
+        children
+      )}
     </LabelPrimitive.Root>
   );
 }

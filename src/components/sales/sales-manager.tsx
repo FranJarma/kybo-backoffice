@@ -1,5 +1,6 @@
 "use client";
 import { useErrorFeedback } from "@/components/ui/use-error-feedback";
+import { CashStatusGate } from "@/components/cash/status-gate";
 import {
   ComboConfigurator,
   type ComboSaleConfiguration,
@@ -736,6 +737,7 @@ export function SalesManager({
       data-pos
       className="flex h-full min-h-0 flex-col gap-3 [&>div:not([data-pos-workspace])]:shrink-0"
     >
+      <CashStatusGate key={branchId} branchId={branchId} />
       <Dialog
         open={!!configuring}
         onOpenChange={(open) => {
@@ -1054,7 +1056,7 @@ export function SalesManager({
                   ) : (
                     <>
                       {fulfillment === "dine_in" && (
-                        <Control label="Mesa de consumo (opcional)">
+                        <Control label="Mesa de consumo" optional>
                           <select
                             className={selectClass}
                             value={tableId}
@@ -1284,7 +1286,7 @@ export function SalesManager({
               }
             }}
           >
-            <Control label="Observaciones del pedido">
+            <Control label="Observaciones del pedido" optional>
               <Input
                 autoFocus
                 className="min-h-12"

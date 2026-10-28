@@ -258,7 +258,11 @@ export function TransferDraftForm({
             <div className="grid gap-5 sm:grid-cols-2">
               <div className={fieldClass}>
                 <span id={originId}>
-                  <FieldCaption required>Origen</FieldCaption>
+                  <FieldCaption
+                    required={!!origins && (changingOrigin || !originInfo)}
+                  >
+                    Origen
+                  </FieldCaption>
                 </span>
                 {origins && (changingOrigin || !originInfo) ? (
                   <div className="grid gap-2">
@@ -379,6 +383,7 @@ export function TransferDraftForm({
                 <SearchSelect
                   entity="items"
                   label="Artículo"
+                  requiredCaption
                   value={itemId}
                   filter={(row) => row.stockTracked !== false}
                   onChange={(id, row) => {
@@ -390,11 +395,14 @@ export function TransferDraftForm({
                 />
                 <div className={fieldClass}>
                   <label htmlFor={quantityId}>
-                    Cantidad{unit ? ` (${unit.label})` : ""}
+                    <FieldCaption required={!!unit}>
+                      Cantidad{unit ? ` (${unit.label})` : ""}
+                    </FieldCaption>
                   </label>
                   <div className="relative">
                     <Input
                       id={quantityId}
+                      aria-required={!!unit || undefined}
                       inputMode="decimal"
                       value={amount}
                       disabled={!unit}
@@ -419,9 +427,12 @@ export function TransferDraftForm({
                   </div>
                 </div>
                 <label className={fieldClass}>
-                  Destino
+                  <FieldCaption required={!!itemId && !!directory}>
+                    Destino
+                  </FieldCaption>
                   <select
                     aria-label="Destino del insumo"
+                    aria-required={(!!itemId && !!directory) || undefined}
                     value={destination}
                     disabled={!itemId || !directory}
                     onChange={(event) =>
@@ -472,7 +483,10 @@ export function TransferDraftForm({
                             {line.name}
                           </span>
                           <label className={fieldClass}>
-                            Cantidad ({transferEntryUnit(line.baseUnit)?.label})
+                            <FieldCaption required>
+                              Cantidad (
+                              {transferEntryUnit(line.baseUnit)?.label})
+                            </FieldCaption>
                             <Input
                               aria-label={`Cantidad de ${line.name} (${transferEntryUnit(line.baseUnit)?.label})`}
                               required

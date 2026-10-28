@@ -10,9 +10,10 @@ import {
 describe("navegación por áreas", () => {
   it("pone Inicio antes del día bajo Negocio e integra las compras", () => {
     const entries = visibleNavigation({ role: "admin" });
-    expect(entries.slice(0, 2).map((n) => [n.id, n.area])).toEqual([
+    expect(entries.slice(0, 3).map((n) => [n.id, n.area])).toEqual([
       ["home", "Negocio"],
       ["daily-operations", "Negocio"],
+      ["cash", "Negocio"],
     ]);
     expect(entries.some((n) => n.id === "supply-alerts")).toBe(false);
     expect(entries.find((n) => n.id === "purchases")?.label).toBe("Compras");
@@ -109,6 +110,7 @@ describe("navegación por áreas", () => {
   it("personal no recibe enlaces restringidos", () => {
     expect(visibleNavigation({ role: "staff" }).map((n) => n.id)).toEqual([
       "daily-operations",
+      "cash",
       "sales",
       "tables",
       "kitchen",
@@ -131,6 +133,21 @@ describe("navegación por áreas", () => {
         catalogManager: true,
       }).some((b) => b.href === "/inventory"),
     ).toBe(false);
+  });
+  it("permite llegar a Caja pero reserva su configuración al administrador", () => {
+    for (const role of ["staff", "manager", "admin"])
+      expect(
+        visibleNavigation({ role }).some((n) => n.href === "/finance/cash"),
+      ).toBe(true);
+    expect(
+      visibleNavigation({ role: "admin" }).some(
+        (n) => n.href === "/settings/cash",
+      ),
+    ).toBe(true);
+    for (const role of ["staff", "manager"])
+      expect(
+        visibleNavigation({ role }).some((n) => n.href === "/settings/cash"),
+      ).toBe(false);
   });
   it("todas las redirecciones terminan en rutas canónicas", () => {
     for (const r of legacyRedirects) {

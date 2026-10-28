@@ -5,6 +5,7 @@ import { Radio, Monitor, ArrowUpRight } from "lucide-react";
 import { getJson, useOperation } from "@/components/inventory/shared";
 import { Button } from "@/components/ui/button";
 import { OperationAlert } from "@/components/ui/operation-alert";
+import { FieldCaption } from "@/components/ui/field-caption";
 import { OperationNotice } from "@/components/sales/shared";
 import {
   Dialog,
@@ -242,10 +243,13 @@ function LocatorManagementDialog({
                   type="checkbox"
                   className="size-6"
                   checked={confirmed}
+                  required={current.number !== number}
                   disabled={operation.locked}
                   onChange={(e) => setConfirmed(e.target.checked)}
                 />
-                Recibí físicamente el localizador {current.number}
+                <FieldCaption required={current.number !== number}>
+                  Recibí físicamente el localizador {current.number}
+                </FieldCaption>
               </label>
             )}
             <Button

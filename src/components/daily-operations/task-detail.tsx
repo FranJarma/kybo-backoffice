@@ -9,6 +9,7 @@ import {
 } from "@/modules/daily-operations/presentation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FieldCaption } from "@/components/ui/field-caption";
 import { quantity } from "@/lib/number-format";
 import type { TaskRow } from "@/modules/daily-operations/types";
 import { stateLabels, urgencyLabels } from "./task-list";
@@ -288,11 +289,12 @@ export function TaskDetail({
           {canManage && (
             <div className="space-y-2">
               <label htmlFor="daily-assignee" className="text-sm font-medium">
-                Responsable
+                <FieldCaption required>Responsable</FieldCaption>
               </label>
               <div className="flex flex-wrap gap-2">
                 <select
                   id="daily-assignee"
+                  required
                   className="min-h-12 min-w-0 flex-1 rounded-lg border bg-white px-3"
                   value={assignee}
                   onChange={(e) => setAssignee(e.target.value)}
@@ -383,8 +385,9 @@ export function TaskDetail({
             </summary>
             <div className="mt-3 space-y-3">
               <label className="grid gap-2 text-sm font-medium">
-                Motivo o impedimento
+                <FieldCaption required>Motivo o impedimento</FieldCaption>
                 <Input
+                  required
                   className="min-h-12"
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}

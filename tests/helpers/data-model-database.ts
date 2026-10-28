@@ -94,6 +94,9 @@ export async function createDataModelTestContext(
       await client.exec(
         await readFile("drizzle/0027_purchase_orders.sql", "utf8"),
       );
+    await client.exec(await readFile("drizzle/0028_cash_register.sql", "utf8"));
+    if (!options.legacyProcurement)
+      await client.exec(await readFile("drizzle/0029_purchase_advances.sql", "utf8"));
     return {
       ...fixture,
       client,

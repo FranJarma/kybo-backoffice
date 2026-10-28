@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { UserRound } from "lucide-react";
 import { SearchCombobox } from "@/components/ui/search-combobox";
 import { Input } from "@/components/ui/input";
+import { FieldCaption } from "@/components/ui/field-caption";
 import { getJson } from "@/components/inventory/shared";
 import type { SaleLookup } from "@/modules/sales/types";
 
@@ -62,8 +63,8 @@ export function CustomerPicker({
         htmlFor="pos-customer"
         className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-brand"
       >
-        <UserRound className="size-3.5" aria-hidden="true" /> Cliente{" "}
-        <span className="font-normal text-muted">· Opcional</span>
+        <UserRound className="size-3.5" aria-hidden="true" />
+        <FieldCaption optional>Cliente</FieldCaption>
       </label>
       <SearchCombobox
         createLabel="Nuevo cliente:"
@@ -99,7 +100,7 @@ export function CustomerPicker({
             htmlFor="pos-customer-email"
             className="mb-1 block text-xs text-muted"
           >
-            Email del cliente (opcional)
+            <FieldCaption optional>Email del cliente</FieldCaption>
           </label>
           <Input
             id="pos-customer-email"

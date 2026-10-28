@@ -3,6 +3,7 @@ import { useState, type FormEvent } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FieldCaption } from "@/components/ui/field-caption";
 import type { CatalogRow } from "@/modules/catalog/types";
 import type { CreateOrderInput } from "@/modules/procurement/types";
 import type { PurchaseSeed } from "@/modules/supply-alerts/presentation";
@@ -160,7 +161,7 @@ export function PurchaseOrderEditor({
             />
           </div>
           <label className="space-y-2 text-sm font-semibold">
-            Fecha del pedido
+            <FieldCaption required>Fecha del pedido</FieldCaption>
             <Input
               type="date"
               required
@@ -170,10 +171,7 @@ export function PurchaseOrderEditor({
             />
           </label>
           <label className="space-y-2 text-sm font-semibold">
-            Llegada estimada{" "}
-            <span className="font-normal text-muted-foreground">
-              (opcional)
-            </span>
+            <FieldCaption optional>Llegada estimada</FieldCaption>
             <Input
               type="date"
               min={orderedOn}
@@ -248,12 +246,14 @@ export function PurchaseOrderEditor({
                 />
               </div>
               <label className="mt-4 block space-y-2 text-sm font-semibold">
-                Cantidad a pedir{" "}
-                {l.presentation
-                  ? `· ${l.presentation.name}`
-                  : l.item
-                    ? `· ${l.item.baseUnit === "unit" ? "unidades" : l.item.baseUnit}`
-                    : ""}
+                <FieldCaption required>
+                  Cantidad a pedir{" "}
+                  {l.presentation
+                    ? `· ${l.presentation.name}`
+                    : l.item
+                      ? `· ${l.item.baseUnit === "unit" ? "unidades" : l.item.baseUnit}`
+                      : ""}
+                </FieldCaption>
                 <Input
                   required
                   inputMode="decimal"
@@ -282,7 +282,7 @@ export function PurchaseOrderEditor({
           Agregar insumo
         </Button>
         <label className="block space-y-2 text-sm font-semibold">
-          Notas <span className="font-normal">(opcional)</span>
+          <FieldCaption optional>Notas</FieldCaption>
           <Input
             maxLength={2000}
             value={notes}

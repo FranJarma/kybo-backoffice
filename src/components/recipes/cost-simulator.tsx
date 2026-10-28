@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef } from "react";
 import { Input } from "@/components/ui/input";
+import { FieldCaption } from "@/components/ui/field-caption";
 import { OperationAlert } from "@/components/ui/operation-alert";
 import { useErrorFeedback } from "@/components/ui/use-error-feedback";
 import { money, quantity } from "@/components/inventory/shared";
@@ -52,7 +53,9 @@ export function CostSimulator({ recipe }: { recipe: RecipeDetail }) {
       {config.groups.map((g) => (
         <fieldset key={g.id} className="space-y-2">
           <legend className="text-sm font-semibold mb-2">
-            {g.name} · {g.min} a {g.max}
+            <FieldCaption required={g.min > 0} optional={g.min === 0}>
+              {g.name} · {g.min} a {g.max}
+            </FieldCaption>
           </legend>
           {g.options
             .filter((o) => o.enabled)
@@ -61,7 +64,7 @@ export function CostSimulator({ recipe }: { recipe: RecipeDetail }) {
                 key={o.id}
                 className="flex justify-between items-center gap-3 text-sm"
               >
-                <span>{o.name}</span>
+                <FieldCaption optional>{o.name}</FieldCaption>
                 <Input
                   aria-label={`Comparar ${o.name}`}
                   className="w-20 bg-white"

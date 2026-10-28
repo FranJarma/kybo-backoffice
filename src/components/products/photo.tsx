@@ -3,6 +3,7 @@ import Image from "next/image";
 import { useState } from "react";
 import { ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FieldCaption } from "@/components/ui/field-caption";
 import { OperationAlert } from "@/components/ui/operation-alert";
 import { useErrorFeedback } from "@/components/ui/use-error-feedback";
 import type { PhotoVariant } from "@/modules/media/photo-variants";
@@ -62,7 +63,9 @@ export function PhotoEditor({
         </div>
         <div className="min-w-0 w-full space-y-4">
           <label className="block text-sm font-semibold">
-            {value ? "Reemplazar foto" : "Subir foto"}
+            <FieldCaption optional>
+              {value ? "Reemplazar foto" : "Subir foto"}
+            </FieldCaption>
             <input
               className="mt-2 block w-full text-xs file:mr-2 file:rounded-lg file:border-0 file:bg-blue-50 file:p-2 file:text-brand"
               type="file"

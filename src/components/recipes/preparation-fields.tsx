@@ -2,6 +2,7 @@
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FieldCaption } from "@/components/ui/field-caption";
 import type { PreparationGuide } from "@/modules/recipes/preparation-guide";
 
 export const emptyPreparation: PreparationGuide = {
@@ -33,7 +34,7 @@ export function PreparationFields({
         </p>
       </div>
       <label className="block max-w-xs space-y-2 text-sm font-medium">
-        <span>Tiempo estimado (minutos)</span>
+        <FieldCaption optional>Tiempo estimado (minutos)</FieldCaption>
         <Input
           type="number"
           min={1}
@@ -51,7 +52,9 @@ export function PreparationFields({
         />
       </label>
       <div className="space-y-5">
-        <h4 className="text-sm font-semibold">Paso a paso</h4>
+        <h4 className="text-sm font-semibold">
+          <FieldCaption optional>Paso a paso</FieldCaption>
+        </h4>
         {!value.steps.length && (
           <p className="text-sm text-muted">
             Agregá los pasos en el orden en que se prepara la receta.
@@ -60,7 +63,9 @@ export function PreparationFields({
         {value.steps.map((step, index) => (
           <div key={index} className="space-y-2">
             <div className="flex items-center justify-between gap-3">
-              <span className="text-sm font-medium">Paso {index + 1}</span>
+              <span className="text-sm font-medium">
+                <FieldCaption optional>Paso {index + 1}</FieldCaption>
+              </span>
               <div className="flex gap-1">
                 <Button
                   type="button"
@@ -121,7 +126,7 @@ export function PreparationFields({
         </Button>
       </div>
       <label className="block space-y-2 text-sm font-medium">
-        <span>Observaciones para el equipo</span>
+        <FieldCaption optional>Observaciones para el equipo</FieldCaption>
         <textarea
           className="form-control min-h-28 resize-y"
           maxLength={2000}

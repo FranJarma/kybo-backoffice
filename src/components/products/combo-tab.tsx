@@ -268,6 +268,12 @@ export function ComboTab({
             modificadores y mermas. El cliente elige un producto por grupo; un
             grupo con una sola opción es fijo.
           </p>
+          <p className="text-sm font-semibold">
+            <FieldCaption required>Grupos del combo</FieldCaption>
+            <span className="mt-1 block text-xs font-normal text-muted">
+              Agregá al menos un grupo con un producto.
+            </span>
+          </p>
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-5">
             <p className="text-sm text-muted">
               Reutilizá una lista de productos en varios combos.
@@ -433,9 +439,12 @@ export function ComboTab({
                       ] as const
                     ).map(([key, label]) => (
                       <label key={key} className="text-sm">
-                        Adicional final {label} (IVA incluido)
+                        <FieldCaption required>
+                          Adicional final {label} (IVA incluido)
+                        </FieldCaption>
                         <Input
                           inputMode="decimal"
+                          required
                           value={o[key]}
                           onChange={(e) =>
                             update(i, {
@@ -457,33 +466,41 @@ export function ComboTab({
                 </div>
               ))}
               {!g.source && (
-                <SearchCombobox
-                  id={`combo-product-${i}`}
-                  label="Agregar producto al grupo"
-                  value=""
-                  selectedLabel=""
-                  options={choices.filter(
-                    (p) => !g.options.some((o) => o.productId === p.id),
-                  )}
-                  onSearch={setQuery}
-                  onChange={(id) => {
-                    const p = choices.find((p) => p.id === id);
-                    if (p)
-                      update(i, {
-                        ...g,
-                        options: [
-                          ...g.options,
-                          {
-                            productId: p.id,
-                            name: p.name,
-                            counter: "0",
-                            pedidosya: "0",
-                            ubereats: "0",
-                          },
-                        ],
-                      });
-                  }}
-                />
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">
+                    <FieldCaption required>Productos incluidos</FieldCaption>
+                    <span className="mt-1 block text-xs font-normal text-muted">
+                      Elegí al menos un producto para este grupo.
+                    </span>
+                  </p>
+                  <SearchCombobox
+                    id={`combo-product-${i}`}
+                    label="Agregar producto al grupo"
+                    value=""
+                    selectedLabel=""
+                    options={choices.filter(
+                      (p) => !g.options.some((o) => o.productId === p.id),
+                    )}
+                    onSearch={setQuery}
+                    onChange={(id) => {
+                      const p = choices.find((p) => p.id === id);
+                      if (p)
+                        update(i, {
+                          ...g,
+                          options: [
+                            ...g.options,
+                            {
+                              productId: p.id,
+                              name: p.name,
+                              counter: "0",
+                              pedidosya: "0",
+                              ubereats: "0",
+                            },
+                          ],
+                        });
+                    }}
+                  />
+                </div>
               )}
               {!g.source && (
                 <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">

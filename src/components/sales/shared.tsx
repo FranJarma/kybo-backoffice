@@ -10,15 +10,19 @@ export function Control({
   label,
   children,
   required = false,
+  optional = false,
 }: {
   label: string;
   children: React.ReactNode;
   required?: boolean;
+  optional?: boolean;
 }) {
   return (
     <label className="block min-w-0">
       <span className="mb-2 block text-xs font-semibold text-brand">
-        <FieldCaption required={required}>{label}</FieldCaption>
+        <FieldCaption required={required} optional={optional}>
+          {label}
+        </FieldCaption>
       </span>
       {children}
     </label>

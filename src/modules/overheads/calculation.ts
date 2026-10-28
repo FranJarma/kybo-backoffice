@@ -4,7 +4,7 @@ import {
   roundedDivision,
   six,
 } from "@/modules/inventory/decimal";
-import type { ExpenseEntry } from "./types";
+import { isAutomaticExpense, type ExpenseSnapshotEntry } from "./types";
 
 /** Multiply the original monthly ratio before rounding, including for combos. */
 export function allocateOverhead(
@@ -21,7 +21,7 @@ export function allocateOverhead(
   );
 }
 export function summarizeExpenses(
-  entries: ExpenseEntry[],
+  entries: ExpenseSnapshotEntry[],
   expectedUnits: number | null,
   actualUnits: number,
 ) {
@@ -32,7 +32,8 @@ export function summarizeExpenses(
         0n,
       ),
     );
-  const budgetPending = entries.filter((e) => e.budget === null).length;
+  const manualEntries = entries.filter((entry) => !isAutomaticExpense(entry));
+  const budgetPending = manualEntries.filter((e) => e.budget === null).length;
   const actualPending = entries.filter((e) => e.actual === null).length;
   const budgetTotal = sum("budget"),
     actualTotal = sum("actual");
@@ -42,7 +43,7 @@ export function summarizeExpenses(
     budgetPending,
     actualPending,
     budgetRate:
-      entries.length && !budgetPending
+      manualEntries.length && !budgetPending
         ? allocateOverhead(budgetTotal, expectedUnits, 1)
         : null,
     actualRate:

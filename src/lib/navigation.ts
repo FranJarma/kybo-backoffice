@@ -17,6 +17,14 @@ export const navigation = [
     access: "all",
   },
   {
+    id: "cash",
+    area: "Negocio",
+    label: "Caja",
+    href: "/finance/cash",
+    icon: "WalletCards",
+    access: "all",
+  },
+  {
     id: "sales",
     area: "Ventas",
     label: "Punto de venta",
@@ -202,6 +210,14 @@ export const navigation = [
     href: "/finance/expenses",
     icon: "WalletCards",
     access: "manager",
+  },
+  {
+    id: "cash-settings",
+    area: "Configuración",
+    label: "Configuración de caja",
+    href: "/settings/cash",
+    icon: "WalletCards",
+    access: "admin",
   },
   {
     id: "payment-methods",

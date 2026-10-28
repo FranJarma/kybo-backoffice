@@ -48,6 +48,7 @@ export type SalePayment = {
   kind: "collection" | "refund";
   collector: "local" | "platform";
   methodName: string | null;
+  methodKind?: string | null;
   commissionPercent?: string | null;
   commissionAmount?: string | null;
   settlementNet?: string | null;

@@ -142,8 +142,8 @@ function GroupEditor({
               <FieldCaption required>Productos incluidos</FieldCaption>
             </h3>
             <p className="mt-2 text-sm text-muted">
-              Elegí las fichas existentes. Sus recetas, modificadores y costos
-              se conservan.
+              Elegí al menos un producto existente. Sus recetas, modificadores y
+              costos se conservan.
             </p>
           </div>
           <SearchCombobox

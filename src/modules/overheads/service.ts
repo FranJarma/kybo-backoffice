@@ -3,6 +3,8 @@ import { user } from "@/db/auth-schema";
 import type { AppDb } from "@/db/client";
 import type { Tx } from "@/db/types";
 import { expensePeriods, expenseClosures } from "@/db/overhead-schema";
+import { cashExpenses } from "@/db/cash-schema";
+import { cashAvailable } from "@/modules/cash/integration";
 import { sales, saleOrders, saleLines } from "@/db/sales-schema";
 import { auditEvents } from "@/db/business-schema";
 import type { Actor } from "@/lib/access";
@@ -12,7 +14,12 @@ import type { OperationalContext } from "@/modules/operations/types";
 import { decimal, integer } from "@/modules/inventory/decimal";
 import { businessDate } from "@/modules/operations/business-date";
 import { summarizeExpenses } from "./calculation";
-import { type ExpenseEntry, type OverheadBasis } from "./types";
+import {
+  type AutomaticExpenseEntry,
+  type ExpenseEntry,
+  type OverheadBasis,
+  isAutomaticExpense,
+} from "./types";
 import {
   expenseMonth,
   expenseEntrySchema,
@@ -53,6 +60,41 @@ function bounds(month: string) {
     start: `${month}-01`,
     end: `${m === 12 ? y + 1 : y}-${String(m === 12 ? 1 : m + 1).padStart(2, "0")}-01`,
   };
+}
+/** Daily records contribute actuals once; budgets remain exclusively manual. */
+async function dailyExpenses(
+  tx: Tx,
+  branchId: string,
+  month: string,
+): Promise<AutomaticExpenseEntry[]> {
+  if (!(await cashAvailable(tx))) return [];
+  const { start, end } = bounds(month);
+  const rows = await tx
+    .select()
+    .from(cashExpenses)
+    .where(
+      and(
+        eq(cashExpenses.branchId, branchId),
+        gte(cashExpenses.businessDate, start),
+        lt(cashExpenses.businessDate, end),
+      ),
+    )
+    .orderBy(
+      cashExpenses.businessDate,
+      cashExpenses.createdAt,
+      cashExpenses.id,
+    );
+  return rows.map((row) => ({
+    source: "cash",
+    sourceId: row.id,
+    businessDate: row.businessDate,
+    fundingSource: row.source as AutomaticExpenseEntry["fundingSource"],
+    category: row.category as ExpenseEntry["category"],
+    concept: row.concept,
+    budget: "0.00",
+    actual: row.amount,
+    notes: "",
+  }));
 }
 export async function finalUnits(
   tx: Tx,
@@ -146,14 +188,20 @@ export async function getExpenses(db: AppDb, actor: Actor, rawMonth?: string) {
             .where(eq(expenseClosures.periodId, period.id))
             .orderBy(desc(expenseClosures.sequence))
         : [];
+      const automaticEntries =
+        period?.status === "closed"
+          ? (closures[0]?.entries ?? []).filter(isAutomaticExpense)
+          : await dailyExpenses(tx, ctx.branchId, month);
+      const summaryEntries = [...(period?.entries ?? []), ...automaticEntries];
       return {
         month,
         branchId: ctx.branchId,
         timeZone: ctx.timeZone,
         period: period ?? null,
         actualUnits,
+        automaticEntries,
         summary: summarizeExpenses(
-          period?.entries ?? [],
+          summaryEntries,
           period?.expectedUnits ?? null,
           actualUnits,
         ),
@@ -215,10 +263,15 @@ export async function expenseCommand(
       : decimal(input.iibbRate, 2, false);
   if (iibbRate !== null && integer(iibbRate) > 10000n)
     invalid("La alícuota estimada de IIBB debe estar entre 0 y 100%.");
+  const automaticEntries =
+    input.action === "save"
+      ? []
+      : await dailyExpenses(tx, ctx.branchId, input.month);
+  const closureEntries = [...entries, ...automaticEntries];
   if (input.action !== "save") {
     if (
       !input.confirmed ||
-      !entries.length ||
+      !closureEntries.length ||
       entries.some((e) => e.actual === null)
     )
       invalid(
@@ -259,7 +312,7 @@ export async function expenseCommand(
       .values({
         periodId: saved.id,
         sequence: (last?.sequence ?? 0) + 1,
-        entries,
+        entries: closureEntries,
         expectedUnits,
         iibbRate,
         actualUnits: await finalUnits(tx, ctx.branchId, input.month),

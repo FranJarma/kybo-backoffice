@@ -44,13 +44,19 @@ export function Field({
   hint?: string;
 }) {
   const id = useId();
+  const editable = !!onChange && !disabled;
   return (
     <div className="min-w-0">
       <label
         htmlFor={id}
         className="mb-2 block text-xs font-semibold text-brand"
       >
-        <FieldCaption required={required}>{label}</FieldCaption>
+        <FieldCaption
+          required={editable && required}
+          optional={editable && !required}
+        >
+          {label}
+        </FieldCaption>
       </label>
       <div className="relative">
         <Input
@@ -62,7 +68,7 @@ export function Field({
           value={value}
           disabled={disabled}
           readOnly={!onChange}
-          required={required}
+          required={editable && required}
           onChange={(e) => onChange?.(e.target.value)}
           className={unit ? "pr-16 tabular-nums" : undefined}
         />

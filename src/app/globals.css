@@ -205,6 +205,15 @@ a {
   background: #edf5ff;
   color: var(--brand);
 }
+[data-slot="button"][data-variant="outline-primary"] {
+  border: 1px solid var(--accent);
+  background: #fff;
+  color: var(--accent);
+}
+[data-slot="button"][data-variant="outline-primary"]:hover {
+  background: color-mix(in srgb, var(--accent) 6%, #fff);
+  color: var(--accent);
+}
 [data-slot="button"][data-size="icon"] {
   min-width: 42px;
 }

@@ -210,7 +210,16 @@ export function SaleDetailPanel({
                   </div>
                   <p className="mt-1 text-muted">{time(p.createdAt)}</p>
                   {p.reference && (
-                    <p className="mt-2 break-all">{p.reference}</p>
+                    <p className="mt-2 break-all">
+                      <span className="text-muted">
+                        {p.methodKind === "card"
+                          ? p.kind === "refund"
+                            ? "Comprobante original Nº: "
+                            : "Comprobante Nº: "
+                          : "Referencia: "}
+                      </span>
+                      {p.reference}
+                    </p>
                   )}
                   {canCancel && p.kind === "refund" && (
                     <p className="mt-2 text-muted">

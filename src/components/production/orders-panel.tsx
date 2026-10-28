@@ -607,9 +607,8 @@ function ConfirmOrder({
         </label>
         {recipe.lines.map((line, i) => (
           <label key={line.id} className="text-sm">
-            <FieldCaption required={!line.optional}>
+            <FieldCaption required={!line.optional} optional={line.optional}>
               Componente {i + 1}
-              {line.optional ? " · opcional" : ""}
             </FieldCaption>
             <select
               required={!line.optional}
@@ -633,7 +632,7 @@ function ConfirmOrder({
           </label>
         ))}
         <label className="text-sm md:col-span-2">
-          Indicaciones para el responsable
+          <FieldCaption optional>Indicaciones para el responsable</FieldCaption>
           <textarea
             className="mt-1 w-full rounded border p-3"
             maxLength={2000}
@@ -743,7 +742,7 @@ function FinishOrder({
           />
         </label>
         <label className="text-sm">
-          Vencimiento
+          <FieldCaption optional>Vencimiento</FieldCaption>
           <Input
             type="date"
             value={expiry}
@@ -751,7 +750,7 @@ function FinishOrder({
           />
         </label>
         <label className="text-sm">
-          Código de lote
+          <FieldCaption optional>Código de lote</FieldCaption>
           <Input
             maxLength={120}
             value={lotCode}
@@ -891,11 +890,11 @@ function EditPlanning({
             </span>
           </label>
           <label>
-            <FieldCaption required>
+            <FieldCaption required={order.state === "planned"}>
               Cantidad prevista ({order.baseUnit})
             </FieldCaption>
             <Input
-              required
+              required={order.state === "planned"}
               disabled={order.state !== "planned"}
               inputMode="decimal"
               value={planned}
@@ -903,7 +902,7 @@ function EditPlanning({
             />
           </label>
           <label>
-            Indicaciones
+            <FieldCaption optional>Indicaciones</FieldCaption>
             <textarea
               className="w-full rounded border p-3"
               maxLength={2000}

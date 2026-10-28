@@ -1,5 +1,6 @@
 "use client";
 import { PreparationFields, emptyPreparation } from "./preparation-fields";
+import { FieldCaption } from "@/components/ui/field-caption";
 import { recipeSection } from "@/modules/catalog/item-classes";
 import { consumptionQuantity } from "@/modules/recipes/waste";
 import { RecipeEditorTabs, type RecipeEditorView } from "./editor-tabs";
@@ -1203,7 +1204,7 @@ export function RecipeEditor({
             Agregar ingrediente o descartable
           </Button>
           <label className="block text-xs font-semibold">
-            Indicaciones de preparación
+            <FieldCaption optional>Indicaciones de preparación</FieldCaption>
             <textarea
               className="form-control mt-2 min-h-20"
               value={notes}

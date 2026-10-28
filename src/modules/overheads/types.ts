@@ -15,6 +15,19 @@ export type ExpenseEntry = {
   actual: string | null;
   notes: string;
 };
+/** Immutable provenance stored with a monthly closure, never a manual input. */
+export type AutomaticExpenseEntry = ExpenseEntry & {
+  source: "cash";
+  sourceId: string;
+  businessDate: string;
+  fundingSource: "cash" | "external";
+};
+export type ExpenseSnapshotEntry = ExpenseEntry | AutomaticExpenseEntry;
+export function isAutomaticExpense(
+  entry: ExpenseSnapshotEntry,
+): entry is AutomaticExpenseEntry {
+  return "source" in entry && entry.source === "cash";
+}
 export type OverheadBasis = {
   month: string;
   budgetTotal: string | null;

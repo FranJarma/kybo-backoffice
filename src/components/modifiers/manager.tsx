@@ -9,6 +9,7 @@ import Link from "next/link";
 import { Plus, Pencil, Archive, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FieldCaption } from "@/components/ui/field-caption";
 import { OperationAlert } from "@/components/ui/operation-alert";
 import { useErrorFeedback } from "@/components/ui/use-error-feedback";
 import {
@@ -118,9 +119,10 @@ export function ComponentFields({
                     }
                   />
                 </Field>
-                <Field label="Merma %">
+                <Field label="Merma %" required>
                   <Input
                     aria-label={`Merma de componente ${i + 1}`}
+                    required
                     inputMode="decimal"
                     value={c.wastePercent ?? "0"}
                     onChange={(event) =>
@@ -252,6 +254,12 @@ function GroupEditor({
           Compartí estas opciones entre productos. Cada producto define sus
           cantidades de elección y recargos.
         </p>
+        <p className="text-sm font-semibold">
+          <FieldCaption required>Opciones del grupo</FieldCaption>
+          <span className="mt-1 block text-xs font-normal text-muted">
+            Agregá al menos una opción.
+          </span>
+        </p>
         {options.map((o, i) => (
           <section
             key={o.key}
@@ -321,7 +329,7 @@ function GroupEditor({
                 }
               />
             ) : (
-              <Field label="Indicación para cocina">
+              <Field label="Indicación para cocina" optional>
                 <Input
                   value={o.instruction}
                   placeholder={o.name}

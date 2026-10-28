@@ -9,6 +9,8 @@ import type { Actor } from "@/lib/access";
 import type { CommandMeta, OperationalContext } from "./types";
 import { AppError } from "@/lib/errors";
 import { authorizeTaskCommand } from "../daily-operations/access";
+import { authorizeCashCommand } from "../cash/access";
+import { lockCashConfiguration, refreshCashContext } from "../cash/integration";
 
 function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonical);
@@ -52,8 +54,10 @@ export async function executeCommand<T>(
       action === "deliver" ||
       productionCommand ||
       action === "daily-task";
+    const cashCommand = action === "cash";
     if (
-      (!staffCommand && ctx.role === "staff") ||
+      (!staffCommand && !cashCommand && ctx.role === "staff") ||
+      (action === "cash-settings" && ctx.role !== "admin") ||
       (action === "global-lot-recall" && ctx.role !== "admin")
     )
       throw new AppError(
@@ -62,6 +66,7 @@ export async function executeCommand<T>(
         403,
       );
     if (action === "daily-task") await authorizeTaskCommand(tx, ctx, payload);
+    if (cashCommand) await authorizeCashCommand(tx, ctx, payload);
     if (ctx.role === "staff" && productionCommand) {
       const orderId = (payload as { id?: unknown })?.id;
       const [order] =
@@ -97,6 +102,18 @@ export async function executeCommand<T>(
       })
       .onConflictDoNothing()
       .returning();
+    if (cashCommand || action === "cash-settings") {
+      // Keep the common identity-then-branch lock order, including replay.
+      await lockCashConfiguration(tx, branchId);
+      await refreshCashContext(tx, ctx);
+      if (action === "cash-settings" && ctx.role !== "admin")
+        throw new AppError(
+          "FORBIDDEN",
+          "Solo Administración puede configurar Caja.",
+          403,
+        );
+      if (cashCommand) await authorizeCashCommand(tx, ctx, payload);
+    }
     if (!claimed) {
       const [previous] = await tx
         .select()

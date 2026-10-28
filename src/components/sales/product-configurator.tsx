@@ -90,8 +90,12 @@ export function ProductConfigurator({
       <div className="space-y-3">
         <p className="text-xs text-muted">
           {g.max === 1
-            ? "Elegí una opción"
-            : `Hasta ${g.max} elecciones · ${count} seleccionadas`}
+            ? g.min > 0
+              ? "Elegí una opción"
+              : "Podés elegir una opción"
+            : g.min > 0
+              ? `Entre ${g.min} y ${g.max} elecciones · ${count} seleccionadas`
+              : `Hasta ${g.max} elecciones · ${count} seleccionadas`}
         </p>
         <div className="grid gap-2 sm:grid-cols-2">
           {g.options.map((o) => {
@@ -127,6 +131,7 @@ export function ProductConfigurator({
                     className="size-5 shrink-0 accent-blue"
                     type="radio"
                     name={g.id}
+                    required={g.min > 0}
                     checked={selected === 1}
                     disabled={unavailable}
                     onChange={() =>

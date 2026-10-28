@@ -2,6 +2,7 @@
 import { useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FieldCaption } from "@/components/ui/field-caption";
 import { SearchCombobox } from "@/components/ui/search-combobox";
 import type {
   SupplyPolicy,
@@ -83,7 +84,7 @@ export function SupplyPolicyEditor({
       {!fixedItemId && (
         <div className="grid gap-2">
           <label htmlFor={`${id}-item`} className="text-sm font-medium">
-            Insumo
+            <FieldCaption required={!policy}>Insumo</FieldCaption>
           </label>
           <SearchCombobox
             id={`${id}-item`}
@@ -131,7 +132,7 @@ export function SupplyPolicyEditor({
             key={field.label}
             className="grid content-start gap-2 text-sm font-medium"
           >
-            {field.label}
+            <FieldCaption required>{field.label}</FieldCaption>
             <Input
               className="min-h-12"
               type="number"
@@ -169,11 +170,13 @@ export function SupplyPolicyEditor({
         </summary>
         <div className="mt-4 grid gap-5 sm:grid-cols-2">
           <label className="grid content-start gap-2 text-sm font-medium">
-            Consumo diario estimado (
-            {item?.baseUnit === "unit"
-              ? "unid."
-              : (item?.baseUnit ?? "unidad base")}
-            )
+            <FieldCaption optional>
+              Consumo diario estimado (
+              {item?.baseUnit === "unit"
+                ? "unid."
+                : (item?.baseUnit ?? "unidad base")}
+              )
+            </FieldCaption>
             <Input
               className="min-h-12"
               inputMode="decimal"
@@ -184,7 +187,7 @@ export function SupplyPolicyEditor({
             />
           </label>
           <label className="grid content-start gap-2 text-sm font-medium">
-            Reponer para cubrir (días)
+            <FieldCaption required>Reponer para cubrir (días)</FieldCaption>
             <Input
               className="min-h-12"
               type="number"

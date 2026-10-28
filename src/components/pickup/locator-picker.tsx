@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FieldCaption } from "@/components/ui/field-caption";
 import {
   Dialog,
   DialogContent,
@@ -32,7 +33,18 @@ export function LocatorPicker({
   const [open, setOpen] = useState(false);
   return (
     <div className="min-w-0">
-      <p className="mb-1.5 text-xs font-semibold text-brand">Localizador</p>
+      <p className="mb-1.5 text-xs font-semibold text-brand">
+        <FieldCaption
+          required={
+            !automatic && !!fleet && locatorSelection(fleet, null).required
+          }
+          optional={
+            !automatic && !!fleet && !locatorSelection(fleet, null).required
+          }
+        >
+          Localizador
+        </FieldCaption>
+      </p>
       <Button
         type="button"
         variant="outline"

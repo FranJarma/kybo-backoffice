@@ -106,7 +106,7 @@ test("central preparation requires assignment and confirms a real order from the
   await expect(confirm).toBeDisabled();
   await page
     .getByRole("dialog")
-    .getByLabel("Responsable", { exact: true })
+    .getByRole("combobox", { name: "Responsable", exact: true })
     .selectOption("staff");
   await page.getByRole("button", { name: "Asignar", exact: true }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -255,7 +255,7 @@ for (const size of [
     await page.getByText("Reponer vasos descartables", { exact: true }).click();
     await page
       .getByRole("dialog")
-      .getByLabel("Responsable", { exact: true })
+      .getByRole("combobox", { name: "Responsable", exact: true })
       .selectOption("staff");
     await page.getByRole("button", { name: "Asignar", exact: true }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);

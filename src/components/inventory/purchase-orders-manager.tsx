@@ -303,6 +303,8 @@ export function PurchaseOrdersManager({
             order={order}
             timeZone={timeZone}
             locked={locked}
+            actorId={actorId}
+            onUpdated={() => void load()}
             onBack={() => setSelected("")}
             onReceive={() => setReceiving(order)}
             onCommand={(command) =>

@@ -9,10 +9,38 @@ export type PurchaseOrder = Omit<
   typeof purchaseOrders.$inferSelect,
   "createdAt" | "updatedAt"
 > & {
+  financial?: PurchaseOrderFinancial;
   createdAt: string;
   updatedAt: string;
   lines: PurchaseOrderLine[];
   receipts: { id: string; receivedOn: string; documentNumber: string | null }[];
+};
+export type PurchaseAdvanceInput = {
+  requestId: string;
+  supplierId: string;
+  expectedRevision: number;
+  paymentMethodId: string;
+  paidOn: string;
+  amount: string;
+  source: "cash" | "external";
+  reference?: string | null;
+};
+export type PurchaseOrderFinancial = {
+  available: boolean;
+  advancedAmount: string;
+  appliedAmount: string;
+  availableAmount: string;
+  advances: {
+    id: string;
+    amount: string;
+    appliedAmount: string;
+    availableAmount: string;
+    source: "cash" | "external";
+    paymentMethodName: string;
+    paidOn: string;
+    reference: string | null;
+    createdAt: string;
+  }[];
 };
 export type OrderSnapshot = { available: boolean; orders: PurchaseOrder[] };
 export type CreateOrderInput = {

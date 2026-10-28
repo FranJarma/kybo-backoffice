@@ -38,6 +38,7 @@ import {
 } from "@/lib/navigation";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { useSidebarPreference } from "@/lib/sidebar-preference";
+import { CashHeader } from "@/components/cash/header";
 const icons = {
   House,
   Package,
@@ -135,6 +136,7 @@ export function SignOutButton({ compact = false }: { compact?: boolean }) {
 export function AppShell({
   children,
   role,
+  actorId = "",
   name,
   catalogManager = false,
   branches,
@@ -143,6 +145,7 @@ export function AppShell({
 }: {
   children: React.ReactNode;
   role: string;
+  actorId?: string;
   name: string;
   dateLabel: string;
   catalogManager?: boolean;
@@ -222,7 +225,7 @@ export function AppShell({
       <div
         data-brand-header
         className={cn(
-          "flex h-16 shrink-0 items-center border-b border-line",
+          "flex h-18 shrink-0 items-center border-b border-line",
           compact ? "justify-center px-2" : "gap-3 px-6",
         )}
       >
@@ -245,7 +248,7 @@ export function AppShell({
           />
         </Link>
         {!compact && (
-          <span className="border-l border-line pl-3 text-[11px] font-extrabold tracking-tight text-brand">
+          <span className="border-l border-line pl-3 text-[10px] font-semibold tracking-[0.08em] text-muted">
             OPERATIONS
           </span>
         )}
@@ -419,7 +422,7 @@ export function AppShell({
         >
           <header
             data-topbar
-            className="sticky top-0 z-20 flex min-h-16 flex-wrap items-center justify-between gap-3 border-b border-line bg-white/95 px-4 py-3 backdrop-blur-sm sm:flex-nowrap sm:px-7"
+            className="sticky top-0 z-20 grid min-h-16 grid-cols-[auto_minmax(0,1fr)] items-center gap-2 border-b border-line bg-white px-4 py-2.5 sm:flex sm:flex-wrap sm:justify-between sm:gap-4 sm:px-7 lg:h-18 lg:min-h-18 lg:flex-nowrap lg:py-0"
           >
             <div className="flex min-w-0 items-center gap-3">
               {!register && (
@@ -428,7 +431,7 @@ export function AppShell({
                   variant="ghost"
                   size="icon"
                   ref={collapseButton}
-                  className="hidden size-11 text-muted lg:inline-flex"
+                  className="hidden size-11 rounded-lg bg-surface/70 text-muted hover:bg-blue-50 hover:text-blue lg:inline-flex"
                   aria-controls="desktop-sidebar"
                   aria-expanded={!collapsed}
                   aria-label={
@@ -453,7 +456,10 @@ export function AppShell({
               <Button
                 variant="ghost"
                 size="icon"
-                className={cn("min-h-12 min-w-12", !register && "lg:hidden")}
+                className={cn(
+                  "min-h-11 min-w-11 rounded-lg bg-surface/70 text-muted hover:bg-blue-50 hover:text-blue",
+                  !register && "lg:hidden",
+                )}
                 aria-label="Abrir menú"
                 ref={menuButton}
                 aria-expanded={open}
@@ -461,22 +467,27 @@ export function AppShell({
               >
                 <Menu size={21} />
               </Button>
-              <Breadcrumb items={breadcrumbs(path, { role, catalogManager })} />
+              <div className="hidden min-w-0 sm:block sm:max-w-48 xl:max-w-none">
+                <Breadcrumb
+                  items={breadcrumbs(path, { role, catalogManager })}
+                />
+              </div>
             </div>
-            <div className="flex w-full min-w-0 items-center gap-3 sm:w-auto sm:shrink-0">
-              {role === "staff" ? (
-                <p
-                  className="truncate text-sm text-muted"
-                  title="Sucursal asignada"
-                >
-                  {
-                    branches.find((branch) => branch.id === selectedBranchId)
-                      ?.name
-                  }
-                </p>
-              ) : (
-                <BranchSelector rows={branches} selected={selectedBranchId} />
-              )}
+            <div className="contents sm:flex sm:w-auto sm:min-w-0 sm:flex-1 sm:flex-wrap sm:items-center sm:justify-end sm:gap-4">
+              {selectedBranchId ? (
+                <CashHeader
+                  key={`${actorId}:${selectedBranchId}`}
+                  actorId={actorId}
+                  branchId={selectedBranchId}
+                />
+              ) : null}
+              <div className="col-start-2 row-start-1 min-w-0 sm:ml-1 sm:flex-1 sm:max-w-64 sm:border-l sm:border-line sm:pl-4">
+                <BranchSelector
+                  rows={branches}
+                  selected={selectedBranchId}
+                  readOnly={role === "staff"}
+                />
+              </div>
             </div>
           </header>
           <main

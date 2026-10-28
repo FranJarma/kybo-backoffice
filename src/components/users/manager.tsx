@@ -16,6 +16,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FieldCaption } from "@/components/ui/field-caption";
 import {
   Dialog,
   DialogContent,
@@ -402,6 +403,7 @@ export function UsersManager({ initial }: { initial: UsersSnapshot }) {
                       <Label
                         htmlFor="team-username"
                         required={!editing || !draft.email}
+                        optional={!!editing && !!draft.email}
                       >
                         Usuario
                       </Label>
@@ -425,17 +427,19 @@ export function UsersManager({ initial }: { initial: UsersSnapshot }) {
                       {fieldError("username")}
                     </div>
                     <div>
-                      <Label htmlFor="team-email">
-                        Correo{" "}
-                        <span className="font-normal text-muted">
-                          (opcional)
-                        </span>
+                      <Label
+                        htmlFor="team-email"
+                        required={!!editing && !draft.username}
+                        optional={!editing || !!draft.username}
+                      >
+                        Correo
                       </Label>
                       <Input
                         id="team-email"
                         data-user-field="email"
                         className="mt-2"
                         type="email"
+                        required={!!editing && !draft.username}
                         autoComplete="off"
                         value={draft.email}
                         onChange={(e) => update({ email: e.target.value })}
@@ -444,7 +448,11 @@ export function UsersManager({ initial }: { initial: UsersSnapshot }) {
                       {fieldError("email")}
                     </div>
                     <div className="sm:col-span-2">
-                      <Label htmlFor="team-password" required={!editing}>
+                      <Label
+                        htmlFor="team-password"
+                        required={!editing}
+                        optional={!!editing}
+                      >
                         {editing ? "Nueva contraseña" : "Contraseña inicial"}
                       </Label>
                       <div className="relative mt-2">
@@ -503,11 +511,12 @@ export function UsersManager({ initial }: { initial: UsersSnapshot }) {
                   >
                     Rol y accesos
                   </h3>
-                  <Label htmlFor="team-role" required>
+                  <Label htmlFor="team-role" required={!ownAccount}>
                     Rol de la cuenta
                   </Label>
                   <select
                     id="team-role"
+                    required={!ownAccount}
                     className="form-control mt-2"
                     disabled={ownAccount}
                     value={draft.role}
@@ -539,15 +548,12 @@ export function UsersManager({ initial }: { initial: UsersSnapshot }) {
                     <>
                       <fieldset className="mt-6">
                         <legend className="mb-3 text-sm font-semibold">
-                          Sucursales habilitadas{" "}
-                          {(!editing || !draft.disabled) && (
-                            <span
-                              aria-hidden="true"
-                              className="text-orange-600"
-                            >
-                              *
-                            </span>
-                          )}
+                          <FieldCaption
+                            required={!editing || !draft.disabled}
+                            optional={!!editing && draft.disabled}
+                          >
+                            Sucursales habilitadas
+                          </FieldCaption>
                         </legend>
                         <div
                           className="space-y-3"
@@ -587,28 +593,34 @@ export function UsersManager({ initial }: { initial: UsersSnapshot }) {
                                   {branch.name}
                                 </label>
                                 {membership && (
-                                  <select
-                                    aria-label={`Rol en ${branch.name}`}
-                                    className="form-control w-auto"
-                                    value={membership.role}
-                                    onChange={(e) =>
-                                      update({
-                                        memberships: draft.memberships.map(
-                                          (m) =>
-                                            m.branchId === branch.id
-                                              ? {
-                                                  ...m,
-                                                  role: e.target.value as
-                                                    "manager" | "staff",
-                                                }
-                                              : m,
-                                        ),
-                                      })
-                                    }
-                                  >
-                                    <option value="staff">Personal</option>
-                                    <option value="manager">Encargado</option>
-                                  </select>
+                                  <label className="grid gap-2 text-xs font-medium">
+                                    <FieldCaption required>
+                                      Rol en la sucursal
+                                    </FieldCaption>
+                                    <select
+                                      aria-label={`Rol en ${branch.name}`}
+                                      required
+                                      className="form-control w-auto"
+                                      value={membership.role}
+                                      onChange={(e) =>
+                                        update({
+                                          memberships: draft.memberships.map(
+                                            (m) =>
+                                              m.branchId === branch.id
+                                                ? {
+                                                    ...m,
+                                                    role: e.target.value as
+                                                      "manager" | "staff",
+                                                  }
+                                                : m,
+                                          ),
+                                        })
+                                      }
+                                    >
+                                      <option value="staff">Personal</option>
+                                      <option value="manager">Encargado</option>
+                                    </select>
+                                  </label>
                                 )}
                               </div>
                             );
@@ -627,6 +639,11 @@ export function UsersManager({ initial }: { initial: UsersSnapshot }) {
                           </p>
                         )}
                         {fieldError("memberships")}
+                        {(!editing || !draft.disabled) && (
+                          <p className="mt-3 text-xs text-muted">
+                            Seleccioná al menos una sucursal.
+                          </p>
+                        )}
                         <p className="mt-3 text-xs leading-relaxed text-muted">
                           Personal ingresa automáticamente a su sucursal
                           asignada. Si tiene varias, se utiliza la primera

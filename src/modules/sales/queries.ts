@@ -200,6 +200,7 @@ export function saleDetailFromRows(
         kind: p.kind as SalePayment["kind"],
         collector: p.collector as SalePayment["collector"],
         methodName: p.methodName,
+        methodKind: p.methodKind,
         commissionPercent: p.commissionPercent,
         commissionAmount: p.commissionAmount,
         settlementNet: p.settlementNet,

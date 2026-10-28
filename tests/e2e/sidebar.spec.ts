@@ -62,6 +62,7 @@ test.beforeAll(async () => {
       from: "src/app/globals.css",
     })
   ).css;
+  css += `\n${await readFile("src/components/cash/cash.css", "utf8")}`;
 });
 
 async function setup(page: Page, path = "/inventory") {
@@ -73,7 +74,7 @@ async function setup(page: Page, path = "/inventory") {
       );
       return route.fulfill({
         contentType: "text/html",
-        body: `<html lang="es" data-sidebar-initial="${collapsed}"><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style></head><body><div id="root"></div><script src="/__sidebar-fixture.js"></script></body></html>`,
+        body: `<html lang="es" data-sidebar-initial="${collapsed}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style></head><body><div id="root"></div><script src="/__sidebar-fixture.js"></script></body></html>`,
       });
     }
     if (url.pathname === "/__sidebar-fixture.js")
@@ -337,3 +338,383 @@ test("blocking preference cookies still allows changing the layout", async ({
     .toBe(264);
   expect(errors).toEqual([]);
 });
+
+async function setupCashHeader(
+  page: Page,
+  options: {
+    opened?: boolean;
+    canView?: boolean;
+    canOpen?: boolean;
+    failFirst?: boolean;
+    path?: string;
+    cachedShell?: boolean;
+    lastFund?: string;
+    snapshotDelayMs?: number;
+  } = {},
+) {
+  await setup(page, options.path ?? "/sales");
+  let opened = options.opened ?? false;
+  const posted: {
+    requestId: string;
+    command: { action: string; amount: string };
+  }[] = [];
+  const current = {
+    id: "header-session",
+    branchId: "test-branch",
+    businessDate: "2026-10-27",
+    state: "open",
+    openedBy: "header-operator",
+    openedByName: "María Fernández",
+    openedAt: "2026-10-27T12:15:00Z",
+    openingCash: "12500.50",
+    openingReason: "",
+    closeTime: "23:00",
+    targetFund: null,
+    timeZone: "America/Argentina/Buenos_Aires",
+    revision: 1,
+  };
+  await page.route("**/api/cash**", async (route) => {
+    expect(route.request().headers()["x-kybo-branch-id"]).toBe("test-branch");
+    if (new URL(route.request().url()).pathname === "/api/cash/status")
+      return route.fulfill({
+        json: {
+          available: true,
+          actorId: "header-operator",
+          activated: opened,
+          branchId: "test-branch",
+          timeZone: current.timeZone,
+          open: opened,
+          sessionId: opened ? current.id : null,
+          canView: options.canView ?? true,
+          canOpen: options.canOpen ?? true,
+          opening:
+            opened && options.canView !== false
+              ? {
+                  openedByName: current.openedByName,
+                  openedAt: current.openedAt,
+                  openingCash: current.openingCash,
+                }
+              : null,
+        },
+      });
+    if (route.request().method() === "POST") {
+      posted.push(route.request().postDataJSON());
+      if (options.failFirst && posted.length === 1)
+        return route.fulfill({
+          status: 503,
+          json: { error: "Conexión interrumpida" },
+        });
+      opened = true;
+      current.openingCash = posted.at(-1)!.command.amount;
+    }
+    if (route.request().method() === "GET" && options.snapshotDelayMs)
+      await new Promise((resolve) =>
+        setTimeout(resolve, options.snapshotDelayMs),
+      );
+    return route.fulfill({
+      json: {
+        available: true,
+        activated: opened,
+        branchId: "test-branch",
+        branchName: "Sucursal de prueba",
+        timeZone: current.timeZone,
+        capabilities: {
+          open: options.canOpen ?? true,
+          close: true,
+          expense: true,
+          externalExpense: true,
+          withdraw: true,
+          supplier: true,
+          review: true,
+          admin: true,
+        },
+        settings: { closeTime: "23:00", targetFund: null, revision: 0 },
+        current: opened ? current : null,
+        selected: opened ? current : null,
+        lastClosed:
+          options.lastFund === undefined
+            ? null
+            : {
+                ...current,
+                id: "previous-session",
+                state: "closed",
+                businessDate: "2026-10-26",
+                closedAt: "2026-10-27T02:00:00Z",
+                counted: "12500.50",
+                withdrawal: "2500.00",
+                fund: options.lastFund,
+              },
+        sessions: opened ? [current] : [],
+        movements: [],
+        pendingReviews: 0,
+        totals: {
+          expectedCash: "12500.50",
+          opening: "12500.50",
+          cashCollections: "0.00",
+          cashRefunds: "0.00",
+          expenses: "0.00",
+          supplierPayments: "0.00",
+          withdrawals: "0.00",
+          cardTotal: "0.00",
+          cardOperations: 0,
+          transferTotal: "0.00",
+          otherTotal: "0.00",
+        },
+      },
+    });
+  });
+  if (options.cachedShell) {
+    const url = new URL(page.url());
+    url.searchParams.set("cached-shell", "1");
+    await page.goto(url.href);
+  } else await page.reload();
+  return posted;
+}
+
+for (const opened of [false, true]) {
+  test(`home header and brand stay aligned with cash ${opened ? "open" : "closed"}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1906, height: 900 });
+    await setupCashHeader(page, { path: "/", opened });
+    await expect(page.locator("[data-cash-header]")).toBeVisible();
+    const brand = (await page
+      .locator("aside [data-brand-header]")
+      .boundingBox())!;
+    const topbar = (await page.locator("[data-topbar]").boundingBox())!;
+    expect(
+      Math.abs(brand.y + brand.height - topbar.y - topbar.height),
+    ).toBeLessThanOrEqual(1);
+    const selector = (await page
+      .getByRole("combobox", { name: "Sucursal", exact: true })
+      .boundingBox())!;
+    const branch = page
+      .getByRole("combobox", { name: "Sucursal", exact: true })
+      .locator("..");
+    await expect(
+      branch.getByText("Kalú Gamezone", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      branch.getByText("Peatonal Alberdi", { exact: true }),
+    ).toBeVisible();
+    const cash = (await page.locator("[data-cash-header]").boundingBox())!;
+    expect(
+      Math.abs(selector.y + selector.height / 2 - cash.y - cash.height / 2),
+    ).toBeLessThanOrEqual(1);
+    await page.screenshot({
+      path: `.next-e2e/header-home-${opened ? "open" : "closed"}-1906.png`,
+      fullPage: true,
+    });
+    await page.screenshot({
+      path: `.next-e2e/header-home-${opened ? "open" : "closed"}-strip.png`,
+      clip: { x: 0, y: 0, width: 1906, height: 90 },
+    });
+  });
+}
+
+test("cash access survives a cached layout without the newly added actor prop", async ({
+  page,
+}) => {
+  const posted = await setupCashHeader(page, { path: "/", cachedShell: true });
+  await page
+    .locator("[data-topbar]")
+    .getByRole("button", { name: "Abrir caja", exact: true })
+    .click();
+  await page
+    .getByRole("textbox", { name: "Fondo inicial contado" })
+    .fill("500");
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Abrir caja", exact: true })
+    .click();
+  await expect(page.getByRole("dialog")).toBeHidden();
+  expect(posted).toHaveLength(1);
+});
+
+test("header opens cash in place and preserves the order while showing who opened it", async ({
+  page,
+}) => {
+  const posted = await setupCashHeader(page);
+  await page.getByLabel("Pedido en curso").fill("Pedido 1234 — Martina");
+  const before = page.url();
+  await page
+    .locator("header[data-topbar]")
+    .getByRole("button", { name: "Abrir caja", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await dialog
+    .getByRole("textbox", { name: "Fondo inicial contado" })
+    .fill("12500,50");
+  await dialog.getByRole("button", { name: "Abrir caja", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  const status = page.locator("[data-cash-header]");
+  await expect(status).toContainText("María Fernández");
+  await expect(status).toContainText("09:15");
+  await expect(status).toContainText("12.500,50");
+  await expect(status).toContainText("Inicial");
+  await expect(page.getByLabel("Pedido en curso")).toHaveValue(
+    "Pedido 1234 — Martina",
+  );
+  expect(page.url()).toBe(before);
+  expect(posted).toHaveLength(1);
+  expect(posted[0].command).toMatchObject({
+    action: "open",
+    amount: "12500.50",
+  });
+});
+
+test("cash opening keeps its primary outline colors at rest, hover and keyboard focus", async ({
+  page,
+}) => {
+  await setupCashHeader(page, { path: "/" });
+  const button = page
+    .locator("[data-topbar]")
+    .getByRole("button", { name: "Abrir caja", exact: true });
+  const primary = "rgb(255, 133, 0)";
+  await button.hover();
+  await expect(button).toHaveCSS("color", primary);
+  await expect(button).toHaveCSS("border-top-color", primary);
+  await expect(button.locator("svg")).toHaveCSS("stroke", primary);
+  await expect(button).not.toHaveCSS("background-color", "rgb(237, 245, 255)");
+  await expect(button).not.toHaveCSS("background-color", "rgb(255, 255, 255)");
+  await button.screenshot({ path: ".next-e2e/cash-opening-primary-hover.png" });
+  await page.mouse.move(0, 0);
+  await expect(button).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  await button.screenshot({ path: ".next-e2e/cash-opening-primary-rest.png" });
+  await button.focus();
+  await expect(button).toHaveCSS("color", primary);
+  await expect(button).toHaveCSS("border-top-color", primary);
+  await expect(button.locator("svg")).toHaveCSS("stroke", primary);
+});
+
+test("header opening keeps the same request after an uncertain result", async ({
+  page,
+}) => {
+  const posted = await setupCashHeader(page, { failFirst: true });
+  await page
+    .locator("header[data-topbar]")
+    .getByRole("button", { name: "Abrir caja", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await dialog
+    .getByRole("textbox", { name: "Fondo inicial contado" })
+    .fill("500");
+  await dialog.getByRole("button", { name: "Abrir caja", exact: true }).click();
+  await dialog
+    .getByRole("button", { name: "Reintentar la misma operación" })
+    .click();
+  await expect(dialog).toBeHidden();
+  expect(posted).toHaveLength(2);
+  expect(posted[0]).toEqual(posted[1]);
+});
+
+for (const path of ["/sales", "/finance/cash"]) {
+  test(`opening focuses and selects the initial fund and shows the last retained fund from ${path}`, async ({
+    page,
+  }) => {
+    const posted = await setupCashHeader(page, {
+      path,
+      lastFund: "10000.50",
+      snapshotDelayMs: path === "/sales" ? 350 : 0,
+    });
+    if (path === "/finance/cash")
+      await expect(
+        page
+          .locator("main")
+          .getByRole("button", { name: "Abrir caja", exact: true }),
+      ).toBeEnabled();
+    await page
+      .locator("[data-topbar]")
+      .getByRole("button", { name: "Abrir caja", exact: true })
+      .click();
+    const input = page
+      .getByRole("dialog")
+      .getByRole("textbox", { name: "Fondo inicial contado" });
+    await expect(input).toBeEnabled();
+    await expect(input).toBeFocused();
+    await expect(input).toHaveValue("10000,50");
+    const history = page.locator("[data-cash-opening-history]");
+    await expect(history).toContainText("10.000,50");
+    expect((await history.boundingBox())!.y).toBeGreaterThan(
+      (await input.boundingBox())!.y,
+    );
+    await page.keyboard.type("15000");
+    await expect(input).toHaveValue("15000");
+    expect(posted).toHaveLength(0);
+  });
+}
+
+test("first opening focuses the amount and explains that no prior closing exists", async ({
+  page,
+}) => {
+  await setupCashHeader(page, { snapshotDelayMs: 350 });
+  await page
+    .locator("[data-topbar]")
+    .getByRole("button", { name: "Abrir caja", exact: true })
+    .click();
+  await expect(
+    page.getByRole("textbox", { name: "Fondo inicial contado" }),
+  ).toBeFocused();
+  await expect(page.locator("[data-cash-opening-history]")).toContainText(
+    "No hay cierres anteriores",
+  );
+});
+
+test("the header reuses the existing opening form on the cash page", async ({
+  page,
+}) => {
+  const posted = await setupCashHeader(page, { path: "/finance/cash" });
+  await page
+    .locator("header[data-topbar]")
+    .getByRole("button", { name: "Abrir caja", exact: true })
+    .click();
+  await expect(page.getByRole("dialog")).toHaveCount(1);
+  await page
+    .getByRole("textbox", { name: "Fondo inicial contado" })
+    .fill("500");
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Abrir caja", exact: true })
+    .click();
+  await expect(page.getByRole("dialog")).toBeHidden();
+  await expect(page.locator("[data-cash-header]")).toContainText(
+    "María Fernández",
+  );
+  expect(posted).toHaveLength(1);
+});
+
+test("header hides financial opening details and opening controls without permission", async ({
+  page,
+}) => {
+  await setupCashHeader(page, { opened: true, canView: false, canOpen: false });
+  const status = page.locator("[data-cash-header]");
+  await expect(status).toContainText("Caja abierta");
+  await expect(status).not.toContainText("María");
+  await expect(status).not.toContainText("12.500,50");
+  await expect(status.getByRole("link")).toHaveCount(0);
+  await expect(status.getByRole("button", { name: "Abrir caja" })).toHaveCount(
+    0,
+  );
+});
+
+for (const width of [390, 768, 1024, 1440]) {
+  test(`cash header stays readable without horizontal overflow at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await setupCashHeader(page, { opened: true });
+    await expect(page.locator("[data-cash-header]")).toContainText(
+      "María Fernández",
+    );
+    await expect(page.locator("[data-cash-header]")).toContainText("12.500,50");
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: `.next-e2e/cash-header-${width}.png`,
+      fullPage: true,
+    });
+  });
+}

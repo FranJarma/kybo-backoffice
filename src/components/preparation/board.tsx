@@ -369,10 +369,9 @@ export function PreparationBoard({
             </select>
           </Control>
           {scope === "history" && (
-            <Control label="Fecha comercial" required>
+            <Control label="Fecha comercial">
               <Input
                 type="date"
-                required
                 value={date}
                 onChange={(e) => {
                   setDate(e.target.value);

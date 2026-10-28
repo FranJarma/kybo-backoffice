@@ -43,6 +43,13 @@ import {
 import { parsePayment, parseReceive } from "./validation";
 import { allocateShipping } from "./shipping";
 import { stockOperations } from "@/db/stock-schema";
+import { purchaseOrders, purchaseOrderReceipts } from "@/db/procurement-schema";
+import {
+  applyPurchaseAdvances,
+  receiptAdvanceApplications,
+  purchasePaymentSourcesAvailable,
+} from "../procurement/advances";
+import { lockCashSession, recordCashMovement } from "../cash/integration";
 import {
   lockPurchaseReceipt,
   finishPurchaseReceipt,
@@ -367,13 +374,28 @@ async function detail(
     .from(purchaseReceiptLines)
     .where(eq(purchaseReceiptLines.receiptId, id))
     .orderBy(asc(purchaseReceiptLines.position));
+  const hasPaymentSource = await purchasePaymentSourcesAvailable(db as Tx);
   const payments = await db
-    .select()
+    .select({
+      id: purchasePayments.id,
+      target: purchasePayments.target,
+      source: hasPaymentSource ? purchasePayments.source : sql<null>`null`,
+      paymentMethodName: purchasePayments.paymentMethodName,
+      amount: purchasePayments.amount,
+      paidOn: purchasePayments.paidOn,
+      reference: purchasePayments.reference,
+      createdAt: purchasePayments.createdAt,
+    })
     .from(purchasePayments)
     .where(eq(purchasePayments.receiptId, id))
     .orderBy(asc(purchasePayments.createdAt), asc(purchasePayments.id));
+  const advanceApplications = await receiptAdvanceApplications(db as Tx, id);
   return {
     ...summary(row, lines.length),
+    advanceApplications,
+    advanceAppliedAmount: cents(
+      advanceApplications.reduce((n, a) => n + integer(a.amount), 0n),
+    ),
     notes: row.notes,
     lines: lines.map((l) => ({
       shippingAmount: l.shippingAmount,
@@ -398,6 +420,7 @@ async function detail(
       expiresOn: l.expiresOn,
     })),
     payments: payments.map((p) => ({
+      source: p.source,
       target: p.target,
       id: p.id,
       paymentMethodName: p.paymentMethodName,
@@ -747,6 +770,8 @@ export function createInventoryService(
           });
         }
         await finishPurchaseReceipt(tx, ctx, orderReference, orderReceived);
+        if (orderReference)
+          await applyPurchaseAdvances(tx, ctx, r.id, orderReference.order.id);
         await audit(tx, actor, "purchase_receipts", r.id, "receive", {
           purchaseOrderId: input.purchaseOrderId ?? null,
           totalAmount: total === null ? null : cents(total),
@@ -788,6 +813,40 @@ export function createInventoryService(
           paymentId,
         );
         if (prior) return detail(tx, receiptId, ctx.branchId);
+        // Resolve an omitted origin before taking any document/method locks.
+        const [previewMethod] = await tx
+          .select()
+          .from(paymentMethods)
+          .where(eq(paymentMethods.id, input.paymentMethodId));
+        if (!previewMethod) notFound();
+        const source =
+          input.source ?? (previewMethod.kind === "cash" ? "cash" : "external");
+        const hasPaymentSource = await purchasePaymentSourcesAvailable(tx);
+        if (source === "cash") await lockCashSession(tx, ctx);
+        // Match receipt and advance registration: order before receipt.
+        const [allocation] = await tx
+          .select({ orderId: purchaseOrderReceipts.orderId })
+          .from(purchaseOrderReceipts)
+          .innerJoin(
+            purchaseReceiptLines,
+            eq(purchaseReceiptLines.id, purchaseOrderReceipts.receiptLineId),
+          )
+          .where(eq(purchaseReceiptLines.receiptId, receiptId))
+          .limit(1);
+        if (allocation) {
+          const [order] = await tx
+            .select()
+            .from(purchaseOrders)
+            .where(
+              and(
+                eq(purchaseOrders.id, allocation.orderId),
+                eq(purchaseOrders.branchId, ctx.branchId),
+              ),
+            )
+            .for("update");
+          if (!order) notFound();
+          await applyPurchaseAdvances(tx, ctx, receiptId, order.id);
+        }
         const [receipt] = await tx
           .select()
           .from(purchaseReceipts)
@@ -807,6 +866,10 @@ export function createInventoryService(
         if (!method) notFound();
         if (method.archivedAt)
           invalid("Elegí un medio de pago activo.", "ARCHIVED_REFERENCE", 409);
+        if (method.kind !== previewMethod.kind)
+          conflict("El medio de pago cambió. Revisá el origen del dinero.");
+        if (source === "cash" && method.kind !== "cash")
+          invalid("Una salida del cajón requiere el medio Efectivo.");
         const shippingPayment = input.target === "shipping";
         if (
           shippingPayment &&
@@ -827,20 +890,26 @@ export function createInventoryService(
           ) + integer(input.amount!);
         if (newPaid > integer(payable!))
           conflict("El pago supera el saldo pendiente.");
-        const [payment] = await tx
-          .insert(purchasePayments)
-          .values({
-            id: paymentId,
-            receiptId,
-            paymentMethodId: method.id,
-            paymentMethodName: method.name,
-            target: shippingPayment ? "shipping" : "supplier",
-            amount: input.amount!,
-            paidOn: input.paidOn,
-            reference: input.reference,
-            actorId: actor.id,
-          })
-          .returning();
+        const payment = {
+          id: paymentId,
+          receiptId,
+          paymentMethodId: method.id,
+          paymentMethodName: method.name,
+          target: shippingPayment ? "shipping" : "supplier",
+          source,
+          amount: input.amount!,
+          paidOn: input.paidOn,
+          reference: input.reference,
+          actorId: actor.id,
+        };
+        if (hasPaymentSource) await tx.insert(purchasePayments).values(payment);
+        else {
+          // Drizzle includes omitted columns with DEFAULT; use an explicit legacy
+          // column list until the reviewed migration has actually been applied.
+          await tx.execute(
+            sql`insert into ${purchasePayments} (id,receipt_id,payment_method_id,payment_method_name,target,amount,paid_on,reference,actor_id) values (${payment.id},${payment.receiptId},${payment.paymentMethodId},${payment.paymentMethodName},${payment.target},${payment.amount},${payment.paidOn},${payment.reference},${payment.actorId})`,
+          );
+        }
         await tx
           .update(purchaseReceipts)
           .set(
@@ -854,10 +923,22 @@ export function createInventoryService(
               eq(purchaseReceipts.branchId, ctx.branchId),
             ),
           );
+        if (source === "cash")
+          await recordCashMovement(tx, ctx, {
+            kind: "supplier",
+            amount: cents(-integer(payment.amount)),
+            sourceType: "purchase-payment",
+            sourceId: payment.id,
+            methodKind: "cash",
+            methodName: method.name,
+            concept: `Pago a ${shippingPayment ? receipt.shippingSupplierName : receipt.supplierName}`,
+            reference: payment.reference,
+          });
         await audit(tx, actor, "purchase_payments", payment.id, "pay", {
           receiptId,
           amount: payment.amount,
           target: payment.target,
+          source,
         });
         return detail(tx, receiptId, ctx.branchId);
       });

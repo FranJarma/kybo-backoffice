@@ -10,13 +10,13 @@ export function Breadcrumb({ items }: { items: Crumb[] }) {
           return (
             <li
               key={`${index}:${item.label}`}
-              className={`flex min-w-0 items-center gap-2 ${index < items.length - 2 ? "hidden sm:flex" : ""}`}
+              className={`min-w-0 items-center gap-2 ${current ? "flex" : "hidden xl:flex"}`}
             >
               {index > 0 && (
                 <ChevronRight
                   size={13}
                   aria-hidden="true"
-                  className={`shrink-0 text-muted ${index === items.length - 2 ? "hidden sm:block" : ""}`}
+                  className="hidden shrink-0 text-muted xl:block"
                 />
               )}
               {item.href && !current ? (
@@ -30,7 +30,9 @@ export function Breadcrumb({ items }: { items: Crumb[] }) {
                 <span
                   aria-current={current ? "page" : undefined}
                   className={
-                    current ? "break-words font-bold text-brand" : "text-muted"
+                    current
+                      ? "break-words text-sm font-semibold text-brand"
+                      : "text-muted"
                   }
                 >
                   {item.label}

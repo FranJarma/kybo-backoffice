@@ -7,6 +7,7 @@ import { RecipeEditorTabs, type RecipeEditorView } from "./editor-tabs";
 import { useEffect, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FieldCaption } from "@/components/ui/field-caption";
 import { OperationAlert } from "@/components/ui/operation-alert";
 import { useErrorFeedback } from "@/components/ui/use-error-feedback";
 import { SearchSelect, getJson } from "@/components/inventory/shared";
@@ -467,7 +468,9 @@ export function ModifierRecipeEditor({
             </div>
           )}
           <section className="rounded-xl border border-line p-4">
-            <h3 className="mb-3 font-bold text-brand">Composición fija</h3>
+            <h3 className="mb-3 font-bold text-brand">
+              <FieldCaption optional>Composición fija</FieldCaption>
+            </h3>
             <p className="mb-4 text-xs text-muted">
               Ingredientes y descartables que siempre lleva el producto. Ambos
               suman costo y consumo de stock. Las alternativas se agregan en
@@ -570,19 +573,17 @@ export function ModifierRecipeEditor({
                 />
               </Field>
               <div className="grid gap-5 sm:grid-cols-3">
-                <Field label="Mínimo" required>
+                <Field label="Mínimo" optional>
                   <Input
                     type="number"
-                    required
                     min={0}
                     value={g.min}
                     onChange={(e) => update(i, { min: Number(e.target.value) })}
                   />
                 </Field>
-                <Field label="Máximo" required>
+                <Field label="Máximo" optional>
                   <Input
                     type="number"
-                    required
                     min={0}
                     value={g.max}
                     onChange={(e) => update(i, { max: Number(e.target.value) })}
@@ -616,10 +617,9 @@ export function ModifierRecipeEditor({
                     {o.name}
                   </label>
                   <div className="grid gap-5 sm:grid-cols-2">
-                    <Field label="Selecciones por defecto" required>
+                    <Field label="Selecciones por defecto" optional>
                       <Input
                         type="number"
-                        required
                         min={0}
                         aria-describedby={`default-count-${i}-${j}`}
                         value={o.defaultCount}
@@ -635,10 +635,9 @@ export function ModifierRecipeEditor({
                         1 = una elección. No indica gramos ni stock.
                       </span>
                     </Field>
-                    <Field label="Máximo por opción" required>
+                    <Field label="Máximo por opción" optional>
                       <Input
                         type="number"
-                        required
                         min={0}
                         value={o.maxCount}
                         onChange={(e) =>
@@ -653,6 +652,7 @@ export function ModifierRecipeEditor({
                         <Field
                           key={c}
                           label={`Recargo final ${c === "counter" ? "local" : c === "pedidosya" ? "PedidosYa" : "Uber Eats"}`}
+                          optional
                         >
                           <Input
                             value={o.prices[c]}
@@ -725,7 +725,7 @@ export function ModifierRecipeEditor({
           ))}
           <div className="flex items-end gap-2">
             <div className="min-w-0 flex-1">
-              <Field label="Grupo reutilizable">
+              <Field label="Grupo reutilizable" optional>
                 <select
                   className="form-control"
                   value={chosen}

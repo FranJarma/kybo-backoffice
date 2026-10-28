@@ -292,7 +292,9 @@ export function ItemSuppliersTab({
     hint?: string,
   ) => (
     <label className="block min-w-0 space-y-2 text-sm font-medium text-brand">
-      <FieldCaption required={required}>{label}</FieldCaption>
+      <FieldCaption required={required} optional={!required}>
+        {label}
+      </FieldCaption>
       <Input
         type={type}
         value={value}

@@ -3,9 +3,11 @@ import { useState } from "react";
 import { CalendarClock, PackageCheck, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FieldCaption } from "@/components/ui/field-caption";
 import { integer } from "@/modules/inventory/decimal";
 import type { PurchaseOrder, OrderCommand } from "@/modules/procurement/types";
-import { date, quantity, today } from "./shared";
+import { date, money, quantity, today } from "./shared";
+import { PurchaseAdvanceForm } from "./purchase-advance-form";
 export const orderStates = {
   draft: "Borrador",
   ordered: "Pedido en camino",
@@ -20,6 +22,8 @@ export function PurchaseOrderDetail({
   onBack,
   onReceive,
   onCommand,
+  actorId,
+  onUpdated,
 }: {
   order: PurchaseOrder;
   timeZone: string;
@@ -27,6 +31,8 @@ export function PurchaseOrderDetail({
   onBack: () => void;
   onReceive: () => void;
   onCommand: (command: OrderCommand) => void;
+  actorId?: string;
+  onUpdated?: () => void;
 }) {
   const [mode, setMode] = useState<"reschedule" | "cancel" | null>(null),
     [expectedOn, setExpectedOn] = useState(o.expectedOn ?? ""),
@@ -180,6 +186,82 @@ export function PurchaseOrderDetail({
           </footer>
         )}
       </div>
+      {o.financial && (
+        <section className="space-y-4 rounded-xl border border-line bg-white p-5 sm:p-7">
+          <h3 className="font-bold">Anticipos del pedido</h3>
+          <dl className="grid gap-4 text-sm sm:grid-cols-3">
+            <div>
+              <dt className="text-muted">Adelantado</dt>
+              <dd className="mt-1 text-lg font-semibold tabular-nums">
+                {money(o.financial.advancedAmount)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted">Aplicado a recepciones</dt>
+              <dd className="mt-1 text-lg font-semibold tabular-nums">
+                {money(o.financial.appliedAmount)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted">Crédito disponible</dt>
+              <dd className="mt-1 text-lg font-bold text-blue-700 tabular-nums">
+                {money(o.financial.availableAmount)}
+              </dd>
+            </div>
+          </dl>
+          <p className="text-sm text-muted">
+            El costo final se conoce al recibir. El anticipo no define un total
+            del pedido.
+          </p>
+          {o.state === "cancelled" &&
+            integer(o.financial.availableAmount) > 0n && (
+              <p
+                role="status"
+                className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900"
+              >
+                Crédito pendiente de resolver por administración. Cancelar este
+                pedido no devuelve el dinero.
+              </p>
+            )}
+          {!!o.financial.advances.length && (
+            <ul className="divide-y divide-line text-sm">
+              {o.financial.advances.map((a) => (
+                <li
+                  key={a.id}
+                  className="flex flex-wrap justify-between gap-2 py-3"
+                >
+                  <div>
+                    <p className="font-semibold">
+                      {a.source === "external"
+                        ? "Pagado fuera de caja"
+                        : "Efectivo del cajón"}{" "}
+                      · {a.paymentMethodName}
+                    </p>
+                    <p className="mt-1 text-xs text-muted">
+                      {date(a.paidOn)} · {a.reference || "Sin referencia"}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold">{money(a.amount)}</p>
+                    <p className="mt-1 text-xs text-muted">
+                      Disponible: {money(a.availableAmount)}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+      {actorId && onUpdated && o.financial?.available && (
+        <PurchaseAdvanceForm
+          actorId={actorId}
+          order={o}
+          timeZone={timeZone}
+          locked={locked}
+          onSaved={onUpdated}
+        />
+      )}
       {mode && (
         <form
           onSubmit={(e) => {
@@ -201,7 +283,7 @@ export function PurchaseOrderDetail({
           <fieldset disabled={locked} className="grid gap-4 sm:grid-cols-2">
             {mode === "reschedule" && (
               <label className="space-y-2 text-sm font-semibold">
-                Nueva llegada estimada
+                <FieldCaption optional>Nueva llegada estimada</FieldCaption>
                 <Input
                   type="date"
                   min={o.orderedOn}
@@ -211,7 +293,7 @@ export function PurchaseOrderDetail({
               </label>
             )}
             <label className="space-y-2 text-sm font-semibold">
-              Motivo del cambio
+              <FieldCaption required>Motivo del cambio</FieldCaption>
               <Input
                 required
                 maxLength={500}

@@ -3,6 +3,7 @@ import {
   summarizeExpenses,
   allocateOverhead,
 } from "@/modules/overheads/calculation";
+import type { AutomaticExpenseEntry } from "@/modules/overheads/types";
 const line = (budget: string | null, actual: string | null) => ({
   category: "rent" as const,
   concept: "Alquiler",
@@ -39,4 +40,23 @@ it("multiplies original ratios before rounding, preserving combo quantities", ()
   expect(allocateOverhead("1.00", 3, 1)).toBe("0.333333");
   expect(allocateOverhead(null, 3, 2)).toBeNull();
   expect(allocateOverhead("1.00", 0, 2)).toBeNull();
+});
+it("daily actual expenses do not silently confirm a missing monthly budget", () => {
+  const daily: AutomaticExpenseEntry = {
+    category: "maintenance",
+    concept: "Reparación",
+    budget: "0.00",
+    actual: "50.00",
+    notes: "",
+    source: "cash",
+    sourceId: "daily-expense",
+    businessDate: "2026-10-27",
+    fundingSource: "cash",
+  };
+  expect(summarizeExpenses([daily], 100, 10)).toMatchObject({
+    budgetRate: null,
+    actualRate: "5.000000",
+    actualTotal: "50.00",
+    actualPending: 0,
+  });
 });

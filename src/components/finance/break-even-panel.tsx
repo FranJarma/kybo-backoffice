@@ -375,7 +375,9 @@ export function BreakEvenPanel({
                 </span>
               </label>
               <label className="grid content-start gap-2 text-xs font-medium">
-                <FieldCaption>Volumen previsto · unidades finales</FieldCaption>
+                <FieldCaption optional>
+                  Volumen previsto · unidades finales
+                </FieldCaption>
                 <input
                   type="number"
                   min="0"
@@ -394,7 +396,7 @@ export function BreakEvenPanel({
                 </span>
               </label>
               <label className="grid content-start gap-2 text-xs font-medium">
-                <FieldCaption>Días de apertura · opcional</FieldCaption>
+                <FieldCaption optional>Días de apertura</FieldCaption>
                 <input
                   type="number"
                   min="1"
@@ -463,7 +465,9 @@ export function BreakEvenPanel({
                 </p>
               ) : null}
               <label className="grid max-w-lg gap-2 text-xs font-medium">
-                <FieldCaption>Agregar producto a la mezcla</FieldCaption>
+                <FieldCaption optional>
+                  Agregar producto a la mezcla
+                </FieldCaption>
                 <select
                   className="form-control"
                   value=""
