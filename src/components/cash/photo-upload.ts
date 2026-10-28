@@ -1,6 +1,6 @@
-// Keep camera captures below the hosting request limit while preserving a readable ticket.
+// Reduce mobile upload time as well as staying below the hosting request limit.
 export async function cashUploadImage(file: File): Promise<Blob> {
-  const budget = 3 * 1024 * 1024;
+  const budget = 768 * 1024;
   if (file.size <= budget) return file;
   const bitmap = await createImageBitmap(file, {
     imageOrientation: "from-image",
@@ -14,12 +14,24 @@ export async function cashUploadImage(file: File): Promise<Blob> {
     if (!context)
       throw Error("No pudimos preparar la foto. Elegí otra imagen.");
     context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    for (const quality of [0.92, 0.82, 0.72]) {
+    let smallest: Blob | null = null;
+    for (const quality of [0.82, 0.72]) {
       const result = await new Promise<Blob | null>((resolve) =>
         canvas.toBlob(resolve, "image/webp", quality),
       );
       if (result && result.size <= budget) return result;
+      if (result && (!smallest || result.size < smallest.size))
+        smallest = result;
     }
+    // Detailed images may need more bytes to remain legible. Still prefer the
+    // smaller representation, within the same safe request limit as before.
+    if (
+      smallest &&
+      smallest.size < file.size &&
+      smallest.size <= 3 * 1024 * 1024
+    )
+      return smallest;
+    if (file.size <= 3 * 1024 * 1024) return file;
     throw Error(
       "La foto es demasiado grande. Probá con una toma más cercana del comprobante.",
     );

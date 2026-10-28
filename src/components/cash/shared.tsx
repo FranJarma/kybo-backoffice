@@ -1,6 +1,7 @@
 import type { ReactNode, Ref } from "react";
 import { CircleAlert } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { FieldCaption } from "@/components/ui/field-caption";
 import { money } from "@/lib/number-format";
 import type { CashSession } from "@/modules/cash/types";
 
@@ -29,6 +30,8 @@ export function MoneyField({
   inputRef,
   descriptionId,
   disabled = false,
+  required = false,
+  optional = false,
 }: {
   label: string;
   value: string;
@@ -37,15 +40,21 @@ export function MoneyField({
   inputRef?: Ref<HTMLInputElement>;
   descriptionId?: string;
   disabled?: boolean;
+  required?: boolean;
+  optional?: boolean;
 }) {
   return (
     <label className="cash-field">
-      <span>{label}</span>
+      <FieldCaption required={required} optional={optional}>
+        {label}
+      </FieldCaption>
       <div className="cash-money-input">
         <span aria-hidden="true">$</span>
         <Input
           ref={inputRef}
           aria-label={label}
+          required={required}
+          aria-required={required || undefined}
           aria-describedby={descriptionId}
           inputMode="decimal"
           autoComplete="off"

@@ -5,25 +5,21 @@ import type { AppDb } from "@/db/client";
 import type { Tx } from "@/db/types";
 import type { OperationalContext } from "@/modules/operations/types";
 import { cashPhotos, cashSessions } from "@/db/cash-schema";
+import { branches } from "@/db/branch-schema";
 import type { Actor } from "@/lib/access";
 import { AppError } from "@/lib/errors";
 import { requireOperationalContext } from "@/modules/branches/context";
 import type { PhotoStorage } from "@/modules/media/storage";
 import { authorizeCashCommand, authorizeCashRead } from "./access";
-import {
-  cashAvailable,
-  lockCashConfiguration,
-  refreshCashContext,
-} from "./integration";
+import { cashAvailable, lockCashConfiguration } from "./integration";
 export const MAX_CASH_PHOTO_BYTES = 10 * 1024 * 1024;
 async function requirePhotoTarget(
   tx: Tx,
   ctx: OperationalContext,
   sessionId: string,
+  lock = false,
 ) {
-  await lockCashConfiguration(tx, ctx.branchId);
-  await refreshCashContext(tx, ctx);
-  const [session] = await tx
+  const query = tx
     .select()
     .from(cashSessions)
     .where(
@@ -31,8 +27,8 @@ async function requirePhotoTarget(
         eq(cashSessions.id, sessionId),
         eq(cashSessions.branchId, ctx.branchId),
       ),
-    )
-    .for("update");
+    );
+  const [session] = await (lock ? query.for("update") : query);
   if (session?.state === "open") {
     await authorizeCashCommand(tx, ctx, { action: "close" });
     return;
@@ -109,8 +105,16 @@ export async function uploadCashPhoto(
   await storage.put(key, image.data);
   try {
     await db.transaction(async (tx) => {
+      // Keep the branch -> cash lock order used by other operations. Resolve
+      // permissions only after any wait for closing or configuration changes.
+      await tx
+        .select({ id: branches.id })
+        .from(branches)
+        .where(eq(branches.id, ctx.branchId))
+        .for("share");
+      await lockCashConfiguration(tx, ctx.branchId);
       const current = await requireOperationalContext(tx, actor, ctx.branchId);
-      await requirePhotoTarget(tx, current, sessionId);
+      await requirePhotoTarget(tx, current, sessionId, true);
       await tx.insert(cashPhotos).values({
         id,
         branchId: ctx.branchId,

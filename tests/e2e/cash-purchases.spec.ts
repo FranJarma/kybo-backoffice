@@ -182,7 +182,9 @@ for (const width of [390, 1024])
       .getByRole("option", { name: "Transferencia", exact: true })
       .click();
     await page.getByLabel("Importe pagado (ARS)").fill("100.000");
-    await page.getByLabel("Referencia", { exact: true }).fill("TR-BOL-100");
+    await page
+      .getByRole("textbox", { name: "Referencia", exact: true })
+      .fill("TR-BOL-100");
     await page
       .getByRole("button", { name: "Confirmar anticipo", exact: true })
       .click();

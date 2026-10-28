@@ -113,7 +113,7 @@ export function ReplenishmentPolicyEditor({
       >
         <div className={labelClass}>
           <label htmlFor={`${id}-item`}>
-            <FieldCaption required>Artículo</FieldCaption>
+            <FieldCaption required={!policy}>Artículo</FieldCaption>
           </label>
           <SearchCombobox
             id={`${id}-item`}
@@ -130,7 +130,7 @@ export function ReplenishmentPolicyEditor({
           />
         </div>
         <label className={labelClass}>
-          <FieldCaption required>Ubicación</FieldCaption>
+          <FieldCaption required={!policy}>Ubicación</FieldCaption>
           <select
             required
             disabled={!!policy}
@@ -195,7 +195,9 @@ export function ReplenishmentPolicyEditor({
           />
         </label>
         <label className={labelClass}>
-          Tiempo estimado de preparación (min)
+          <FieldCaption optional>
+            Tiempo estimado de preparación (min)
+          </FieldCaption>
           <Input
             className={touch}
             inputMode="numeric"

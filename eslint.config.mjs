@@ -14,5 +14,7 @@ export default defineConfig([
     "next-env.d.ts",
     "playwright-report/**",
     "test-results/**",
+    "output/pdf/**",
+    "tmp/pdfs/**",
   ]),
 ]);

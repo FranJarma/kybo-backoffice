@@ -288,28 +288,30 @@ export function PreparationSettings({
                     </small>
                   )}
                 </span>
-                <select
-                  aria-label={`Estación para ${p.name}`}
-                  className={selectClass}
-                  value={routes[p.id] ?? p.stationId ?? ""}
-                  disabled={locked}
-                  onChange={(e) => {
-                    setRoutes((r) => ({ ...r, [p.id]: e.target.value }));
-                    setNotice("");
-                  }}
-                >
-                  <option value="">General</option>
-                  {data.stations
-                    .filter(
-                      (s) =>
-                        !s.archived && (!p.archived || s.id === p.stationId),
-                    )
-                    .map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                </select>
+                <Control label="Estación de preparación" optional>
+                  <select
+                    aria-label={`Estación para ${p.name}`}
+                    className={selectClass}
+                    value={routes[p.id] ?? p.stationId ?? ""}
+                    disabled={locked}
+                    onChange={(e) => {
+                      setRoutes((r) => ({ ...r, [p.id]: e.target.value }));
+                      setNotice("");
+                    }}
+                  >
+                    <option value="">General</option>
+                    {data.stations
+                      .filter(
+                        (s) =>
+                          !s.archived && (!p.archived || s.id === p.stationId),
+                      )
+                      .map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ))}
+                  </select>
+                </Control>
                 <Button
                   variant="outline"
                   aria-label={`Guardar ${p.name}`}

@@ -148,7 +148,12 @@ function Field({
 }) {
   return (
     <label className="block min-w-0 text-sm font-medium text-brand">
-      <FieldCaption required={required}>{label}</FieldCaption>
+      <FieldCaption
+        required={!disabled && required}
+        optional={!disabled && !required}
+      >
+        {label}
+      </FieldCaption>
       <span className="relative mt-2 flex">
         <Input
           className={unit ? "pr-20 tabular-nums" : ""}
@@ -1567,8 +1572,9 @@ export function PurchasesManager({
                       disabled={paymentOperation.locked}
                     >
                       <label className="text-sm font-medium">
-                        Pago a
+                        <FieldCaption required>Pago a</FieldCaption>
                         <select
+                          required
                           className="form-control mt-2"
                           value={paymentTarget}
                           onChange={(e) => {
@@ -1604,8 +1610,9 @@ export function PurchasesManager({
                         required
                       />
                       <label className="space-y-2 text-sm font-medium">
-                        Origen del dinero
+                        <FieldCaption required>Origen del dinero</FieldCaption>
                         <select
+                          required
                           className="form-control"
                           value={paymentSource}
                           onChange={(e) => {

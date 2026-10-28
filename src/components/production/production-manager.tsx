@@ -1,5 +1,6 @@
 "use client";
 import { useErrorFeedback } from "@/components/ui/use-error-feedback";
+import { FieldCaption } from "@/components/ui/field-caption";
 import { OperationAlert } from "@/components/ui/operation-alert";
 import { decimal, integer } from "@/modules/inventory/decimal";
 import { consumptionQuantity } from "@/modules/recipes/waste";
@@ -749,49 +750,62 @@ function ProductionForm({
                       </p>
                     )}
                     {(line.optional || line.options.length > 1) && (
-                      <select
-                        className="form-control mt-2"
-                        aria-label={`Alternativa de producción ${i + 1}`}
-                        value={selection.optionId ?? ""}
-                        onChange={(e) => {
-                          invalidate();
-                          const chosen = line.options.find(
-                            (o) => o.id === e.target.value,
-                          );
-                          let qty = "0";
-                          if (chosen) {
-                            try {
-                              qty = inputDecimal(
-                                consumptionQuantity(
-                                  chosen.quantity,
-                                  chosen.wastePercent,
-                                  integer(decimal(multiplier, 6, true, true)!),
-                                ),
-                              );
-                            } catch {
-                              qty = inputDecimal(chosen.quantity);
+                      <label className="mt-2 block text-xs font-medium">
+                        <FieldCaption
+                          required={!line.optional}
+                          optional={line.optional}
+                        >
+                          Alternativa de producción {i + 1}
+                        </FieldCaption>
+                        <select
+                          className="form-control mt-2"
+                          aria-label={`Alternativa de producción ${i + 1}`}
+                          required={!line.optional}
+                          value={selection.optionId ?? ""}
+                          onChange={(e) => {
+                            invalidate();
+                            const chosen = line.options.find(
+                              (o) => o.id === e.target.value,
+                            );
+                            let qty = "0";
+                            if (chosen) {
+                              try {
+                                qty = inputDecimal(
+                                  consumptionQuantity(
+                                    chosen.quantity,
+                                    chosen.wastePercent,
+                                    integer(
+                                      decimal(multiplier, 6, true, true)!,
+                                    ),
+                                  ),
+                                );
+                              } catch {
+                                qty = inputDecimal(chosen.quantity);
+                              }
                             }
-                          }
-                          setSelections((rows) =>
-                            rows.map((s) =>
-                              s.lineId === line.id
-                                ? {
-                                    ...s,
-                                    optionId: chosen?.id ?? null,
-                                    quantity: qty,
-                                  }
-                                : s,
-                            ),
-                          );
-                        }}
-                      >
-                        {line.optional && <option value="">No utilizar</option>}
-                        {line.options.map((o) => (
-                          <option value={o.id} key={o.id}>
-                            {o.name}
-                          </option>
-                        ))}
-                      </select>
+                            setSelections((rows) =>
+                              rows.map((s) =>
+                                s.lineId === line.id
+                                  ? {
+                                      ...s,
+                                      optionId: chosen?.id ?? null,
+                                      quantity: qty,
+                                    }
+                                  : s,
+                              ),
+                            );
+                          }}
+                        >
+                          {line.optional && (
+                            <option value="">No utilizar</option>
+                          )}
+                          {line.options.map((o) => (
+                            <option value={o.id} key={o.id}>
+                              {o.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
                     )}
                   </div>
                   <Field
@@ -866,7 +880,7 @@ function ProductionForm({
             />
           </div>
           <label className="mt-4 block text-xs font-semibold">
-            Notas del lote
+            <FieldCaption optional>Notas del lote</FieldCaption>
             <textarea
               className="form-control mt-2 min-h-20"
               maxLength={2000}

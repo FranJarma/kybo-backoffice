@@ -1,8 +1,17 @@
 "use client";
 /* eslint-disable @next/next/no-img-element -- Private authenticated receipt endpoint; never optimized or cached publicly. */
-import { useRef, useState } from "react";
-import { Camera, ImagePlus, X, ZoomIn, ZoomOut, Check } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
+import {
+  Camera,
+  ImagePlus,
+  X,
+  ZoomIn,
+  ZoomOut,
+  Check,
+  LoaderCircle,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FieldCaption } from "@/components/ui/field-caption";
 import { cashBranchRequest, cashPhotoUrl } from "./shared";
 import type { LotDraft } from "./draft";
 import { cashUploadImage } from "./photo-upload";
@@ -28,8 +37,30 @@ export function CashPhotoPicker({
 }) {
   const camera = useRef<HTMLInputElement>(null),
     gallery = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false),
+  const [stage, setStage] = useState<"preparing" | "uploading" | null>(null),
     [zoom, setZoom] = useState(false);
+  const [preview, setPreview] = useState<{
+    url: string;
+    photoId: string | null;
+  } | null>(null);
+  const localUrl = useRef<string | null>(null);
+  useEffect(
+    () => () => {
+      if (localUrl.current) URL.revokeObjectURL(localUrl.current);
+    },
+    [],
+  );
+  function clearPreview() {
+    if (localUrl.current) URL.revokeObjectURL(localUrl.current);
+    localUrl.current = null;
+    setPreview(null);
+  }
+  const uploading = stage !== null;
+  const displayedUrl =
+    preview && (uploading || preview.photoId === photo?.id)
+      ? preview.url
+      : photo?.url;
+  const requirementId = useId();
   async function choose(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -38,11 +69,16 @@ export function CashPhotoPicker({
       return onError("Elegí una foto JPG, PNG o WebP.");
     if (file.size > 10 * 1024 * 1024)
       return onError("La foto supera los 10 MB. Elegí una más pequeña.");
-    setUploading(true);
+    setStage("preparing");
     onUploading(true);
     onError("");
     try {
+      const url = URL.createObjectURL(file);
+      if (localUrl.current) URL.revokeObjectURL(localUrl.current);
+      localUrl.current = url;
+      setPreview({ url, photoId: null });
       const image = await cashUploadImage(file);
+      setStage("uploading");
       const uploaded = await cashBranchRequest<{ id: string; url: string }>(
         branchId,
         `/api/cash/photos?sessionId=${encodeURIComponent(sessionId)}`,
@@ -52,17 +88,25 @@ export function CashPhotoPicker({
           body: image,
         },
       );
+      setPreview({ url, photoId: uploaded.id });
       onChange({ id: uploaded.id, url: cashPhotoUrl(uploaded.id, branchId) });
       setZoom(false);
     } catch (error) {
+      clearPreview();
       onError((error as Error).message);
     } finally {
-      setUploading(false);
+      setStage(null);
       onUploading(false);
     }
   }
   return (
-    <div className="cash-photo-picker">
+    <div
+      className={`cash-photo-picker ${displayedUrl ? "cash-photo-has-image" : ""}`}
+      role="group"
+      aria-busy={uploading}
+      aria-label={`Foto del cierre de lote ${index + 1}`}
+      aria-describedby={requirementId}
+    >
       <input
         ref={camera}
         className="sr-only"
@@ -71,6 +115,8 @@ export function CashPhotoPicker({
         accept="image/jpeg,image/png,image/webp"
         capture="environment"
         aria-label={`Tomar foto del lote ${index + 1}`}
+        aria-required={!photo}
+        aria-describedby={requirementId}
         disabled={disabled || uploading}
         onChange={choose}
       />
@@ -81,14 +127,24 @@ export function CashPhotoPicker({
         type="file"
         accept="image/jpeg,image/png,image/webp"
         aria-label={`Elegir foto del lote ${index + 1}`}
+        aria-required={!photo}
+        aria-describedby={requirementId}
         disabled={disabled || uploading}
         onChange={choose}
       />
-      {photo ? (
+      {displayedUrl ? (
         <>
-          <div className="cash-photo-heading">
+          <div
+            className="cash-photo-heading"
+            data-pending={uploading || undefined}
+          >
             <span>
-              <Check size={16} /> Comprobante agregado
+              {uploading ? (
+                <LoaderCircle size={16} className="animate-spin" />
+              ) : (
+                <Check size={16} />
+              )}
+              {uploading ? "Foto seleccionada" : "Comprobante agregado"}
             </span>
             <Button
               type="button"
@@ -96,7 +152,10 @@ export function CashPhotoPicker({
               size="icon-sm"
               aria-label={`Quitar foto del lote ${index + 1}`}
               disabled={disabled || uploading}
-              onClick={() => onChange(null)}
+              onClick={() => {
+                clearPreview();
+                onChange(null);
+              }}
             >
               <X />
             </Button>
@@ -108,7 +167,7 @@ export function CashPhotoPicker({
             aria-label={`${zoom ? "Reducir" : "Ampliar"} foto del lote ${index + 1}`}
             aria-pressed={zoom}
           >
-            <img src={photo.url} alt={`Comprobante del lote ${index + 1}`} />
+            <img src={displayedUrl} alt={`Comprobante del lote ${index + 1}`} />
             <span>
               {zoom ? <ZoomOut size={15} /> : <ZoomIn size={15} />}
               {zoom ? "Reducir" : "Ampliar foto"}
@@ -119,7 +178,9 @@ export function CashPhotoPicker({
         <div className="cash-photo-prompt">
           <Camera size={28} />
           <div>
-            <b>Foto del cierre de lote</b>
+            <b>
+              <FieldCaption required>Foto del cierre de lote</FieldCaption>
+            </b>
             <p>Que se vean el número de lote y el total.</p>
           </div>
         </div>
@@ -128,6 +189,7 @@ export function CashPhotoPicker({
         <Button
           type="button"
           variant="outline"
+          aria-describedby={requirementId}
           onClick={() => camera.current?.click()}
           disabled={disabled || uploading}
         >
@@ -137,6 +199,7 @@ export function CashPhotoPicker({
         <Button
           type="button"
           variant="outline"
+          aria-describedby={requirementId}
           onClick={() => gallery.current?.click()}
           disabled={disabled || uploading}
         >
@@ -144,10 +207,12 @@ export function CashPhotoPicker({
           Elegir foto
         </Button>
       </div>
-      <small aria-live="polite">
+      <small id={requirementId} aria-live="polite">
         {uploading
-          ? "Guardando comprobante…"
-          : "Comprobante privado · JPG, PNG o WebP · hasta 10 MB"}
+          ? stage === "preparing"
+            ? "Preparando imagen…"
+            : "Guardando comprobante…"
+          : `${photo ? "JPG, PNG o WebP" : "Obligatoria para registrar el lote · JPG, PNG o WebP"} · hasta 10 MB`}
       </small>
     </div>
   );

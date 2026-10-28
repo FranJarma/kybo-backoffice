@@ -109,7 +109,12 @@ function TextField({
 }) {
   return (
     <label className="block min-w-0 text-sm font-semibold">
-      <FieldCaption required={required}>{label}</FieldCaption>
+      <FieldCaption
+        required={!disabled && required}
+        optional={!disabled && !required}
+      >
+        {label}
+      </FieldCaption>
       <Input
         className="mt-1"
         value={value}
@@ -1046,7 +1051,9 @@ export function InventoryManager({
                     />
                     <div className="min-w-0 text-sm font-semibold">
                       <label htmlFor="opening-entry-unit">
-                        <FieldCaption required>Cargar cantidad en</FieldCaption>
+                        <FieldCaption required={openingReady}>
+                          Cargar cantidad en
+                        </FieldCaption>
                       </label>
                       <select
                         id="opening-entry-unit"
@@ -1177,9 +1184,7 @@ export function InventoryManager({
                   </label>
                 )}
                 <TextField
-                  label={
-                    action === "opening" ? "Observaciones (opcional)" : "Motivo"
-                  }
+                  label={action === "opening" ? "Observaciones" : "Motivo"}
                   value={reason}
                   set={setReason}
                   required={action !== "opening"}

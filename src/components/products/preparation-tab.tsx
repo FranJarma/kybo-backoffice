@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getJson, useOperation } from "@/components/inventory/shared";
 import { Button } from "@/components/ui/button";
+import { FieldCaption } from "@/components/ui/field-caption";
 import { OperationAlert } from "@/components/ui/operation-alert";
 import { useErrorFeedback } from "@/components/ui/use-error-feedback";
 import type { PrepSettings } from "@/modules/preparation/types";
@@ -78,7 +79,7 @@ export function ProductPreparationTab({
       ) : (
         <>
           <label className="block text-sm font-medium">
-            Estación de preparación
+            <FieldCaption optional>Estación de preparación</FieldCaption>
             <select
               className="form-control mt-2"
               value={stationId}

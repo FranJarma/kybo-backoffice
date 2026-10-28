@@ -346,7 +346,10 @@ export function Cart({
                       />
                     </label>
                     <label className="grid gap-2 text-sm font-semibold text-brand">
-                      <FieldCaption required={priceChanged}>
+                      <FieldCaption
+                        required={priceChanged}
+                        optional={!priceChanged}
+                      >
                         Motivo del cambio de precio
                       </FieldCaption>
                       <Input
@@ -369,7 +372,7 @@ export function Cart({
                   </>
                 )}
                 <label className="grid gap-2 text-sm font-semibold text-brand">
-                  Observaciones
+                  <FieldCaption optional>Observaciones</FieldCaption>
                   <Input
                     autoFocus={editor.focus === "notes"}
                     className="min-h-12"

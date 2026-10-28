@@ -326,6 +326,8 @@ export function SearchSelect({
   filter,
   disabled,
   required,
+  requiredCaption = required,
+  optional = !requiredCaption,
   initial,
 }: {
   entity: Entity;
@@ -336,6 +338,8 @@ export function SearchSelect({
   filter?: (row: CatalogRow) => boolean;
   disabled?: boolean;
   required?: boolean;
+  requiredCaption?: boolean;
+  optional?: boolean;
   initial?: CatalogRow;
 }) {
   const selectId = useId();
@@ -389,7 +393,12 @@ export function SearchSelect({
         htmlFor={selectId}
         className="mb-2 block text-xs font-semibold text-brand"
       >
-        <FieldCaption required={required}>{label}</FieldCaption>
+        <FieldCaption
+          required={!disabled && requiredCaption}
+          optional={!disabled && optional}
+        >
+          {label}
+        </FieldCaption>
       </label>
       <SearchCombobox
         id={selectId}

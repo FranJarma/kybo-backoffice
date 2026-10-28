@@ -127,6 +127,7 @@ export function BranchProductSettings({
       <SearchSelect
         entity="products"
         label="Producto"
+        optional={false}
         value={product}
         onChange={(id) => {
           setProduct(id);
@@ -175,7 +176,9 @@ export function BranchProductSettings({
                 Agotado temporalmente en esta sucursal
               </label>
               <label className="block text-sm font-semibold">
-                Ubicación de despacho de reventa
+                <FieldCaption optional>
+                  Ubicación de despacho de reventa
+                </FieldCaption>
                 <select
                   className="mt-2 block w-full rounded border p-2"
                   value={location}

@@ -453,7 +453,7 @@ export function PaymentDialog({
                         />
                         Agregar referencia (opcional)
                       </summary>
-                      <Control label={`Referencia ${i + 1}`}>
+                      <Control label={`Referencia ${i + 1}`} optional>
                         <Input
                           value={row.reference}
                           maxLength={120}

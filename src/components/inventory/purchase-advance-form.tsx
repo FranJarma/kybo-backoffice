@@ -2,6 +2,7 @@
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FieldCaption } from "@/components/ui/field-caption";
 import { OperationNotice } from "@/components/sales/shared";
 import type {
   PurchaseAdvanceInput,
@@ -89,8 +90,9 @@ export function PurchaseAdvanceForm({
             className="grid gap-4 sm:grid-cols-2"
           >
             <label className="space-y-2 text-sm font-semibold">
-              Origen del dinero
+              <FieldCaption required>Origen del dinero</FieldCaption>
               <select
+                required
                 className="form-control"
                 value={source}
                 onChange={(e) => {
@@ -111,7 +113,7 @@ export function PurchaseAdvanceForm({
               required
             />
             <label className="space-y-2 text-sm font-semibold">
-              Fecha de pago
+              <FieldCaption required>Fecha de pago</FieldCaption>
               <Input
                 required
                 type="date"
@@ -122,7 +124,7 @@ export function PurchaseAdvanceForm({
               />
             </label>
             <label className="space-y-2 text-sm font-semibold">
-              Importe pagado (ARS)
+              <FieldCaption required>Importe pagado (ARS)</FieldCaption>
               <Input
                 required
                 inputMode="decimal"
@@ -132,7 +134,7 @@ export function PurchaseAdvanceForm({
               />
             </label>
             <label className="space-y-2 text-sm font-semibold sm:col-span-2">
-              Referencia
+              <FieldCaption optional>Referencia</FieldCaption>
               <Input
                 value={reference}
                 maxLength={160}

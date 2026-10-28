@@ -169,10 +169,16 @@ for (const width of [600, 768, 1024])
     await page.goto("/__unified?mode=settings");
     await page.addScriptTag({ path: ".next-e2e/unified-purchases-ui.js" });
     await expect(
-      page.getByLabel("Consumo diario estimado (unid.)", { exact: true }),
+      page.getByRole("textbox", {
+        name: "Consumo diario estimado (unid.)",
+        exact: true,
+      }),
     ).toHaveValue("150");
     await page
-      .getByLabel("Reponer para cubrir (días)", { exact: true })
+      .getByRole("spinbutton", {
+        name: "Reponer para cubrir (días)",
+        exact: true,
+      })
       .fill("10");
     await page
       .getByRole("button", { name: "Guardar configuración", exact: true })
@@ -182,7 +188,10 @@ for (const width of [600, 768, 1024])
     );
     expect(sent).toHaveLength(0);
     await page
-      .getByLabel("Reponer para cubrir (días)", { exact: true })
+      .getByRole("spinbutton", {
+        name: "Reponer para cubrir (días)",
+        exact: true,
+      })
       .fill("17");
     await page
       .getByRole("button", { name: "Guardar configuración", exact: true })
@@ -361,7 +370,10 @@ test("item configuration belongs to manager catalog tab and is a separate form",
     .getByRole("tab", { name: "Reposición y compras", exact: true })
     .click();
   await expect(
-    page.getByLabel("Consumo diario estimado (unid.)", { exact: true }),
+    page.getByRole("textbox", {
+      name: "Consumo diario estimado (unid.)",
+      exact: true,
+    }),
   ).toHaveValue("150");
   expect(await page.locator("form form").count()).toBe(0);
   const reads = settingsReads;

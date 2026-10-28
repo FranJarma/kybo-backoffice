@@ -320,7 +320,9 @@ export function ProductSetupFields({
                     </select>
                   </label>
                   <label className="block text-sm font-medium sm:col-span-2">
-                    Costo de compra por unidad
+                    <FieldCaption optional>
+                      Costo de compra por unidad
+                    </FieldCaption>
                     <Input
                       className="mt-2"
                       inputMode="decimal"

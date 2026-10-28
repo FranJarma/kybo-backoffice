@@ -3,6 +3,7 @@ import { useState } from "react";
 import { CalendarClock, PackageCheck, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FieldCaption } from "@/components/ui/field-caption";
 import { integer } from "@/modules/inventory/decimal";
 import type { PurchaseOrder, OrderCommand } from "@/modules/procurement/types";
 import { date, money, quantity, today } from "./shared";
@@ -282,7 +283,7 @@ export function PurchaseOrderDetail({
           <fieldset disabled={locked} className="grid gap-4 sm:grid-cols-2">
             {mode === "reschedule" && (
               <label className="space-y-2 text-sm font-semibold">
-                Nueva llegada estimada
+                <FieldCaption optional>Nueva llegada estimada</FieldCaption>
                 <Input
                   type="date"
                   min={o.orderedOn}
@@ -292,7 +293,7 @@ export function PurchaseOrderDetail({
               </label>
             )}
             <label className="space-y-2 text-sm font-semibold">
-              Motivo del cambio
+              <FieldCaption required>Motivo del cambio</FieldCaption>
               <Input
                 required
                 maxLength={500}

@@ -55,10 +55,9 @@ export function PrepMetricsPanel({ onClose }: { onClose: () => void }) {
         </Button>
       </div>
       <div className="max-w-xs">
-        <Control label="Fecha del resumen" required>
+        <Control label="Fecha del resumen">
           <Input
             type="date"
-            required
             value={date}
             onChange={(e) => setDate(e.target.value)}
           />

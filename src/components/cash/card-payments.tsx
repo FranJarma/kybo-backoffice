@@ -18,7 +18,6 @@ export function CashCardPayments({
         (row.kind === "collection" || row.kind === "refund"),
     )
     .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
-  if (!payments.length) return null;
   const refunds = payments.filter((row) => row.kind === "refund").length;
   const collections = payments.length - refunds;
   return (
@@ -34,39 +33,45 @@ export function CashCardPayments({
         className="cash-card-payments-scroll"
         role="region"
         aria-label="Cobros con tarjeta de esta jornada"
-        tabIndex={0}
+        tabIndex={payments.length ? 0 : undefined}
       >
-        <ul>
-          {payments.map((row) => (
-            <li key={row.id}>
-              <div className="cash-card-payment-heading">
-                <b>{row.concept}</b>
-                <strong>{money(row.amount)}</strong>
-              </div>
-              <p className="cash-card-payment-meta">
-                {row.methodName} ·{" "}
-                <time dateTime={row.createdAt}>
-                  {sessionTime(row.createdAt, session.timeZone)}
-                </time>
-              </p>
-              {row.reference?.trim() ? (
-                <p className="cash-card-payment-receipt">
-                  <span>
-                    {row.kind === "refund"
-                      ? "Comprobante original"
-                      : "Comprobante"}{" "}
-                    Nº
-                  </span>
-                  <b>{row.reference}</b>
+        {payments.length ? (
+          <ul>
+            {payments.map((row) => (
+              <li key={row.id}>
+                <div className="cash-card-payment-heading">
+                  <b>{row.concept}</b>
+                  <strong>{money(row.amount)}</strong>
+                </div>
+                <p className="cash-card-payment-meta">
+                  {row.methodName} ·{" "}
+                  <time dateTime={row.createdAt}>
+                    {sessionTime(row.createdAt, session.timeZone)}
+                  </time>
                 </p>
-              ) : (
-                <p className="cash-card-payment-missing">
-                  Sin comprobante registrado
-                </p>
-              )}
-            </li>
-          ))}
-        </ul>
+                {row.reference?.trim() ? (
+                  <p className="cash-card-payment-receipt">
+                    <span>
+                      {row.kind === "refund"
+                        ? "Comprobante original"
+                        : "Comprobante"}{" "}
+                      Nº
+                    </span>
+                    <b>{row.reference}</b>
+                  </p>
+                ) : (
+                  <p className="cash-card-payment-missing">
+                    Sin comprobante registrado
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="cash-card-payments-empty">
+            No hay comprobantes de tarjeta registrados en esta jornada.
+          </p>
+        )}
       </div>
       <small>
         Compará cada número con el detalle del posnet. Las devoluciones restan

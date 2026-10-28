@@ -384,7 +384,9 @@ export function ExpensesManager({ initialMonth }: { initialMonth: string }) {
                       Impuestos estimados
                     </h2>
                     <label className="grid max-w-xs gap-2 text-sm font-medium">
-                      <FieldCaption>Alícuota estimada de IIBB (%)</FieldCaption>
+                      <FieldCaption optional>
+                        Alícuota estimada de IIBB (%)
+                      </FieldCaption>
                       <input
                         {...invalidField("iibbRate")}
                         className="form-control"
@@ -410,7 +412,9 @@ export function ExpensesManager({ initialMonth }: { initialMonth: string }) {
                   </div>
                   <div className="grid items-start gap-6 md:grid-cols-[minmax(200px,320px)_1fr]">
                     <label className="grid gap-2 text-sm font-medium">
-                      Unidades previstas del mes
+                      <FieldCaption optional>
+                        Unidades previstas del mes
+                      </FieldCaption>
                       <input
                         {...invalidField("expectedUnits")}
                         className="form-control"
@@ -508,7 +512,7 @@ export function ExpensesManager({ initialMonth }: { initialMonth: string }) {
                             </select>
                           </label>
                           <label className="grid gap-2 text-sm">
-                            <FieldCaption>Presupuesto</FieldCaption>
+                            <FieldCaption optional>Presupuesto</FieldCaption>
                             <input
                               {...invalidField(`entries.${i}.budget`)}
                               aria-label={`Presupuesto ${i + 1}`}
@@ -522,9 +526,7 @@ export function ExpensesManager({ initialMonth }: { initialMonth: string }) {
                             />
                           </label>
                           <label className="grid gap-2 text-sm">
-                            <FieldCaption required={revising}>
-                              Real{!revising && " (pendiente hasta conocerlo)"}
-                            </FieldCaption>
+                            <FieldCaption required>Real</FieldCaption>
                             <input
                               {...invalidField(`entries.${i}.actual`)}
                               required={revising}
@@ -537,6 +539,12 @@ export function ExpensesManager({ initialMonth }: { initialMonth: string }) {
                               }
                               placeholder="Pendiente"
                             />
+                            {!revising && (
+                              <small className="text-xs leading-relaxed text-muted">
+                                Obligatorio para cerrar el mes; podés guardarlo
+                                pendiente.
+                              </small>
+                            )}
                           </label>
                           <Button
                             variant="ghost"
@@ -576,7 +584,7 @@ export function ExpensesManager({ initialMonth }: { initialMonth: string }) {
                           </p>
                         ) : null}
                         <label className="grid gap-2 text-sm text-muted">
-                          Observaciones opcionales
+                          <FieldCaption optional>Observaciones</FieldCaption>
                           <input
                             aria-label={`Observaciones ${i + 1}`}
                             className="form-control"

@@ -1056,7 +1056,7 @@ export function SalesManager({
                   ) : (
                     <>
                       {fulfillment === "dine_in" && (
-                        <Control label="Mesa de consumo (opcional)">
+                        <Control label="Mesa de consumo" optional>
                           <select
                             className={selectClass}
                             value={tableId}
@@ -1286,7 +1286,7 @@ export function SalesManager({
               }
             }}
           >
-            <Control label="Observaciones del pedido">
+            <Control label="Observaciones del pedido" optional>
               <Input
                 autoFocus
                 className="min-h-12"

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Clock3, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FieldCaption } from "@/components/ui/field-caption";
 import { SearchCombobox } from "@/components/ui/search-combobox";
 import { OperationAlert } from "@/components/ui/operation-alert";
 import type {
@@ -181,7 +182,7 @@ export function CashSettingsManager({ branchId }: { branchId: string }) {
             </div>
             <form className="cash-stack" onSubmit={configure}>
               <label className="cash-field">
-                <span>Horario previsto de cierre</span>
+                <FieldCaption required>Horario previsto de cierre</FieldCaption>
                 <Input
                   type="time"
                   value={closeTime}
@@ -195,6 +196,7 @@ export function CashSettingsManager({ branchId }: { branchId: string }) {
               </label>
               <MoneyField
                 label="Fondo de cambio objetivo"
+                optional
                 value={targetFund}
                 disabled={busy}
                 onChange={setTargetFund}
@@ -217,9 +219,12 @@ export function CashSettingsManager({ branchId }: { branchId: string }) {
             </div>
             <div className="cash-stack">
               <div className="cash-field">
-                <label htmlFor="cash-employee">Empleado de la sucursal</label>
+                <label htmlFor="cash-employee">
+                  <FieldCaption required>Empleado de la sucursal</FieldCaption>
+                </label>
                 <SearchCombobox
                   id="cash-employee"
+                  required
                   label="Empleado de la sucursal"
                   value={userId}
                   selectedLabel={selected?.name ?? ""}

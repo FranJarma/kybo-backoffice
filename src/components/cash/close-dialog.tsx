@@ -1,7 +1,14 @@
 "use client";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { ArrowLeft, ArrowRight, Check, LockKeyhole, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FieldCaption } from "@/components/ui/field-caption";
 import {
   Dialog,
   DialogContent,
@@ -55,9 +62,26 @@ export function CashCloseDialog({
   const [uploads, setUploads] = useState(0);
   const heading = useRef<HTMLHeadingElement>(null);
   const content = useRef<HTMLDivElement>(null);
+  const countedInput = useRef<HTMLInputElement>(null);
+  const focusStep = useCallback(() => {
+    const input = countedInput.current;
+    const target =
+      step === 0 && input && !input.matches(":disabled")
+        ? input
+        : heading.current;
+    if (!target) return false;
+    if (document.activeElement !== target) {
+      target.focus({ preventScroll: true });
+      if (target === input) input.select();
+    }
+    return document.activeElement === target;
+  }, [step]);
   useEffect(() => {
-    if (open) heading.current?.focus();
-  }, [open, step]);
+    if (open) {
+      content.current?.scrollTo({ top: 0 });
+      focusStep();
+    }
+  }, [open, focusStep]);
   useEffect(() => {
     if (open && error) content.current?.scrollTo({ top: 0 });
   }, [open, error]);
@@ -100,9 +124,11 @@ export function CashCloseDialog({
       }}
     >
       <DialogContent
-        ref={content}
         showCloseButton={false}
-        className="kybo-cash cash-close-dialog sm:max-w-5xl"
+        onOpenAutoFocus={(event) => {
+          if (focusStep()) event.preventDefault();
+        }}
+        className="kybo-cash cash-close-dialog"
       >
         <div className="cash-close-header">
           <div>
@@ -142,7 +168,7 @@ export function CashCloseDialog({
         </ol>
         {error ? <CashNotice error>{error}</CashNotice> : null}
         {recovery}
-        <div className="cash-close-body">
+        <div ref={content} className="cash-close-body">
           <h2 ref={heading} tabIndex={-1} className="cash-step-heading">
             {
               [
@@ -155,16 +181,36 @@ export function CashCloseDialog({
           {step === 0 ? (
             <div className="cash-close-grid">
               <div className="cash-stack">
+                <section
+                  className="cash-count-comparison"
+                  aria-label="Control de efectivo"
+                >
+                  <div
+                    className="cash-system-amount"
+                    role="group"
+                    aria-label="Efectivo esperado según el sistema"
+                  >
+                    <div>
+                      <p>Efectivo esperado</p>
+                      <small>Según el sistema</small>
+                    </div>
+                    <strong>{money(totals.expectedCash)}</strong>
+                  </div>
+                  <div className="cash-counted-amount">
+                    <MoneyField
+                      label="Efectivo contado"
+                      required
+                      inputRef={countedInput}
+                      value={draft.counted}
+                      onChange={(counted) => onChange({ ...draft, counted })}
+                      disabled={locked}
+                    />
+                  </div>
+                </section>
                 <p className="cash-muted">
                   Contá todo lo que hay en el cajón antes de hacer un nuevo
                   retiro de cierre.
                 </p>
-                <MoneyField
-                  label="Efectivo contado"
-                  value={draft.counted}
-                  onChange={(counted) => onChange({ ...draft, counted })}
-                  disabled={locked}
-                />
                 <div
                   className={`cash-difference ${difference !== null && difference !== 0n ? "cash-difference-amber" : ""}`}
                 >
@@ -173,8 +219,11 @@ export function CashCloseDialog({
                 </div>
                 {difference !== null && difference !== 0n ? (
                   <label className="cash-field">
-                    <span>Motivo de la diferencia de efectivo</span>
+                    <FieldCaption required>
+                      Motivo de la diferencia de efectivo
+                    </FieldCaption>
                     <textarea
+                      required
                       aria-label="Motivo de la diferencia de efectivo"
                       maxLength={1000}
                       value={draft.reason}
@@ -188,6 +237,7 @@ export function CashCloseDialog({
                 {snapshot.capabilities.withdraw ? (
                   <MoneyField
                     label="Nuevo retiro al cerrar"
+                    optional
                     value={draft.withdrawal}
                     disabled={locked}
                     hint="Si ya registraste un retiro durante el día, no lo cargues de nuevo."
@@ -232,9 +282,8 @@ export function CashCloseDialog({
                 />
               </div>
               <aside className="cash-close-reference">
-                <p className="cash-eyebrow">SEGÚN LOS MOVIMIENTOS DEL DÍA</p>
-                <h3>Efectivo esperado</h3>
-                <strong>{money(totals.expectedCash)}</strong>
+                <p className="cash-eyebrow">MOVIMIENTOS DE LA JORNADA</p>
+                <h3>Cómo se calcula el efectivo</h3>
                 <MoneyRow label="Fondo inicial" amount={totals.opening} />
                 <MoneyRow
                   label="Cobros en efectivo"
@@ -318,7 +367,7 @@ export function CashCloseDialog({
                   ? draft.lots.map((lot) => (
                       <MoneyRow
                         key={lot.id}
-                        label={`Lote ${lot.number} · ${lot.operations} operaciones`}
+                        label={`Lote ${lot.number} · ${lot.operations} ${Number(lot.operations) === 1 ? "operación" : "operaciones"}`}
                         amount={cents(previewMoney(lot.total, true) ?? 0n)}
                       />
                     ))

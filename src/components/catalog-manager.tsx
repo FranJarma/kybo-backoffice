@@ -779,7 +779,11 @@ export function CatalogManager({
             : "min-w-0 space-y-2.5"
         }
       >
-        <Label htmlFor={`${formId}-${field.key}`} required={field.required}>
+        <Label
+          htmlFor={`${formId}-${field.key}`}
+          required={field.required}
+          optional={!field.required}
+        >
           {field.label}
         </Label>
         {fieldControl(field)}

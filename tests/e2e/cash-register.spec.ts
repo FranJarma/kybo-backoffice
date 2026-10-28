@@ -349,6 +349,147 @@ function cardReconciliationSnapshot() {
   return data;
 }
 
+for (const width of [1024, 1366, 1920]) {
+  test(`posnet comparison leads a readable workspace with evidence after fields at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const posted = await mount(page, cardReconciliationSnapshot());
+    await startClose(page);
+    const dialog = page.getByRole("dialog");
+    const summary = dialog.getByRole("region", {
+      name: "Conciliación de tarjetas",
+      exact: true,
+    });
+    const entry = dialog.getByRole("region", {
+      name: "Datos del cierre del posnet",
+      exact: true,
+    });
+    const receipts = dialog.getByRole("region", {
+      name: "Cobros con tarjeta de esta jornada",
+      exact: true,
+    });
+    await expect(summary).toContainText("800,00");
+    await expect(summary).toContainText("3 operaciones");
+    await expect(summary).toBeInViewport({ ratio: 1 });
+    const lot = dialog.getByRole("region", { name: "Lote 1", exact: true });
+    const number = lot.getByLabel("Número de lote 1", { exact: true });
+    const date = lot.getByLabel("Fecha y hora del lote 1", { exact: true });
+    const operations = lot.getByLabel("Operaciones del lote 1", {
+      exact: true,
+    });
+    const total = lot.getByLabel("Total del lote 1", { exact: true });
+    const boxes = await Promise.all(
+      [number, date, operations, total].map((field) => field.boundingBox()),
+    );
+    expect(Math.abs(boxes[0]!.y - boxes[1]!.y)).toBeLessThan(2);
+    expect(
+      Math.max(...boxes.map((box) => box!.height)) -
+        Math.min(...boxes.map((box) => box!.height)),
+    ).toBeLessThan(2);
+    const photo = lot.locator(".cash-photo-picker");
+    expect((await photo.boundingBox())!.y).toBeGreaterThan(
+      Math.max(...boxes.map((box) => box!.y + box!.height)),
+    );
+    const summaryBox = (await summary.boundingBox())!;
+    expect(summaryBox.y + summaryBox.height).toBeLessThanOrEqual(
+      (await entry.boundingBox())!.y,
+    );
+    expect((await receipts.boundingBox())!.x).toBeGreaterThan(
+      (await entry.boundingBox())!.x,
+    );
+    expect((await receipts.boundingBox())!.width).toBeGreaterThan(330);
+    await number.fill("003");
+    await operations.fill("3");
+    await total.fill("800");
+    await expect(summary).toContainText("Importes y operaciones coinciden");
+    const titleBox = (await dialog
+      .getByRole("heading", { name: "Cerrar caja", exact: true })
+      .boundingBox())!;
+    expect(titleBox.y).toBeGreaterThanOrEqual(
+      (await dialog.boundingBox())!.y + 8,
+    );
+    await dialog.screenshot({
+      path: `.next-e2e/posnet-workspace-${width}.png`,
+    });
+    const body = dialog.locator(".cash-close-body");
+    await body.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
+    await expect(
+      dialog.getByRole("heading", { name: "Cerrar caja", exact: true }),
+    ).toBeInViewport({ ratio: 1 });
+    await expect(
+      dialog.getByRole("button", { name: "Continuar", exact: true }),
+    ).toBeInViewport({ ratio: 1 });
+    expect(posted).toEqual([]);
+  });
+}
+
+test("multiple posnet lots keep their data and evidence when reviewing and removing a lot", async ({
+  page,
+}) => {
+  const posted = await mount(page, cardReconciliationSnapshot());
+  await startClose(page);
+  await fillLot(page);
+  const summary = page.getByRole("region", {
+    name: "Conciliación de tarjetas",
+    exact: true,
+  });
+  await page.getByLabel("Total del lote 1", { exact: true }).fill("500");
+  await page
+    .getByRole("button", {
+      name: "Agregar otro lote de este equipo",
+      exact: true,
+    })
+    .click();
+  await page.getByLabel("Número de lote 2", { exact: true }).fill("004");
+  await page
+    .getByLabel("Fecha y hora del lote 2", { exact: true })
+    .fill("2026-10-27T23:15");
+  await page.getByLabel("Operaciones del lote 2", { exact: true }).fill("1");
+  await page.getByLabel("Total del lote 2", { exact: true }).fill("300");
+  await page
+    .getByLabel("Elegir foto del lote 2", { exact: true })
+    .setInputFiles({
+      name: "segundo-lote.png",
+      mimeType: "image/png",
+      buffer: tinyPhoto,
+    });
+  await expect(
+    page.getByText("Comprobante agregado", { exact: true }),
+  ).toHaveCount(2);
+  await expect(summary).toContainText("Importes y operaciones coinciden");
+  await page.getByRole("button", { name: "Continuar", exact: true }).click();
+  await expect(
+    page.getByText("Lote 003 · 2 operaciones", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Lote 004 · 1 operación", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Atrás", exact: true }).click();
+  await expect(
+    page.getByLabel("Número de lote 1", { exact: true }),
+  ).toHaveValue("003");
+  await expect(
+    page.getByLabel("Número de lote 2", { exact: true }),
+  ).toHaveValue("004");
+  await expect(
+    page.getByText("Comprobante agregado", { exact: true }),
+  ).toHaveCount(2);
+  await page
+    .getByRole("button", { name: "Quitar lote 2", exact: true })
+    .click();
+  await expect(
+    page.getByRole("region", { name: "Lote 2", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByLabel("Total del lote 1", { exact: true }),
+  ).toHaveValue("500");
+  await expect(summary).toContainText("Hay una diferencia");
+  expect(posted).toEqual([]);
+});
+
 for (const width of [390, 1024, 1440]) {
   test(`card receipts reconcile the current session including refunds at ${width}px`, async ({
     page,
@@ -442,6 +583,94 @@ test("a full day of card receipts remains keyboard-scrollable without widening t
   await expect(
     page.getByRole("button", { name: "Continuar", exact: true }),
   ).toBeInViewport();
+  expect(posted).toEqual([]);
+});
+
+test("cash requirements are visible and conditional before trying to submit", async ({
+  page,
+}) => {
+  const posted = await mount(page);
+  await page.getByRole("button", { name: "Cerrar caja", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  const counted = dialog.getByLabel("Efectivo contado", { exact: true });
+  await expect(counted).toHaveAttribute("required", "");
+  await expect(
+    dialog
+      .locator("label")
+      .filter({ has: page.getByLabel("Efectivo contado", { exact: true }) })
+      .locator("[data-field-caption]"),
+  ).toContainText("*");
+  const withdrawal = dialog.getByLabel("Nuevo retiro al cerrar", {
+    exact: true,
+  });
+  await expect(withdrawal).not.toHaveAttribute("required");
+  await expect(
+    dialog.locator("label").filter({
+      has: page.getByLabel("Nuevo retiro al cerrar", { exact: true }),
+    }),
+  ).toContainText("opcional");
+  await counted.fill("999");
+  const reason = dialog.getByLabel("Motivo de la diferencia de efectivo", {
+    exact: true,
+  });
+  await expect(reason).toHaveAttribute("required", "");
+  await expect(
+    dialog
+      .locator("label")
+      .filter({
+        has: page.getByLabel("Motivo de la diferencia de efectivo", {
+          exact: true,
+        }),
+      })
+      .locator("[data-field-caption]"),
+  ).toContainText("*");
+  await counted.fill("1000,10");
+  await expect(reason).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Continuar", exact: true }).click();
+  for (const label of [
+    "Número de lote 1",
+    "Fecha y hora del lote 1",
+    "Operaciones del lote 1",
+    "Total del lote 1",
+  ]) {
+    const input = dialog.getByLabel(label, { exact: true });
+    await expect(input).toHaveAttribute("required", "");
+    await expect(
+      dialog
+        .locator("label")
+        .filter({ has: page.getByLabel(label, { exact: true }) })
+        .locator("[data-field-caption]"),
+    ).toContainText("*");
+  }
+  const photo = dialog.getByRole("group", {
+    name: "Foto del cierre de lote 1",
+    exact: true,
+  });
+  await expect(photo).toContainText("Obligatoria");
+  await expect(photo.locator("[data-field-caption]")).toContainText("*");
+  await photo
+    .getByLabel("Elegir foto del lote 1", { exact: true })
+    .setInputFiles({
+      name: "lote.png",
+      mimeType: "image/png",
+      buffer: tinyPhoto,
+    });
+  await expect(
+    photo.getByText("Comprobante agregado", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    photo.getByLabel("Tomar foto del lote 1", { exact: true }),
+  ).not.toHaveAttribute("required");
+  await dialog
+    .getByRole("button", {
+      name: "No pude registrar el cierre del posnet",
+      exact: true,
+    })
+    .click();
+  await expect(photo).toHaveCount(0);
+  await expect(
+    dialog.getByLabel("Motivo del cierre de lote pendiente", { exact: true }),
+  ).toHaveAttribute("required", "");
   expect(posted).toEqual([]);
 });
 
@@ -753,6 +982,124 @@ test("saving a same-session expense keeps the prepared close draft and its priva
     page.getByText("Comprobante agregado", { exact: true }),
   ).toBeVisible();
 });
+for (const viewport of [
+  { width: 375, height: 667 },
+  { width: 390, height: 520 },
+  { width: 768, height: 900 },
+  { width: 1440, height: 1000 },
+  { width: 1920, height: 1080 },
+]) {
+  test(`cash count starts with system amount next to the entry at ${viewport.width}x${viewport.height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    const data = snapshot();
+    data.totals.expectedCash = "85000.00";
+    data.totals.cashCollections = "84499.90";
+    const posted = await mount(page, data);
+    await page
+      .getByRole("button", { name: "Cerrar caja", exact: true })
+      .click();
+    const dialog = page.getByRole("dialog");
+    const comparison = dialog.getByRole("region", {
+      name: "Control de efectivo",
+      exact: true,
+    });
+    const system = comparison.getByRole("group", {
+      name: "Efectivo esperado según el sistema",
+      exact: true,
+    });
+    const input = comparison.getByRole("textbox", {
+      name: "Efectivo contado",
+      exact: true,
+    });
+    await expect(system).toContainText("85.000,00");
+    await expect(system).toBeInViewport({ ratio: 1 });
+    await expect(input).toBeInViewport({ ratio: 1 });
+    await expect(input).toHaveValue("");
+    await expect(input).toBeFocused();
+    const systemBounds = (await system.boundingBox())!;
+    const inputBounds = (await input.boundingBox())!;
+    const footerBounds = (await dialog.locator("footer").boundingBox())!;
+    expect(systemBounds.y + systemBounds.height).toBeLessThanOrEqual(
+      footerBounds.y,
+    );
+    expect(inputBounds.y + inputBounds.height).toBeLessThanOrEqual(
+      footerBounds.y,
+    );
+    if (viewport.width <= 600) {
+      expect(systemBounds.y).toBeLessThan(inputBounds.y);
+      expect(inputBounds.y - systemBounds.y - systemBounds.height).toBeLessThan(
+        75,
+      );
+    }
+    if (viewport.width >= 1440)
+      expect((await dialog.boundingBox())!.width).toBeGreaterThan(1150);
+    expect(
+      await dialog.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth,
+      ),
+    ).toBe(true);
+    await page.keyboard.type("85000");
+    await expect(input).toHaveValue("85000");
+    await expect(dialog.locator(".cash-difference")).toContainText("0,00");
+    await dialog.screenshot({
+      path: `.next-e2e/cash-count-${viewport.width}-${viewport.height}.png`,
+    });
+    expect(posted).toEqual([]);
+  });
+}
+
+test("cash count focus returns on resume and back navigation without stealing other fields", async ({
+  page,
+}) => {
+  const posted = await mount(page);
+  await page.getByRole("button", { name: "Cerrar caja", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  const counted = dialog.getByRole("textbox", {
+    name: "Efectivo contado",
+    exact: true,
+  });
+  await expect(counted).toBeFocused();
+  await page.keyboard.type("1000,10");
+  const withdrawal = dialog.getByRole("textbox", {
+    name: "Nuevo retiro al cerrar",
+    exact: true,
+  });
+  await withdrawal.fill("300");
+  await expect(withdrawal).toBeFocused();
+  await dialog
+    .getByRole("button", { name: "Guardar y salir", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Continuar cierre", exact: true })
+    .click();
+  await expect(counted).toBeFocused();
+  await expect(counted).toHaveValue("1000,10");
+  await dialog.getByRole("button", { name: "Continuar", exact: true }).click();
+  const heading = dialog.getByRole("heading", {
+    name: "Registrá el cierre de tarjetas",
+    exact: true,
+  });
+  await expect(heading).toBeFocused();
+  await dialog
+    .getByRole("button", {
+      name: "Guardar borrador y salir del cierre",
+      exact: true,
+    })
+    .click();
+  await page
+    .getByRole("button", { name: "Continuar cierre", exact: true })
+    .click();
+  await expect(heading).toBeFocused();
+  await dialog.getByRole("button", { name: "Atrás", exact: true }).click();
+  await expect(counted).toBeFocused();
+  await expect(counted).toHaveValue("1000,10");
+  await page.keyboard.type("1001");
+  await expect(counted).toHaveValue("1001");
+  expect(posted).toEqual([]);
+});
+
 for (const width of [390, 768, 1024, 1440])
   test(`closing controls remain usable without horizontal overflow at ${width}px`, async ({
     page,
@@ -851,6 +1198,140 @@ test("administrator sets nullable fund and per-person grants with the shared aut
     canExpense: false,
   });
 });
+test("selected receipt previews locally while storage is pending and only unlocks after persistence", async ({
+  page,
+}) => {
+  const posted = await mount(page);
+  await startClose(page);
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/cash/photos?**", async (route) => {
+    await gate;
+    await route.fulfill({
+      json: { id: "preview-photo", url: "/api/cash/photos/preview-photo" },
+    });
+  });
+  try {
+    await page
+      .getByLabel("Elegir foto del lote 1", { exact: true })
+      .setInputFiles({
+        name: "comprobante.png",
+        mimeType: "image/png",
+        buffer: tinyPhoto,
+      });
+    const preview = page.getByRole("img", {
+      name: "Comprobante del lote 1",
+      exact: true,
+    });
+    await expect(preview).toBeVisible();
+    await expect(preview).toHaveAttribute("src", /^blob:/);
+    await expect(
+      page.getByText("Comprobante agregado", { exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Continuar", exact: true }),
+    ).toBeDisabled();
+    release();
+    await expect(
+      page.getByText("Comprobante agregado", { exact: true }),
+    ).toBeVisible();
+    await expect(preview).toHaveAttribute("src", /^blob:/);
+    await expect(
+      page.getByRole("button", { name: "Continuar", exact: true }),
+    ).toBeEnabled();
+    expect(posted).toEqual([]);
+  } finally {
+    release();
+  }
+});
+
+test("a failed receipt upload never counts as saved and the same file can be retried", async ({
+  page,
+}) => {
+  await mount(page);
+  await startClose(page);
+  let attempts = 0;
+  await page.route("**/api/cash/photos?**", (route) => {
+    attempts++;
+    return attempts === 1
+      ? route.fulfill({
+          status: 503,
+          json: { error: "No se pudo guardar la foto. Intentá otra vez." },
+        })
+      : route.fulfill({
+          json: { id: "retry-photo", url: "/api/cash/photos/retry-photo" },
+        });
+  });
+  const input = page.getByLabel("Elegir foto del lote 1", { exact: true });
+  const file = { name: "ticket.png", mimeType: "image/png", buffer: tinyPhoto };
+  await input.setInputFiles(file);
+  await expect(page.getByRole("alert")).toContainText(
+    "No se pudo guardar la foto",
+  );
+  await expect(
+    page.getByText("Comprobante agregado", { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("img", { name: "Comprobante del lote 1", exact: true }),
+  ).toHaveCount(0);
+  await input.setInputFiles(file);
+  await expect(
+    page.getByText("Comprobante agregado", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Quitar foto del lote 1", exact: true })
+    .click();
+  await expect(
+    page.getByRole("img", { name: "Comprobante del lote 1", exact: true }),
+  ).toHaveCount(0);
+});
+
+test("camera photos below three megabytes are compressed before transmission", async ({
+  page,
+}) => {
+  await mount(page);
+  await startClose(page);
+  const sharp = require("sharp");
+  const raw = Buffer.alloc(1400 * 1600 * 3);
+  require("node:crypto").randomFillSync(raw);
+  const image = await sharp(raw, {
+    raw: { width: 1400, height: 1600, channels: 3 },
+  })
+    .jpeg({ quality: 95 })
+    .toBuffer();
+  expect(image.length).toBeGreaterThan(768 * 1024);
+  expect(image.length).toBeLessThan(3 * 1024 * 1024);
+  let uploaded: Buffer | null = null;
+  await page.route("**/api/cash/photos?**", (route) => {
+    uploaded = route.request().postDataBuffer();
+    return route.fulfill({
+      json: { id: "medium-photo", url: "/api/cash/photos/medium-photo" },
+    });
+  });
+  await page
+    .getByLabel("Elegir foto del lote 1", { exact: true })
+    .setInputFiles({
+      name: "camera.jpg",
+      mimeType: "image/jpeg",
+      buffer: image,
+    });
+  await expect(
+    page.getByText("Comprobante agregado", { exact: true }),
+  ).toBeVisible();
+  expect(uploaded!.length).toBeLessThan(image.length * 0.8);
+  expect((await sharp(uploaded).metadata()).format).toBe("webp");
+  await test.info().attach("receipt-upload-size", {
+    body: JSON.stringify({
+      beforeBytes: image.length,
+      afterBytes: uploaded!.length,
+      reductionPercent: Math.round(100 * (1 - uploaded!.length / image.length)),
+    }),
+    contentType: "application/json",
+  });
+});
+
 test("large camera captures are resized privately before upload and preserve their aspect ratio", async ({
   page,
 }) => {
@@ -900,7 +1381,7 @@ test("large camera captures are resized privately before upload and preserve the
   expect(metadata.height).toBe(747);
   await expect(
     page.getByRole("img", { name: "Comprobante del lote 1", exact: true }),
-  ).toHaveAttribute("src", "/api/cash/photos/large-photo?branchId=branch");
+  ).toHaveAttribute("src", /^blob:/);
 });
 
 test("same-day reopening with the unchanged fund accepts its required reason", async ({

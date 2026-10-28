@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FieldCaption } from "@/components/ui/field-caption";
 import {
   Dialog,
   DialogContent,
@@ -971,6 +972,7 @@ export function CashManager({
               ) : null}
               {action !== "review" ? (
                 <MoneyField
+                  required
                   inputRef={action === "open" ? initialFundInput : undefined}
                   descriptionId={
                     action === "open" ? openingHistoryId : undefined
@@ -1012,11 +1014,11 @@ export function CashManager({
                     previewMoney(actionDraft.amount) !==
                       integer(snapshot.lastClosed.fund ?? "0.00")) ? (
                     <label className="cash-field">
-                      <span>
+                      <FieldCaption required>
                         {reopeningToday
                           ? "Motivo de nueva apertura"
                           : "Motivo de la diferencia de apertura"}
-                      </span>
+                      </FieldCaption>
                       <textarea
                         aria-label={
                           reopeningToday
@@ -1041,7 +1043,7 @@ export function CashManager({
               {action === "expense" ? (
                 <>
                   <label className="cash-field">
-                    <span>Concepto del gasto</span>
+                    <FieldCaption required>Concepto del gasto</FieldCaption>
                     <Input
                       value={actionDraft.concept}
                       required
@@ -1056,8 +1058,9 @@ export function CashManager({
                     />
                   </label>
                   <label className="cash-field">
-                    <span>Categoría</span>
+                    <FieldCaption required>Categoría</FieldCaption>
                     <select
+                      required
                       value={actionDraft.category}
                       disabled={busy}
                       onChange={(event) =>
@@ -1077,11 +1080,14 @@ export function CashManager({
                   </label>
                   {capabilities?.externalExpense ? (
                     <fieldset className="cash-source">
-                      <legend>Origen del dinero</legend>
+                      <legend>
+                        <FieldCaption required>Origen del dinero</FieldCaption>
+                      </legend>
                       <label>
                         <input
                           type="radio"
                           name="expense-source"
+                          required
                           value="cash"
                           checked={actionDraft.source === "cash"}
                           disabled={busy}
@@ -1120,7 +1126,7 @@ export function CashManager({
               ) : null}
               {action === "withdraw" ? (
                 <label className="cash-field">
-                  <span>Quién recibe / destino</span>
+                  <FieldCaption required>Quién recibe / destino</FieldCaption>
                   <Input
                     value={actionDraft.recipient}
                     required
@@ -1176,11 +1182,11 @@ export function CashManager({
               ) : null}
               {action === "withdraw" || action === "review" ? (
                 <label className="cash-field">
-                  <span>
+                  <FieldCaption required>
                     {action === "review"
                       ? "Observación de la revisión"
                       : "Motivo del retiro"}
-                  </span>
+                  </FieldCaption>
                   <textarea
                     aria-label={
                       action === "review"

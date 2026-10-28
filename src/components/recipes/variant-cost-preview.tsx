@@ -3,6 +3,7 @@ import { useEffect, useId, useState } from "react";
 import { money } from "@/lib/number-format";
 import { variantTotals } from "@/modules/recipes/variant-costs";
 import { Input } from "@/components/ui/input";
+import { FieldCaption } from "@/components/ui/field-caption";
 import { OperationAlert } from "@/components/ui/operation-alert";
 import type { PreviewRow } from "./cost-preview";
 
@@ -175,7 +176,11 @@ export function VariantCostPreview({
       </select>
       {others.map((g) => (
         <fieldset key={g.id} className="space-y-3 border-t border-line pt-4">
-          <legend className="px-1 text-sm font-semibold">{g.name}</legend>
+          <legend className="px-1 text-sm font-semibold">
+            <FieldCaption required={g.min > 0} optional={g.min === 0}>
+              {g.name}
+            </FieldCaption>
+          </legend>
           <p className="text-xs text-muted">
             Cantidad de elecciones en total: de {g.min} a {g.max}. Usá 0 para no
             incluir una opción.
@@ -186,7 +191,7 @@ export function VariantCostPreview({
                 key={o.id}
                 className="flex items-center justify-between gap-4 text-sm"
               >
-                <span>{o.name}</span>
+                <FieldCaption optional>{o.name}</FieldCaption>
                 <Input
                   className="w-24 shrink-0"
                   aria-label={`${g.name}: cantidad de ${o.name}`}

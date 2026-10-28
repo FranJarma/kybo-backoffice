@@ -109,7 +109,7 @@ export function ShippingEditor({
       {!readOnly && (
         <div className="grid gap-5 sm:grid-cols-2">
           <label className="text-sm font-medium">
-            Costo de envío (ARS)
+            <FieldCaption optional>Costo de envío (ARS)</FieldCaption>
             <Input
               className="mt-2"
               inputMode="decimal"
@@ -205,7 +205,9 @@ export function ShippingEditor({
                 </span>
                 {!readOnly && draft.allocation === "manual" ? (
                   <label className="text-sm">
-                    Envío para {line.item?.name || `artículo ${i + 1}`} (ARS)
+                    <FieldCaption optional>
+                      Envío para {line.item?.name || `artículo ${i + 1}`} (ARS)
+                    </FieldCaption>
                     <Input
                       className="mt-2"
                       inputMode="decimal"
