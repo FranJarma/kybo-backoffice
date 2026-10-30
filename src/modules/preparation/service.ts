@@ -34,6 +34,10 @@ import {
 } from "./types";
 import { taskDetail, taskViews, stationView, iso } from "./queries";
 import { orderTiming } from "./timing";
+import {
+  personalPreparationScope,
+  requirePreparationTaskAccess,
+} from "../staff-work/access";
 
 export function createPreparationService(db: AppDb) {
   return {
@@ -97,6 +101,13 @@ export function createPreparationService(db: AppDb) {
           )
           .for("update");
         if (!sale || !task) notFound();
+        await requirePreparationTaskAccess(
+          tx,
+          { ...actor, role: ctx.role },
+          task,
+          input.action,
+          { replay: !!old },
+        );
         if (old) return taskDetail(tx, id);
         if (sale.status === "cancelled" || task.status === "cancelled")
           conflict("La venta fue anulada. Actualizá la cola.");
@@ -231,7 +242,7 @@ export function createPreparationService(db: AppDb) {
       return db.transaction(
         async (tx) => {
           const [task] = await tx
-            .select({ id: preparationTasks.id })
+            .select()
             .from(preparationTasks)
             .where(
               and(
@@ -240,11 +251,16 @@ export function createPreparationService(db: AppDb) {
               ),
             );
           if (!task) notFound();
+          await requirePreparationTaskAccess(
+            tx,
+            { ...actor, role: ctx.role },
+            task,
+            "view",
+          );
           return taskDetail(tx, id);
         },
         {
           isolationLevel: "repeatable read",
-          accessMode: "read only",
         },
       );
     },
@@ -258,8 +274,13 @@ export function createPreparationService(db: AppDb) {
       const input = parse(listSchema, raw);
       return db.transaction(
         async (tx) => {
+          const visibility = await personalPreparationScope(tx, {
+            ...actor,
+            role: ctx.role,
+          });
           const where = and(
             eq(preparationTasks.branchId, ctx.branchId),
+            visibility,
             inArray(
               preparationTasks.status,
               input.scope === "active"
@@ -327,7 +348,7 @@ export function createPreparationService(db: AppDb) {
             serverNow: new Date().toISOString(),
           };
         },
-        { isolationLevel: "repeatable read", accessMode: "read only" },
+        { isolationLevel: "repeatable read" },
       );
     },
     async people(actor: Actor | null) {

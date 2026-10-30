@@ -26,6 +26,10 @@ import {
 import { integer, six } from "../inventory/decimal";
 import { AppError } from "@/lib/errors";
 import { returnDeliveredLocator } from "../pickup/lifecycle";
+import {
+  requireDeliveryAccess,
+  requirePreparationTaskAccess,
+} from "../staff-work/access";
 export type LineQuantity = { saleLineId: string; quantity: number };
 function fail(message: string): never {
   throw new AppError("FULFILLMENT_CONFLICT", message, 409);
@@ -217,6 +221,17 @@ export async function completePreparation(
     task.assigneeId !== ctx.actorId
   )
     fail("La tarea cambió o debe finalizarla su responsable.");
+  await requirePreparationTaskAccess(
+    tx,
+    {
+      id: ctx.actorId,
+      role: ctx.role,
+      branchId: ctx.branchId,
+      accountKind: ctx.accountKind,
+    },
+    task,
+    "ready",
+  );
   const members = await tx
     .select()
     .from(preparationTaskLines)
@@ -263,6 +278,7 @@ export async function deliverLines(
     updateTasks?: boolean;
   },
 ) {
+  await requireDeliveryAccess(tx, ctx);
   await lockOrder(tx, ctx, input.orderId);
   await applyLines(
     tx,

@@ -23,6 +23,8 @@ import {
   ListChecks,
   PanelLeftClose,
   PanelLeftOpen,
+  QrCode,
+  ShieldCheck,
 } from "lucide-react";
 import { Dialog, Tooltip } from "radix-ui";
 import { Button } from "@/components/ui/button";
@@ -39,6 +41,7 @@ import {
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { useSidebarPreference } from "@/lib/sidebar-preference";
 import { CashHeader } from "@/components/cash/header";
+import { WorkplaceDialog } from "@/components/workplace/actions";
 const icons = {
   House,
   Package,
@@ -53,6 +56,8 @@ const icons = {
   Store,
   LayoutGrid,
   ListChecks,
+  QrCode,
+  ShieldCheck,
 };
 function SidebarHint({
   compact,
@@ -139,6 +144,7 @@ export function AppShell({
   actorId = "",
   name,
   catalogManager = false,
+  accountKind = "personal",
   branches,
   selectedBranchId,
   initialSidebarCollapsed = false,
@@ -149,11 +155,13 @@ export function AppShell({
   name: string;
   dateLabel: string;
   catalogManager?: boolean;
+  accountKind?: "personal" | "store";
   branches: BranchChoice[];
   selectedBranchId: string;
   initialSidebarCollapsed?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [managementOpen, setManagementOpen] = useState(false);
   const [collapsed, toggleSidebar] = useSidebarPreference(
     initialSidebarCollapsed,
   );
@@ -198,7 +206,7 @@ export function AppShell({
     observer.observe(nav);
     return () => observer.disconnect();
   }, [collapsed, path, register]);
-  const entries = visibleNavigation({ role, catalogManager });
+  const entries = visibleNavigation({ role, catalogManager, accountKind });
   const visibleGroups = [...new Set(entries.map((n) => n.area))].map(
     (label) => ({
       label,
@@ -215,11 +223,13 @@ export function AppShell({
     .join("")
     .toUpperCase();
   const roleLabel =
-    role === "admin"
-      ? "Administrador"
-      : role === "staff"
-        ? "Personal"
-        : "Encargado";
+    accountKind === "store"
+      ? "Cuenta del local"
+      : role === "admin"
+        ? "Administrador"
+        : role === "staff"
+          ? "Personal"
+          : "Encargado";
   const renderNavigation = (compact: boolean) => (
     <>
       <div
@@ -290,7 +300,29 @@ export function AppShell({
                 <SidebarHint key={href} compact={compact} label={label}>
                   <Link
                     href={href}
-                    onClick={() => setOpen(false)}
+                    target={
+                      accountKind === "store" && href === "/staff/attendance/qr"
+                        ? "_blank"
+                        : undefined
+                    }
+                    rel={
+                      accountKind === "store" && href === "/staff/attendance/qr"
+                        ? "noopener noreferrer"
+                        : undefined
+                    }
+                    onClick={(event) => {
+                      if (
+                        accountKind === "store" &&
+                        href === "/workplace" &&
+                        !event.ctrlKey &&
+                        !event.metaKey &&
+                        !event.shiftKey
+                      ) {
+                        event.preventDefault();
+                        setManagementOpen(true);
+                      }
+                      setOpen(false);
+                    }}
                     aria-current={
                       navigationIsActive(href, path) ? "page" : undefined
                     }
@@ -469,12 +501,16 @@ export function AppShell({
               </Button>
               <div className="hidden min-w-0 sm:block sm:max-w-48 xl:max-w-none">
                 <Breadcrumb
-                  items={breadcrumbs(path, { role, catalogManager })}
+                  items={breadcrumbs(path, {
+                    role,
+                    catalogManager,
+                    accountKind,
+                  })}
                 />
               </div>
             </div>
             <div className="contents sm:flex sm:w-auto sm:min-w-0 sm:flex-1 sm:flex-wrap sm:items-center sm:justify-end sm:gap-4">
-              {selectedBranchId ? (
+              {selectedBranchId && accountKind !== "store" ? (
                 <CashHeader
                   key={`${actorId}:${selectedBranchId}`}
                   actorId={actorId}
@@ -502,6 +538,13 @@ export function AppShell({
           </main>
         </div>
       </div>
+      {accountKind === "store" && (
+        <WorkplaceDialog
+          branchId={selectedBranchId}
+          open={managementOpen}
+          onClose={() => setManagementOpen(false)}
+        />
+      )}
     </Tooltip.Provider>
   );
 }

@@ -55,6 +55,7 @@ import {
   finishPurchaseReceipt,
 } from "../procurement/receipts";
 import { requireOperationalContext } from "../branches/context";
+import type { OperationalContext } from "../operations/types";
 import type {
   LotRow,
   MovementRow,
@@ -110,9 +111,23 @@ export async function claim(
   requestId: string,
   hash: string,
   resultId: string,
+  // Internal callers may reuse the context just read in this same transaction.
+  validatedContext?: OperationalContext,
 ): Promise<string | null> {
+  if (
+    validatedContext &&
+    (validatedContext.actorId !== actor.id ||
+      validatedContext.branchId !== actor.branchId)
+  )
+    throw new AppError(
+      "FORBIDDEN",
+      "El contexto no corresponde a esta persona o sucursal.",
+      403,
+    );
   if (actor.branchId) {
-    const ctx = await requireOperationalContext(tx, actor, actor.branchId);
+    const ctx =
+      validatedContext ??
+      (await requireOperationalContext(tx, actor, actor.branchId));
     if (
       ctx.role === "staff" &&
       [

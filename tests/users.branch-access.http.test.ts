@@ -5,6 +5,13 @@ const mocks = vi.hoisted(() => ({
   actor: vi.fn(),
   lock: vi.fn(),
   insert: vi.fn(),
+  remove: vi.fn(),
+  profile: vi.fn(),
+  revoke: vi.fn(),
+}));
+vi.mock("@/modules/workplace/access", () => ({
+  getStoreProfile: mocks.profile,
+  workplaceSchemaReady: async () => true,
 }));
 vi.mock("@/lib/auth", () => ({ requireActor: mocks.actor }));
 vi.mock("@/modules/users/service", () => ({
@@ -13,7 +20,11 @@ vi.mock("@/modules/users/service", () => ({
 vi.mock("@/db/client", () => ({
   getDb: async () => ({
     transaction: async (run: (tx: unknown) => unknown) =>
-      run({ insert: mocks.insert }),
+      run({
+        insert: mocks.insert,
+        delete: () => ({ where: mocks.remove }),
+        update: () => ({ set: () => ({ where: mocks.revoke }) }),
+      }),
   }),
 }));
 import { PUT } from "@/app/api/branches/[id]/members/route";
@@ -35,6 +46,7 @@ beforeEach(() => {
   mocks.insert.mockReturnValue({
     values: () => ({ onConflictDoUpdate: async () => undefined }),
   });
+  mocks.profile.mockResolvedValue(null);
 });
 it("uses the shared administration locks before changing branch access", async () => {
   expect(
@@ -46,6 +58,8 @@ it("uses the shared administration locks before changing branch access", async (
     role: "admin",
   });
   expect(mocks.lock).toHaveBeenCalledBefore(mocks.insert);
+  expect(mocks.remove).toHaveBeenCalledOnce();
+  expect(mocks.revoke).toHaveBeenCalledOnce();
 });
 it("does not change memberships after administrator revocation", async () => {
   mocks.lock.mockRejectedValue(

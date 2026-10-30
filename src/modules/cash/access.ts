@@ -8,6 +8,17 @@ export async function cashCapabilities(
   tx: Tx,
   ctx: OperationalContext,
 ): Promise<CashCapabilities> {
+  if (ctx.accountKind === "store")
+    return {
+      open: false,
+      close: false,
+      expense: false,
+      externalExpense: false,
+      withdraw: false,
+      supplier: false,
+      review: false,
+      admin: false,
+    };
   const manager = ctx.role !== "staff";
   const [grant] = manager
     ? []

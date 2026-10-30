@@ -1,7 +1,13 @@
 import Image from "next/image";
 import { LoginForm } from "@/components/login-form";
 import { Card } from "@/components/ui/card";
-export default function LoginPage() {
+import { safeLoginReturn } from "@/lib/login-return";
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ returnTo?: string }>;
+}) {
+  const returnTo = safeLoginReturn((await searchParams).returnTo);
   return (
     <main className="flex min-h-screen items-center justify-center bg-surface px-4 py-8">
       <Card className="w-full max-w-md gap-0 p-7 sm:p-9">
@@ -24,7 +30,7 @@ export default function LoginPage() {
             Acceso privado para gestionar los datos del local.
           </p>
         </div>
-        <LoginForm />
+        <LoginForm returnTo={returnTo} />
       </Card>
     </main>
   );

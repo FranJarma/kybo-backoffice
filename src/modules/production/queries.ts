@@ -1,5 +1,6 @@
-import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import type { AppDb } from "@/db/client";
+import type { Tx } from "@/db/types";
 import type { Actor } from "@/lib/access";
 import { requireCatalogAccess } from "@/lib/access";
 import { productionOrders } from "@/db/production-order-schema";
@@ -13,8 +14,21 @@ import { stockDocuments } from "@/db/inventory-document-schema";
 import { inventoryLots } from "@/db/inventory-schema";
 import { integer, six } from "../inventory/decimal";
 import { latestProductionResult } from "./result";
+import { AppError } from "@/lib/errors";
+import { getStoreProfile, workplaceSchemaReady } from "../workplace/access";
+import { centralPreparationLocation } from "../daily-operations/central-preparation";
+
+async function personalAccount(db: AppDb, actor: Actor) {
+  if (actor.accountKind === "store" || (await getStoreProfile(db, actor.id)))
+    throw new AppError(
+      "FORBIDDEN",
+      "La producción requiere una cuenta personal.",
+      403,
+    );
+}
 
 export async function productionAssignees(db: AppDb, actor: Actor) {
+  await personalAccount(db, actor);
   requireCatalogAccess(actor);
   return db
     .selectDistinct({ id: user.id, name: user.name })
@@ -47,6 +61,12 @@ export async function listProductionOrders(
   offset: number,
   mine: boolean,
 ) {
+  await personalAccount(db, actor);
+  const personalDepot =
+    actor.role === "staff" && (await workplaceSchemaReady(db));
+  const depot = personalDepot
+    ? await centralPreparationLocation(db as unknown as Tx, actor.branchId!)
+    : null;
   const page = await db
     .select({
       order: productionOrders,
@@ -66,6 +86,11 @@ export async function listProductionOrders(
     .where(
       and(
         eq(productionOrders.branchId, actor.branchId!),
+        personalDepot
+          ? depot
+            ? eq(productionOrders.locationId, depot.id)
+            : sql`false`
+          : undefined,
         inArray(
           productionOrders.state,
           scope === "history"

@@ -11,6 +11,13 @@ import { AppError } from "@/lib/errors";
 import { authorizeTaskCommand } from "../daily-operations/access";
 import { authorizeCashCommand } from "../cash/access";
 import { lockCashConfiguration, refreshCashContext } from "../cash/integration";
+import { identityRequired } from "../identity/confirmation";
+import { consumeConfirmation } from "../identity/service";
+import { getStoreProfile } from "../workplace/access";
+import {
+  requireDeliveryAccess,
+  requirePersonalProductionAccess,
+} from "../staff-work/access";
 
 function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonical);
@@ -65,7 +72,29 @@ export async function executeCommand<T>(
         "Ya no tenés permiso para realizar o consultar esta operación.",
         403,
       );
-    if (action === "daily-task") await authorizeTaskCommand(tx, ctx, payload);
+    // The live context already resolves account kind; legacy internal contexts
+    // still check the persistent marker, after the cheap command-role rejection.
+    if (
+      (ctx.accountKind === "store" ||
+        (ctx.accountKind === undefined && (await getStoreProfile(tx, actor.id)))) &&
+      action !== "deliver"
+    )
+      throw new AppError(
+        "FORBIDDEN",
+        "La cuenta del local solo puede registrar la entrega desde este circuito.",
+        403,
+      );
+    if (action === "deliver") await requireDeliveryAccess(tx, ctx);
+    const dailyTask =
+      action === "daily-task"
+        ? await authorizeTaskCommand(tx, ctx, payload)
+        : null;
+    if (
+      dailyTask?.kind === "production" &&
+      dailyTask.documentId &&
+      (payload as { action?: string })?.action === "start"
+    )
+      await requirePersonalProductionAccess(tx, ctx, dailyTask.documentId);
     if (cashCommand) await authorizeCashCommand(tx, ctx, payload);
     if (ctx.role === "staff" && productionCommand) {
       const orderId = (payload as { id?: unknown })?.id;
@@ -88,6 +117,7 @@ export async function executeCommand<T>(
           "Solo podés ejecutar las tareas que tenés asignadas.",
           403,
         );
+      await requirePersonalProductionAccess(tx, ctx, String(orderId));
     }
     const id = randomUUID();
     const [claimed] = await tx
@@ -136,6 +166,27 @@ export async function executeCommand<T>(
         operationId: previous.id,
         replayed: true,
       };
+    }
+    const confirmationAction =
+      action === "production-start" ||
+      (dailyTask?.kind === "production" &&
+        (payload as { action?: string })?.action === "start")
+        ? "production-start"
+        : cashCommand && (payload as { action?: string })?.action === "close"
+          ? "cash-close"
+          : null;
+    if (confirmationAction && (await identityRequired(tx, branchId))) {
+      await consumeConfirmation(
+        tx,
+        actor,
+        {
+          action: confirmationAction,
+          branchId,
+          requestId: meta.requestId,
+          payload,
+        },
+        meta.verificationId,
+      );
     }
     const result = await run(tx, ctx, id);
     await tx

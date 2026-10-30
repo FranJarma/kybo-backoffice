@@ -1,311 +1,200 @@
 "use client";
-import { useErrorFeedback } from "@/components/ui/use-error-feedback";
-import { FieldCaption } from "@/components/ui/field-caption";
-import { OperationAlert } from "@/components/ui/operation-alert";
-import { useEffect, useState, type FormEvent } from "react";
+
+import { useEffect, useState } from "react";
+import { Plus, Store, Clock3, Building2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card } from "@/components/ui/card";
+import { SearchCombobox } from "@/components/ui/search-combobox";
+import { OperationAlert } from "@/components/ui/operation-alert";
+import { useErrorFeedback } from "@/components/ui/use-error-feedback";
 import { getJson } from "@/components/inventory/shared";
-import { BranchMembers } from "./members";
-import { BranchProductSettings } from "./product-settings";
-type Branch = {
-  id: string;
-  code: string;
-  name: string;
-  timeZone: string;
-  revision: number;
-};
+import { BranchWorkspace } from "./workspace";
+import { BranchAddress } from "./address";
+import { CreateBranchDialog } from "./forms";
+import { resolveBranchSelection, type BranchSummary } from "./presentation";
+import "./branches.css";
+
 export function BranchManager({
   admin,
   canEditCatalog,
+  initialBranchId = "",
 }: {
   admin: boolean;
   canEditCatalog: boolean;
+  initialBranchId?: string;
 }) {
-  const [branches, setBranches] = useState<Branch[]>([]),
-    [selected, setSelected] = useState("");
-  const [name, setName] = useState(""),
-    [code, setCode] = useState(""),
-    [timeZone, setTimeZone] = useState("America/Argentina/Buenos_Aires");
-  const [locationName, setLocationName] = useState("");
-  const [locations, setLocations] = useState<
-    { id: string; name: string; code: string; revision: number }[]
-  >([]);
-  const [error, setError, errorAttempt] = useErrorFeedback(),
-    [notice, setNotice] = useState(""),
-    [busy, setBusy] = useState(false),
-    [revision, setRevision] = useState(0);
+  const [branches, setBranches] = useState<BranchSummary[]>([]);
+  const [selected, setSelected] = useState(initialBranchId);
+  const [loading, setLoading] = useState(true);
+  const [version, setVersion] = useState(0);
+  const [creating, setCreating] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [error, setError, errorAttempt] = useErrorFeedback();
+
   useEffect(() => {
     let live = true;
-    getJson<{ rows: Branch[] }>("/api/branches")
-      .then((r) => {
-        if (live) setBranches(r.rows);
+    getJson<{ rows: BranchSummary[] }>("/api/branches")
+      .then(({ rows }) => {
+        if (!live) return;
+        setBranches(rows);
+        setSelected((current) =>
+          resolveBranchSelection(rows, current, initialBranchId),
+        );
+        setError("");
       })
       .catch(() => {
-        if (live) setError("No se pudieron cargar las sucursales.");
+        if (live)
+          setError(
+            "No pudimos cargar las sucursales. Intentá actualizar el listado.",
+          );
+      })
+      .finally(() => {
+        if (live) setLoading(false);
       });
     return () => {
       live = false;
     };
-  }, [revision, setError]);
-  useEffect(() => {
-    if (!selected) return;
-    let live = true;
-    getJson<{ rows: typeof locations }>(`/api/branches/${selected}/locations`)
-      .then((r) => {
-        if (live) setLocations(r.rows);
-      })
-      .catch(() => {
-        if (live) setError("No se pudieron cargar las ubicaciones.");
-      });
-    return () => {
-      live = false;
-    };
-  }, [selected, revision, setError]);
-  async function save(event: FormEvent, create: boolean) {
-    event.preventDefault();
-    setBusy(true);
-    setError("");
-    setNotice("");
-    try {
-      const response = await fetch(
-        create ? "/api/branches" : `/api/branches/${selected}/locations`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(
-            create
-              ? {
-                  code,
-                  name,
-                  timeZone,
-                  locations: [{ name: locationName }],
-                }
-              : { name: locationName },
-          ),
-        },
-      );
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error ?? "No se pudo guardar.");
-      setNotice(
-        create
-          ? "Sucursal creada. Asigná accesos y configurá los productos antes de operar."
-          : "Ubicación creada.",
-      );
-      setLocationName("");
-      if (create) {
-        setName("");
-        setCode("");
-        setSelected(body.id);
-      }
-      setRevision((r) => r + 1);
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "No se pudo guardar.");
-    } finally {
-      setBusy(false);
-    }
+  }, [version, initialBranchId, setError]);
+
+  const branch = branches.find((row) => row.id === selected);
+  function refresh() {
+    setLoading(true);
+    setVersion((value) => value + 1);
   }
-  async function archive(locationId?: string, expectedRevision?: number) {
-    const branch = branches.find((b) => b.id === selected);
-    if (!branch) return;
-    setBusy(true);
-    setError("");
-    setNotice("");
-    try {
-      const response = await fetch(
-        `/api/branches/${selected}${locationId ? "/locations" : ""}`,
-        {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(
-            locationId
-              ? { locationId, revision: expectedRevision }
-              : { revision: branch.revision },
-          ),
-        },
-      );
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error ?? "No se pudo archivar.");
-      setNotice(
-        locationId
-          ? "Ubicación archivada. Se conserva su historial."
-          : "Sucursal archivada. Se conserva su historial.",
-      );
-      if (!locationId) {
-        setSelected("");
-        setLocations([]);
-      }
-      setRevision((v) => v + 1);
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "No se pudo archivar.");
-    } finally {
-      setBusy(false);
-    }
-  }
-  const locationFields = (
-    <>
-      <label className="space-y-2 text-sm font-semibold">
-        <FieldCaption required>Nombre de ubicación</FieldCaption>
-        <Input
-          value={locationName}
-          onChange={(e) => setLocationName(e.target.value)}
-          required
-          maxLength={160}
-          placeholder="Por ejemplo, Barra, Cocina o Depósito"
-        />
-      </label>
-    </>
-  );
+
   return (
-    <section className="space-y-6">
-      <div>
-        <p className="eyebrow">Organización</p>
-        <h1 className="mt-1 text-3xl font-extrabold text-brand">
-          Sucursales y ubicaciones
-        </h1>
-        <p className="mt-2 text-muted">
-          Un catálogo compartido. Existencias y tareas propias de cada local.
-        </p>
-      </div>
+    <section className="branches-page">
+      <header className="branches-heading">
+        <div>
+          <p className="eyebrow">Organización</p>
+          <h1>Sucursales y ubicaciones</h1>
+          <p>Organizá los espacios, el equipo y los productos de cada local.</p>
+        </div>
+        {admin && (
+          <Button className="branches-action" onClick={() => setCreating(true)}>
+            <Plus /> Crear sucursal
+          </Button>
+        )}
+      </header>
       {error && (
         <OperationAlert
           eventKey={errorAttempt}
           tone="error"
-          title="No pudimos completar la operación"
+          title="No pudimos cargar la información"
           message={error}
         />
       )}
       {notice && (
-        <p role="status" className="rounded-lg bg-green-50 p-3 text-green-900">
+        <p role="status" className="branches-success">
           {notice}
         </p>
       )}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card className="p-6">
-          <h2 className="text-lg font-bold">Sucursales disponibles</h2>
-          <div className="my-4 divide-y">
-            {branches.map((branch) => (
-              <button
+      <section
+        className="branches-context"
+        aria-label="Sucursal que estás administrando"
+        aria-busy={loading}
+      >
+        <div className="branches-context-main">
+          <span className="branches-context-icon">
+            <Store aria-hidden="true" />
+          </span>
+          <div className="branches-context-selection">
+            <label htmlFor="managed-branch">Sucursal a configurar</label>
+            <SearchCombobox
+              id="managed-branch"
+              label="Sucursal a configurar"
+              value={branch?.id ?? ""}
+              selectedLabel={branch?.name ?? ""}
+              options={branches}
+              onSearch={() => {}}
+              onChange={(id) => {
+                if (id) {
+                  setSelected(id);
+                  setNotice("");
+                }
+              }}
+              loading={loading}
+              disabled={loading || branches.length < 2}
+              placeholder={
+                loading ? "Cargando sucursales…" : "Sin sucursales disponibles"
+              }
+            />
+            {admin && branch && (
+              <BranchAddress
                 key={branch.id}
-                type="button"
-                onClick={() => {
-                  setSelected(branch.id);
-                  setLocations([]);
-                }}
-                className={`flex w-full items-center justify-between py-4 text-left ${selected === branch.id ? "font-bold text-brand" : ""}`}
-              >
-                <span>
-                  {branch.name}
-                  <small className="block font-normal text-muted">
-                    {branch.code} · {branch.timeZone}
-                  </small>
-                </span>
-                <span aria-hidden>→</span>
-              </button>
-            ))}
-            {branches.length === 0 && (
-              <p className="py-4 text-muted">
-                Todavía no tenés sucursales asignadas.
-              </p>
+                branchId={branch.id}
+                branchName={branch.name}
+              />
             )}
           </div>
-          {selected && (
+        </div>
+        <div className="branches-context-meta">
+          {branch && (
             <>
-              <h3 className="font-bold">
-                Ubicaciones de {branches.find((b) => b.id === selected)?.name}
-              </h3>
-              <ul className="my-3 space-y-2">
-                {locations.map((location) => (
-                  <li key={location.id}>
-                    {location.name}{" "}
-                    {admin && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        disabled={busy}
-                        onClick={() =>
-                          void archive(location.id, location.revision)
-                        }
-                      >
-                        Archivar ubicación vacía
-                      </Button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-              {admin && (
-                <form
-                  onSubmit={(e) => void save(e, false)}
-                  className="grid gap-3"
-                >
-                  <fieldset disabled={busy} className="grid gap-3">
-                    {locationFields}
-                    <Button type="submit">Agregar ubicación</Button>
-                  </fieldset>
-                </form>
-              )}
+              <span>
+                <Building2 aria-hidden="true" />
+                <span>
+                  <small>Código interno</small>
+                  <strong>{branch.code}</strong>
+                </span>
+              </span>
+              <span>
+                <Clock3 aria-hidden="true" />
+                <span>
+                  <small>Zona horaria</small>
+                  <strong>
+                    {branch.timeZone.split("/").at(-1)?.replaceAll("_", " ")}
+                  </strong>
+                  <small className="branches-timezone">{branch.timeZone}</small>
+                </span>
+              </span>
             </>
           )}
-        </Card>
-        {admin && (
-          <Card className="p-6">
-            <h2 className="mb-4 text-lg font-bold">Abrir una sucursal</h2>
-            <form onSubmit={(e) => void save(e, true)}>
-              <fieldset disabled={busy} className="grid gap-4">
-                <label className="space-y-2 text-sm font-semibold">
-                  <FieldCaption required>Nombre</FieldCaption>
-                  <Input
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    required
-                    maxLength={160}
-                  />
-                </label>
-                <label className="space-y-2 text-sm font-semibold">
-                  <FieldCaption required>Código</FieldCaption>
-                  <Input
-                    value={code}
-                    onChange={(e) => setCode(e.target.value)}
-                    required
-                    maxLength={64}
-                  />
-                </label>
-                <label className="space-y-2 text-sm font-semibold">
-                  <FieldCaption required>Zona horaria</FieldCaption>
-                  <Input
-                    value={timeZone}
-                    onChange={(e) => setTimeZone(e.target.value)}
-                    required
-                  />
-                </label>
-                <p className="text-sm text-muted">Primera ubicación</p>
-                {locationFields}
-                <Button type="submit">Crear sucursal</Button>
-              </fieldset>
-            </form>
-          </Card>
-        )}
-      </div>
-      {selected && admin && (
-        <Button
-          type="button"
-          variant="outline"
-          disabled={busy}
-          onClick={() => void archive()}
-        >
-          Archivar sucursal sin operaciones pendientes
-        </Button>
-      )}
-      {selected && admin && (
-        <BranchMembers key={`members:${selected}`} branchId={selected} />
-      )}
-      {selected && (
-        <BranchProductSettings
-          key={selected}
-          branchId={selected}
-          locations={locations}
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Actualizar sucursales"
+            disabled={loading}
+            onClick={refresh}
+          >
+            <RefreshCw className={loading ? "animate-spin" : ""} />
+          </Button>
+        </div>
+      </section>
+      {branch ? (
+        <BranchWorkspace
+          key={branch.id}
+          branch={branch}
+          admin={admin}
           canEditCatalog={canEditCatalog}
+          onArchived={() => {
+            setBranches((rows) => rows.filter((row) => row.id !== branch.id));
+            setSelected("");
+            setNotice("Sucursal archivada. Se conserva su historial.");
+            refresh();
+          }}
+        />
+      ) : !loading && !error ? (
+        <div className="branches-empty">
+          <Store />
+          <h2>Creá tu primera sucursal</h2>
+          <p>Después podés agregar sus ubicaciones y habilitar al equipo.</p>
+        </div>
+      ) : loading ? (
+        <p role="status" className="branches-loading">
+          Cargando información de la sucursal…
+        </p>
+      ) : null}
+      {creating && (
+        <CreateBranchDialog
+          onClose={() => setCreating(false)}
+          onCreated={(id) => {
+            setCreating(false);
+            setSelected(id);
+            setNotice(
+              "Sucursal creada. Ya podés configurar sus ubicaciones, accesos y productos.",
+            );
+            refresh();
+          }}
         />
       )}
     </section>

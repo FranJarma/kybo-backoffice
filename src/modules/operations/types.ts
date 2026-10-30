@@ -4,8 +4,10 @@ export type OperationalContext = {
   branchId: string;
   timeZone: string;
   role: "admin" | "manager" | "staff";
+  sessionId?: string;
+  accountKind?: "personal" | "store";
 };
-export type CommandMeta = { requestId: string; expectedRevision?: number };
+export type CommandMeta = { requestId: string; expectedRevision?: number; verificationId?: string };
 export type OperationResult = {
   operationId: string;
   revision: number;

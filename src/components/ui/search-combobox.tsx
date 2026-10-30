@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronDown, Check, Plus, X } from "lucide-react";
 import { Input } from "./input";
 import { cn } from "@/lib/utils";
+import { filterComboboxOptions } from "./combobox-options";
 
 type Option = { id: string; name: string; description?: string | null };
 
@@ -26,6 +27,7 @@ export function SearchCombobox({
   maxLength,
   createLabel = "Crear opción",
   selectExactOnBlur = true,
+  filterMode = "local",
 }: {
   id: string;
   label: string;
@@ -45,6 +47,7 @@ export function SearchCombobox({
   maxLength?: number;
   createLabel?: string;
   selectExactOnBlur?: boolean;
+  filterMode?: "local" | "remote";
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -55,11 +58,7 @@ export function SearchCombobox({
       required && !value ? "Seleccioná una opción de la lista." : "",
     );
   }, [required, value]);
-  const rows = options.filter((option) =>
-    `${option.name} ${option.description ?? ""}`
-      .toLocaleLowerCase()
-      .includes(query.toLocaleLowerCase()),
-  );
+  const rows = filterComboboxOptions(options, query, filterMode);
   const normalized = query.trim().replace(/\s+/g, " ");
   const exact = rows.filter(
     (option) =>

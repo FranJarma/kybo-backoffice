@@ -33,6 +33,7 @@ import {
   type MembershipInput,
 } from "@/modules/users/types";
 import { userCommandSchema } from "@/modules/users/validation";
+import { UserInvitation } from "./invitation";
 
 type Draft = {
   name: string;
@@ -57,6 +58,7 @@ const empty = (): Draft => ({
 export function UsersManager({ initial }: { initial: UsersSnapshot }) {
   const router = useRouter();
   const [snapshot, setSnapshot] = useState(initial);
+  const [inviting, setInviting] = useState<ManagedUser | null>(null);
   const [query, setQuery] = useState(""),
     [status, setStatus] = useState("all");
   const [editing, setEditing] = useState<ManagedUser | null>(null);
@@ -204,10 +206,16 @@ export function UsersManager({ initial }: { initial: UsersSnapshot }) {
             Tu equipo, sus sucursales y lo que puede hacer en Kybo.
           </p>
         </div>
-        <Button onClick={() => edit(null)}>
-          <Plus size={18} />
-          Nuevo usuario
-        </Button>
+        <div className="flex flex-wrap gap-3">
+          <Button asChild variant="outline">
+            <Link href="/settings/store-account">Cuenta del local</Link>
+          </Button>
+          <UserInvitation snapshot={snapshot} onSaved={setSnapshot} />
+          <Button variant="outline" onClick={() => edit(null)}>
+            <Plus size={18} />
+            Nuevo usuario
+          </Button>
+        </div>
       </div>
       <OperationAlert
         title="No pudimos completar la operación"
@@ -288,6 +296,31 @@ export function UsersManager({ initial }: { initial: UsersSnapshot }) {
                   />
                   {row.disabled ? "Desactivado" : "Activo"}
                 </span>
+                {row.invitation && (
+                  <div className="mt-2 space-y-1 text-xs text-muted">
+                    <p>
+                      {row.invitation.status === "activated"
+                        ? "Cuenta activada"
+                        : row.invitation.status === "expired"
+                          ? "Invitación vencida"
+                          : "Invitación pendiente"}
+                    </p>
+                    <p>
+                      Primer ingreso:{" "}
+                      {row.invitation.firstLoginAt
+                        ? new Date(
+                            row.invitation.firstLoginAt,
+                          ).toLocaleDateString("es-AR")
+                        : "Pendiente"}
+                    </p>
+                    <p>
+                      Verificación:{" "}
+                      {row.invitation.verificationConfigured
+                        ? "Configurada"
+                        : "Pendiente"}
+                    </p>
+                  </div>
+                )}
               </div>
               <div className="space-y-1.5 text-sm text-muted">
                 {row.role === "admin" ? (
@@ -325,14 +358,25 @@ export function UsersManager({ initial }: { initial: UsersSnapshot }) {
                   </>
                 )}
               </div>
-              <Button
-                variant="outline"
-                aria-label={`Editar a ${row.name}`}
-                onClick={() => edit(row)}
-              >
-                <Pencil size={15} />
-                Editar
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  aria-label={`Editar a ${row.name}`}
+                  onClick={() => edit(row)}
+                >
+                  <Pencil size={15} />
+                  Editar
+                </Button>
+                {row.invitation && row.invitation.status !== "activated" && (
+                  <Button
+                    variant="outline"
+                    disabled={row.disabled}
+                    onClick={() => setInviting(row)}
+                  >
+                    Invitación
+                  </Button>
+                )}
+              </div>
             </article>
           ))}
           {!visible.length && (
@@ -342,6 +386,15 @@ export function UsersManager({ initial }: { initial: UsersSnapshot }) {
           )}
         </div>
       </section>
+      {inviting && (
+        <UserInvitation
+          key={inviting.id}
+          snapshot={snapshot}
+          onSaved={setSnapshot}
+          user={inviting}
+          onClose={() => setInviting(null)}
+        />
+      )}
       <Dialog
         open={open}
         onOpenChange={(next) => {

@@ -41,6 +41,7 @@ export async function runCashCommand(
   requestId: string,
   raw: unknown,
   now = new Date(),
+  verificationId?: string,
 ) {
   if (!(await cashAvailable(db)))
     fail("MIGRATION_REQUIRED", "Falta habilitar Caja en la base del proyecto.");
@@ -49,7 +50,7 @@ export async function runCashCommand(
     db,
     actor,
     actor.branchId!,
-    { requestId },
+    { requestId, verificationId },
     "cash",
     command,
     async (tx, ctx, operationId) => {

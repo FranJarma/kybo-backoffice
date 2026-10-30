@@ -9,4 +9,9 @@ test-results/
 *.tsbuildinfo
 .superpowers/
 /output/pdf/
-/tmp/pdfs/
+
+# Local temporary assets and manuals from other chats.
+/tmp/
+/.tmp/
+/docs/superpowers/plans/2026-10-28-kybo-manual-equipo.md
+/docs/superpowers/plans/2026-10-29-kybo-manual-speech.md

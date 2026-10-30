@@ -1,8 +1,13 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db/client";
 import { branchMemberships } from "@/db/branch-schema";
-import { operationalUsers, user } from "@/db/auth-schema";
+import { operationalUsers, session, user } from "@/db/auth-schema";
+import {
+  getStoreProfile,
+  workplaceSchemaReady,
+} from "@/modules/workplace/access";
+import { workplaceManagementAuthorizations } from "@/db/workplace-schema";
 import { requireActor } from "@/lib/auth";
 import {
   privateJson,
@@ -29,6 +34,7 @@ export async function GET(
       .select({
         id: user.id,
         name: user.name,
+        accountRole: operationalUsers.role,
         role: branchMemberships.role,
         revokedAt: branchMemberships.revokedAt,
         catalogManager: operationalUsers.catalogManager,
@@ -77,6 +83,18 @@ export async function PUT(
           "Elegí una cuenta operativa habilitada.",
           400,
         );
+      const store = await getStoreProfile(tx, input.userId);
+      if (
+        store &&
+        (store.branchId !== id ||
+          input.role !== "staff" ||
+          input.catalogManager)
+      )
+        throw new AppError(
+          "FORBIDDEN",
+          "La cuenta del local solo puede tener acceso limitado a su sucursal.",
+          403,
+        );
       if (input.catalogManager !== undefined)
         await tx
           .update(operationalUsers)
@@ -97,6 +115,18 @@ export async function PUT(
             revokedAt: input.revoked ? new Date() : null,
           },
         });
+      // Access restored later must never revive a prior session or management grant.
+      await tx.delete(session).where(eq(session.userId, input.userId));
+      if (await workplaceSchemaReady(tx))
+        await tx
+          .update(workplaceManagementAuthorizations)
+          .set({ revokedAt: new Date() })
+          .where(
+            or(
+              eq(workplaceManagementAuthorizations.managerUserId, input.userId),
+              eq(workplaceManagementAuthorizations.storeUserId, input.userId),
+            ),
+          );
     });
     return privateJson({ saved: true });
   } catch (error) {

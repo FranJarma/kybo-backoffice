@@ -13,6 +13,7 @@ export default async function SalesPage({
       actorId={actor.id}
       branchId={actor.branchId!}
       role={actor.role}
+      accountKind={actor.accountKind}
       initialAccount={
         typeof query.account === "string" ? query.account : undefined
       }

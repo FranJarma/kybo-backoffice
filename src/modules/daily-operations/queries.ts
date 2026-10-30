@@ -22,6 +22,7 @@ import { dayFiltersSchema } from "./validation";
 import { supplyAvailable } from "../supply-alerts/policies";
 import { readSupplySnapshot } from "../supply-alerts/service";
 import type { DailySnapshot, StockRow, TaskRow } from "./types";
+import { getStoreProfile } from "../workplace/access";
 export async function readStock(
   tx: Tx,
   branchId: string,
@@ -111,6 +112,16 @@ export async function getDailyOperationSnapshot(
         actor,
         actor.branchId ?? "",
       );
+      if (
+        actor.accountKind === "store" ||
+        ctx.accountKind === "store" ||
+        (await getStoreProfile(tx, actor.id))
+      )
+        throw new AppError(
+          "FORBIDDEN",
+          "Ingresá con tu cuenta personal para consultar tus tareas.",
+          403,
+        );
       if (ctx.role === "staff" && !filters.mine)
         throw new AppError(
           "FORBIDDEN",

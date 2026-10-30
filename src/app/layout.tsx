@@ -11,8 +11,10 @@ const manrope = localFont({
 export const metadata: Metadata = {
   title: "Kybo Operations",
   description: "Gestión interna de Kybo",
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "Kybo" },
   icons: {
     icon: "/favicon.ico",
+    apple: "/pwa-icon/180",
   },
 };
 export default function RootLayout({
