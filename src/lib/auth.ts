@@ -10,10 +10,20 @@ import type { AppDb } from "../db/client";
 import type { Tx } from "../db/types";
 import { getDb } from "../db/client";
 import * as authSchema from "../db/auth-schema";
-import { account, operationalUsers, user } from "../db/auth-schema";
+import {
+  account,
+  operationalUsers,
+  user,
+  session as authSession,
+} from "../db/auth-schema";
 import type { Actor } from "./access";
 import { AppError } from "./errors";
 import { trustedOrigins } from "./origins";
+import { isPendingActivation } from "@/modules/invitations/queries";
+import { finalizePasswordLogin } from "@/modules/invitations/authentication";
+import { getStoreProfile } from "@/modules/workplace/access";
+
+const authConfigurations = new WeakMap<object, { db: AppDb; secret: string }>();
 
 export function createAuth(
   db: AppDb,
@@ -21,7 +31,7 @@ export function createAuth(
 ) {
   if (options.secret.length < 32)
     throw new Error("BETTER_AUTH_SECRET must contain at least 32 characters.");
-  return betterAuth({
+  const auth = betterAuth({
     plugins: [usernamePlugin({ displayUsername: false })],
     database: drizzleAdapter(db, { provider: "pg", schema: authSchema }),
     secret: options.secret,
@@ -46,6 +56,8 @@ export function createAuth(
       },
     },
   });
+  authConfigurations.set(auth, { db, secret: options.secret });
+  return auth;
 }
 
 export type KyboAuth = ReturnType<typeof createAuth>;
@@ -67,7 +79,64 @@ export async function handleAuthRequest(
       );
     }
   }
+  const signIn =
+    request.method === "POST" &&
+    /^\/api\/auth\/sign-in\/(email|username)$/.test(
+      new URL(request.url).pathname,
+    );
+  let password = "";
+  if (signIn) {
+    try {
+      const raw = await request.clone().text();
+      if (raw.length > 16000) throw new Error();
+      const body = JSON.parse(raw);
+      password = typeof body.password === "string" ? body.password : "";
+    } catch {
+      return Response.json(
+        { error: "Revisá los datos de ingreso." },
+        { status: 400, headers: { "Cache-Control": "private, no-store" } },
+      );
+    }
+  }
   const response = await auth.handler(request);
+  if (signIn && response.ok) {
+    const config = authConfigurations.get(auth);
+    const result = await response.clone().json();
+    if (config && typeof result.token === "string") {
+      try {
+        const onboarding = await finalizePasswordLogin(config.db, {
+          sessionToken: result.token,
+          password,
+          invitationToken: request.headers.get("X-Kybo-Invitation"),
+          secret: config.secret,
+          rpId: new URL(request.url).hostname,
+        });
+        const responseHeaders = new Headers(response.headers);
+        responseHeaders.delete("Content-Length");
+        responseHeaders.set("Cache-Control", "private, no-store");
+        return Response.json(
+          { ...result, onboarding },
+          { status: response.status, headers: responseHeaders },
+        );
+      } catch (error) {
+        // Never forward a cookie or token for a session whose activation failed.
+        await config.db
+          .delete(authSession)
+          .where(eq(authSession.token, result.token));
+        const status = error instanceof AppError ? error.status : 503;
+        return Response.json(
+          {
+            error:
+              error instanceof AppError
+                ? error.message
+                : "No pudimos completar el ingreso. Volvé a intentar.",
+            code: error instanceof AppError ? error.code : "UNAVAILABLE",
+          },
+          { status, headers: { "Cache-Control": "private, no-store" } },
+        );
+      }
+    }
+  }
   response.headers.set("Cache-Control", "private, no-store");
   return response;
 }
@@ -108,11 +177,28 @@ export async function actorFromHeaders(
     .from(operationalUsers)
     .where(eq(operationalUsers.userId, session.user.id))
     .limit(1);
+  if (
+    !permissions ||
+    permissions.disabled ||
+    (await isPendingActivation(db, session.user.id))
+  )
+    return null;
+  const store = await getStoreProfile(db, session.user.id);
+  if (
+    store &&
+    (!store.enabled ||
+      permissions.role !== "staff" ||
+      permissions.catalogManager)
+  )
+    return null;
   return permissions && !permissions.disabled
     ? {
         id: session.user.id,
         role: permissions.role,
         catalogManager: permissions.catalogManager,
+        sessionId: session.session.id,
+        accountKind: store ? "store" : "personal",
+        ...(store ? { storeBranchId: store.branchId } : {}),
       }
     : null;
 }

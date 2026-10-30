@@ -3,6 +3,7 @@ import type { Actor } from "@/lib/access";
 import { AppError } from "@/lib/errors";
 import { requireOperationalContext } from "./context";
 import { listAccessibleBranches } from "./list";
+import { getStoreProfile } from "@/modules/workplace/access";
 
 export async function resolveOperationalContext(
   db: AppDb,
@@ -10,9 +11,17 @@ export async function resolveOperationalContext(
   selected: string,
   options: { explicit?: boolean } = {},
 ) {
+  // Explicit targets apply to personal staff too; never substitute another branch.
+  if (options.explicit) return requireOperationalContext(db, actor, selected);
+  const store = await getStoreProfile(db, actor.id);
+  if (store || actor.accountKind === "store")
+    return requireOperationalContext(
+      db,
+      actor,
+      store?.branchId ?? actor.storeBranchId ?? "",
+    );
   if (actor.role !== "staff") {
     // An explicit API target must never silently become a different branch.
-    if (options.explicit) return requireOperationalContext(db, actor, selected);
     if (selected) {
       try {
         return await requireOperationalContext(db, actor, selected);

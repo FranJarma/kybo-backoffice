@@ -16,5 +16,6 @@ export default defineConfig([
     "test-results/**",
     "output/pdf/**",
     "tmp/pdfs/**",
+    "tmp/manual-equipo/**",
   ]),
 ]);

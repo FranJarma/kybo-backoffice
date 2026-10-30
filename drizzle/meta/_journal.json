@@ -211,6 +211,27 @@
       "when": 1793113200001,
       "tag": "0029_purchase_advances",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1793235600000,
+      "tag": "0030_staff_attendance",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1793297400000,
+      "tag": "0031_branch_addresses",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1793300400000,
+      "tag": "0032_attendance_workplace_access",
+      "breakpoints": true
     }
   ]
 }

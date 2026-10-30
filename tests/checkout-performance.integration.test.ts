@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, it } from "vitest";
+import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { drizzle } from "drizzle-orm/pglite";
 import { eq, sql } from "drizzle-orm";
@@ -8,6 +8,26 @@ import * as s from "../src/db/schema";
 import { createDataModelTestContext } from "./helpers/data-model-database";
 import { createSalesService } from "../src/modules/sales/service";
 import { saleDetail } from "../src/modules/sales/queries";
+import { claim } from "../src/modules/inventory/service";
+import type { Tx } from "../src/db/types";
+
+const hooks = vi.hoisted(() => ({
+  afterCustomer: undefined as undefined | ((tx: Tx) => Promise<void>),
+}));
+vi.mock("../src/modules/sales/customer", async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import("../src/modules/sales/customer")>();
+  return {
+    ...original,
+    resolveSaleCustomer: async (
+      ...args: Parameters<typeof original.resolveSaleCustomer>
+    ) => {
+      const result = await original.resolveSaleCustomer(...args);
+      await hooks.afterCustomer?.(args[0]);
+      return result;
+    },
+  };
+});
 
 let c: Awaited<ReturnType<typeof createDataModelTestContext>>;
 const actor: Actor = { id: "checkout-performance", role: "admin" };
@@ -378,4 +398,80 @@ it("confirms two recipe drinks with bounded database round trips and intact rese
     beforePayments.length + 1,
   );
   expect(queries.length).toBeLessThanOrEqual(50);
+});
+it("rejects a claim context that belongs to another actor or branch", async () => {
+  await c.db.transaction(async (tx) => {
+    await expect(
+      claim(
+        tx,
+        actor,
+        "sale-create",
+        randomUUID(),
+        "fingerprint",
+        randomUUID(),
+        {
+          actorId: "another-person",
+          branchId: actor.branchId!,
+          role: "admin",
+          timeZone: "UTC",
+        },
+      ),
+    ).rejects.toMatchObject({ status: 403 });
+    await expect(
+      claim(
+        tx,
+        actor,
+        "sale-create",
+        randomUUID(),
+        "fingerprint",
+        randomUUID(),
+        {
+          actorId: actor.id,
+          branchId: randomUUID(),
+          role: "admin",
+          timeZone: "UTC",
+        },
+      ),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+});
+it("rechecks revocation after customer resolution and rejects replay after account revocation", async () => {
+  const [customer] = await c.db
+    .insert(s.customers)
+    .values({ name: "Cliente de prueba" })
+    .returning();
+  const beforeSales = await c.db.select().from(s.sales);
+  hooks.afterCustomer = async (tx) => {
+    await tx
+      .update(s.operationalUsers)
+      .set({ disabled: true })
+      .where(eq(s.operationalUsers.userId, actor.id));
+  };
+  try {
+    await expect(
+      createSalesService(c.db).create(actor, {
+        ...command(5),
+        customerId: customer.id,
+      }),
+    ).rejects.toMatchObject({ status: 403 });
+    expect(await c.db.select().from(s.sales)).toEqual(beforeSales);
+  } finally {
+    hooks.afterCustomer = undefined;
+  }
+  const input = command(6);
+  await createSalesService(c.db).create(actor, input);
+  await c.db
+    .update(s.operationalUsers)
+    .set({ disabled: true })
+    .where(eq(s.operationalUsers.userId, actor.id));
+  try {
+    await expect(
+      createSalesService(c.db).create(actor, input),
+    ).rejects.toMatchObject({ status: 403 });
+  } finally {
+    await c.db
+      .update(s.operationalUsers)
+      .set({ disabled: false })
+      .where(eq(s.operationalUsers.userId, actor.id));
+  }
 });

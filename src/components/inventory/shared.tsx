@@ -1,4 +1,8 @@
 "use client";
+import {
+  canDiscardRejectedOperation,
+  discardRejectedOperation,
+} from "./operation-recovery";
 import { useCallback, useEffect, useId, useState } from "react";
 import type { CatalogRow, Entity, ListResult } from "@/modules/catalog/types";
 import { SearchCombobox } from "@/components/ui/search-combobox";
@@ -211,6 +215,47 @@ export function useOperation<T>(
       setBusy(true);
       setError("");
       setStatus(null);
+      let payload = operation.payload;
+      const data = payload as Record<string, unknown>;
+      const cashClose =
+        kind === "cash" &&
+        (data.command as { action?: string })?.action === "close";
+      const productionStart = kind === "production-order" && "start" in data;
+      if (cashClose || productionStart) {
+        try {
+          const { operationConfirmation } =
+            await import("@/components/identity/client");
+          const id = productionStart
+            ? operation.url.split("/").at(-1)!
+            : undefined;
+          const binding = cashClose
+            ? data.command
+            : { id, requestId: data.requestId, start: data.start };
+          const verificationId = await operationConfirmation(
+            cashClose ? "cash-close" : "production-start",
+            String(data.requestId),
+            binding,
+            branchId,
+          );
+          payload = {
+            ...data,
+            ...(verificationId ? { verificationId } : {}),
+          } as T;
+        } catch (error) {
+          if (!uncertain) {
+            sessionStorage.removeItem(storageKey);
+            setPending(null);
+          }
+          setError(
+            (error as Error).message +
+              (uncertain
+                ? " El envío anterior sigue pendiente de confirmar."
+                : " No se envió la operación."),
+          );
+          setBusy(false);
+          return;
+        }
+      }
       let response: Response;
       try {
         response = await fetch(operation.url, {
@@ -219,7 +264,7 @@ export function useOperation<T>(
             "Content-Type": "application/json",
             ...(branchId ? { "X-Kybo-Branch-Id": branchId } : {}),
           },
-          body: JSON.stringify(operation.payload),
+          body: JSON.stringify(payload),
         });
       } catch {
         setPending(operation);
@@ -286,7 +331,7 @@ export function useOperation<T>(
       setBusy(false);
       onSuccess(result);
     },
-    [kind, onSuccess, storageKey, branchId, setError],
+    [kind, onSuccess, storageKey, branchId, setError, uncertain],
   );
   const submit = (url: string, payload: T) => {
     if (!ready || pending || busy || !urlFor(kind, url)) return;
@@ -305,6 +350,33 @@ export function useOperation<T>(
   return {
     submit,
     retry: () => pending && !busy && void send(pending),
+    canDiscard: canDiscardRejectedOperation({
+      pending: !!pending,
+      busy,
+      status,
+    }),
+    discardRejected: () => {
+      try {
+        if (
+          !discardRejectedOperation(sessionStorage, storageKey, {
+            pending: !!pending,
+            busy,
+            status,
+          })
+        )
+          return false;
+      } catch {
+        setError(
+          "No pudimos descartar el envío guardado. Recargá antes de continuar.",
+        );
+        return false;
+      }
+      setPending(null);
+      setUncertain(false);
+      setStatus(null);
+      setError("");
+      return true;
+    },
     busy,
     ready,
     error,

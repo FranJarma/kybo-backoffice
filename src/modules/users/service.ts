@@ -11,6 +11,15 @@ import { provisionUser } from "@/lib/auth";
 import { AppError } from "@/lib/errors";
 import { userCommandSchema } from "./validation";
 import type { ManagedUser, UsersSnapshot, UserRole } from "./types";
+import type { InvitationMessage } from "@/modules/invitations/types";
+import { invitationStates } from "@/modules/invitations/queries";
+import {
+  getStoreProfile,
+  workplaceSchemaReady,
+} from "@/modules/workplace/access";
+import { workplaceManagementAuthorizations } from "@/db/workplace-schema";
+import { invitationsSchemaReady } from "@/modules/invitations/availability";
+import { userInvitations } from "@/db/invitations-schema";
 
 const forbidden = () =>
   new AppError(
@@ -29,7 +38,12 @@ export async function requireUserAdministrator(db: AppDb | Tx, actor: Actor) {
     .select()
     .from(operationalUsers)
     .where(eq(operationalUsers.userId, actor.id));
-  if (!current || current.disabled || current.role !== "admin")
+  if (
+    !current ||
+    current.disabled ||
+    current.role !== "admin" ||
+    (await getStoreProfile(db, actor.id))
+  )
     throw forbidden();
 }
 // All administrative access writes use this order, including branch membership edits.
@@ -46,7 +60,8 @@ export async function lockUserAdministration(tx: Tx, actor: Actor) {
   if (
     !administrator ||
     administrator.disabled ||
-    administrator.role !== "admin"
+    administrator.role !== "admin" ||
+    (await getStoreProfile(tx, actor.id))
   )
     throw forbidden();
   return operators;
@@ -140,14 +155,38 @@ export async function listUsers(
       .where(isNull(branches.archivedAt))
       .orderBy(asc(branches.createdAt), asc(branches.id)),
   ]);
-  return { currentUserId: actor.id, rows, branches: available };
+  const invitations = await invitationStates(db);
+  return {
+    currentUserId: actor.id,
+    rows: rows.map((row) => ({
+      ...row,
+      ...(invitations.has(row.id)
+        ? { invitation: invitations.get(row.id) }
+        : {}),
+    })),
+    branches: available,
+  };
 }
 export async function saveUser(
   db: AppDb,
   actor: Actor,
   raw: unknown,
-): Promise<{ id: string; replayed: boolean }> {
+): Promise<{
+  id: string;
+  replayed: boolean;
+  invitation?: InvitationMessage | null;
+}> {
   await requireUserAdministrator(db, actor);
+  if (
+    raw &&
+    typeof raw === "object" &&
+    "action" in raw &&
+    typeof raw.action === "string" &&
+    raw.action.startsWith("invite-")
+  ) {
+    const { saveInvitation } = await import("@/modules/invitations/service");
+    return saveInvitation(db, actor, raw);
+  }
   const input = userCommandSchema.parse(raw);
   const secret = process.env.BETTER_AUTH_SECRET;
   if (!secret || secret.length < 32)
@@ -192,6 +231,20 @@ export async function saveUser(
       if (input.id && !before)
         throw new AppError("NOT_FOUND", "La cuenta no está disponible.", 404);
       if (before && before.version !== input.version) throw conflict();
+      const store = input.id ? await getStoreProfile(tx, input.id) : null;
+      if (
+        store &&
+        (input.role !== "staff" ||
+          input.catalogManager ||
+          input.memberships.length !== 1 ||
+          input.memberships[0].branchId !== store.branchId ||
+          input.memberships[0].role !== "staff")
+      )
+        throw new AppError(
+          "VALIDATION",
+          "La cuenta del local debe conservar acceso limitado a su sucursal.",
+          400,
+        );
       if (input.id === actor.id && (input.disabled || input.role !== "admin"))
         throw new AppError(
           "VALIDATION",
@@ -309,6 +362,41 @@ export async function saveUser(
           before.email !== after.email);
       if (input.disabled || passwordHash || accessChanged)
         await tx.delete(session).where(eq(session.userId, id));
+      if (
+        (input.disabled || passwordHash || accessChanged) &&
+        (await invitationsSchemaReady(tx))
+      ) {
+        // A pending invitation must never disclose credentials superseded by an explicit admin edit.
+        await tx
+          .update(userInvitations)
+          .set({
+            messageCiphertext: null,
+            generation: crypto.randomUUID(),
+            tokenHash: createHmac("sha256", secret)
+              .update(crypto.randomUUID())
+              .digest("hex"),
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(userInvitations.userId, id),
+              isNull(userInvitations.activatedAt),
+            ),
+          );
+      }
+      if (
+        (input.disabled || passwordHash || accessChanged) &&
+        (await workplaceSchemaReady(tx))
+      )
+        await tx
+          .update(workplaceManagementAuthorizations)
+          .set({ revokedAt: new Date() })
+          .where(
+            or(
+              eq(workplaceManagementAuthorizations.managerUserId, id),
+              eq(workplaceManagementAuthorizations.storeUserId, id),
+            ),
+          );
       await tx.insert(auditEvents).values({
         actorId: actor.id,
         entity: "user-management",

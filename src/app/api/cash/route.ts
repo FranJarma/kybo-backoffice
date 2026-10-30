@@ -25,16 +25,25 @@ export async function POST(request: Request) {
   try {
     const actor = await operationalActor(request),
       input = z
-        .object({ requestId: z.uuid(), command: z.unknown() })
+        .object({
+          requestId: z.uuid(),
+          command: z.unknown(),
+          verificationId: z.uuid().optional(),
+        })
         .strict()
         .parse(await requestInput(request, 64000));
+    const db = await getDb();
     return privateJson(
-      await runCashCommand(
-        await getDb(),
-        actor,
-        input.requestId,
-        input.command,
-      ),
+      input.verificationId
+        ? await runCashCommand(
+            db,
+            actor,
+            input.requestId,
+            input.command,
+            undefined,
+            input.verificationId,
+          )
+        : await runCashCommand(db, actor, input.requestId, input.command),
     );
   } catch (error) {
     return errorResponse(error);

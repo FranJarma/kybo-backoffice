@@ -1,4 +1,8 @@
-export type NavigationAccess = { role: string; catalogManager?: boolean };
+export type NavigationAccess = {
+  role: string;
+  catalogManager?: boolean;
+  accountKind?: "personal" | "store";
+};
 export const navigation = [
   {
     id: "home",
@@ -74,6 +78,38 @@ export const navigation = [
     href: "/products",
     icon: "Package",
     access: "catalog",
+  },
+  {
+    id: "attendance",
+    area: "Personal",
+    label: "Asistencia",
+    href: "/staff/attendance",
+    icon: "Users",
+    access: "all",
+  },
+  {
+    id: "attendance-qr",
+    area: "Puesto del local",
+    label: "QR de asistencia",
+    href: "/staff/attendance/qr",
+    icon: "QrCode",
+    access: "store",
+  },
+  {
+    id: "workplace",
+    area: "Puesto del local",
+    label: "Gestionar turno",
+    href: "/workplace",
+    icon: "ShieldCheck",
+    access: "store",
+  },
+  {
+    id: "staff-schedule",
+    area: "Personal",
+    label: "Horarios del equipo",
+    href: "/staff/schedule",
+    icon: "ListChecks",
+    access: "manager",
   },
   {
     id: "categories",
@@ -220,6 +256,14 @@ export const navigation = [
     access: "admin",
   },
   {
+    id: "attendance-settings",
+    area: "Configuración",
+    label: "Configuración de asistencia",
+    href: "/settings/attendance",
+    icon: "Users",
+    access: "admin",
+  },
+  {
     id: "payment-methods",
     area: "Configuración",
     label: "Medios de pago",
@@ -236,6 +280,15 @@ export const navigation = [
     access: "admin",
   },
   {
+    id: "store-account",
+    area: "Configuración",
+    label: "Cuenta del local",
+    href: "/settings/store-account",
+    icon: "Store",
+    access: "admin",
+    sidebar: false,
+  },
+  {
     id: "branches",
     area: "Configuración",
     label: "Sucursales y ubicaciones",
@@ -249,6 +302,9 @@ export function canNavigate(
   entry: (typeof navigation)[number],
   actor: NavigationAccess,
 ) {
+  if (actor.accountKind === "store")
+    return ["sales", "tables", "attendance-qr", "workplace"].includes(entry.id);
+  if (entry.access === "store") return false;
   if (entry.access === "admin") return actor.role === "admin";
   return (
     entry.access === "all" ||

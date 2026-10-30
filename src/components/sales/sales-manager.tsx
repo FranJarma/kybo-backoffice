@@ -65,6 +65,9 @@ import {
   nextAvailableLocator,
 } from "@/modules/pickup/selection";
 import { PickupActions } from "@/components/pickup/locator-manager";
+import { WorkplaceActions } from "@/components/workplace/actions";
+import { WorkplaceSummary } from "@/components/workplace/summary";
+import { QrCode } from "lucide-react";
 
 type WorkspaceView = "new" | "history" | "append";
 type DraftSnapshot = {
@@ -87,12 +90,14 @@ export function SalesManager({
   actorId,
   branchId,
   role,
+  accountKind = "personal",
   initialAccount,
   initialTable,
 }: {
   actorId: string;
   branchId: string;
   role: Actor["role"];
+  accountKind?: Actor["accountKind"];
   initialAccount?: string;
   initialTable?: string;
 }) {
@@ -857,7 +862,28 @@ export function SalesManager({
             onChanged={() => void refreshLocatorDetail()}
             onOpenSale={(id) => void selectSale(id)}
           />
-          <ReplenishmentPanel actorId={actorId} role={role} refresh={refresh} />
+          {accountKind === "store" && (
+            <>
+              <WorkplaceActions branchId={branchId} />
+              <Button type="button" variant="outline" asChild>
+                <a
+                  href="/staff/attendance/qr"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <QrCode size={17} />
+                  Mostrar QR de asistencia
+                </a>
+              </Button>
+            </>
+          )}
+          {accountKind !== "store" && (
+            <ReplenishmentPanel
+              actorId={actorId}
+              role={role}
+              refresh={refresh}
+            />
+          )}
           <Button
             variant="ghost"
             className="min-h-12"
@@ -875,6 +901,9 @@ export function SalesManager({
           )}
         </div>
       </div>
+      {accountKind === "store" && (
+        <WorkplaceSummary key={branchId} branchId={branchId} />
+      )}
       <div className="flex flex-wrap items-center gap-3 border-b border-line">
         <button
           disabled={locked || view === "append"}

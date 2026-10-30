@@ -19,6 +19,9 @@ export async function createDataModelTestContext(
     legacyDailyOperations?: boolean;
     legacySupplyAlerts?: boolean;
     legacyProcurement?: boolean;
+    attendance?: boolean;
+    branchAddress?: boolean;
+    attendanceAccess?: boolean;
   } = {},
 ) {
   requireMigrationTestPermission();
@@ -96,7 +99,21 @@ export async function createDataModelTestContext(
       );
     await client.exec(await readFile("drizzle/0028_cash_register.sql", "utf8"));
     if (!options.legacyProcurement)
-      await client.exec(await readFile("drizzle/0029_purchase_advances.sql", "utf8"));
+      await client.exec(
+        await readFile("drizzle/0029_purchase_advances.sql", "utf8"),
+      );
+    if (options.attendance || options.branchAddress || options.attendanceAccess)
+      await client.exec(
+        await readFile("drizzle/0030_staff_attendance.sql", "utf8"),
+      );
+    if (options.branchAddress || options.attendanceAccess)
+      await client.exec(
+        await readFile("drizzle/0031_branch_addresses.sql", "utf8"),
+      );
+    if (options.attendanceAccess)
+      await client.exec(
+        await readFile("drizzle/0032_attendance_workplace_access.sql", "utf8"),
+      );
     return {
       ...fixture,
       client,

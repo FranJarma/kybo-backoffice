@@ -2,6 +2,7 @@ import { z } from "zod";
 export const taskCommandSchema = z
   .object({
     requestId: z.uuid(),
+    verificationId: z.uuid().optional(),
     expectedRevision: z.number().int().positive(),
     action: z.enum([
       "assign",

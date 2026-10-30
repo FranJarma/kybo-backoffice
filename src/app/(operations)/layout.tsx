@@ -43,11 +43,14 @@ export default async function OperationsLayout({
       role={actor.role}
       actorId={actor.id}
       catalogManager={actor.catalogManager}
+      accountKind={actor.accountKind}
       name={profile?.name ?? "Equipo Kybo"}
       dateLabel={dateLabel}
-      branches={(await listAccessibleBranches(await getDb(), actor)).map(
-        ({ id, name }) => ({ id, name }),
-      )}
+      branches={(await listAccessibleBranches(await getDb(), actor))
+        .filter(
+          (b) => actor.accountKind !== "store" || b.id === actor.storeBranchId,
+        )
+        .map(({ id, name }) => ({ id, name }))}
       selectedBranchId={actor.branchId ?? ""}
       initialSidebarCollapsed={
         (await cookies()).get("kybo-sidebar")?.value === "collapsed"

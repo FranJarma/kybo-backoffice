@@ -15,6 +15,12 @@ export type ManagedUser = {
   catalogManager: boolean;
   memberships: MembershipInput[];
   version: string;
+  invitation?: {
+    status: "pending" | "expired" | "activated";
+    expiresAt: string;
+    firstLoginAt: string | null;
+    verificationConfigured: boolean;
+  };
 };
 export type UsersSnapshot = {
   currentUserId: string;

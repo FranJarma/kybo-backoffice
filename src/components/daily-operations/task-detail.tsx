@@ -72,11 +72,36 @@ export function TaskDetail({
           ...(["cancel", "report_blocked"].includes(action) ? { reason } : {}),
         };
     pending.current = body;
+    let verificationId: string | undefined;
+    if (current.kind === "production" && body?.action === "start") {
+      try {
+        const { operationConfirmation } =
+          await import("@/components/identity/client");
+        verificationId = await operationConfirmation(
+          "production-start",
+          String(body.requestId),
+          { taskId: current.id, ...body },
+        );
+      } catch (error) {
+        if (!retry) pending.current = null;
+        setError(
+          (error as Error).message +
+            (retry
+              ? " El envío anterior sigue pendiente de confirmar."
+              : " No se envió la operación."),
+        );
+        setBusy(false);
+        return;
+      }
+    }
     try {
       const response = await fetch(`/api/operations/tasks/${current.id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          ...body,
+          ...(verificationId ? { verificationId } : {}),
+        }),
       });
       const result = await response.json();
       if (!response.ok) {

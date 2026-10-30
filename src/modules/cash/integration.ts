@@ -47,7 +47,7 @@ export async function lockCashConfiguration(tx: Tx, branchId: string) {
 export async function lockCashSession(
   tx: Tx,
   ctx: OperationalContext,
-  options: { requireOpen?: boolean } = {},
+  options: { requireOpen?: boolean; schemaAvailable?: boolean } = {},
 ): Promise<Session | null> {
   let lock = locks.get(tx);
   if (lock && lock.branchId !== ctx.branchId)
@@ -57,7 +57,11 @@ export async function lockCashSession(
       403,
     );
   if (!lock) {
-    if (!(await cashAvailable(tx))) return null;
+    if (
+      options.schemaAvailable === false ||
+      (options.schemaAvailable === undefined && !(await cashAvailable(tx)))
+    )
+      return null;
     const settings = await lockCashConfiguration(tx, ctx.branchId);
     await refreshCashContext(tx, ctx);
     const [session] = settings?.activatedAt

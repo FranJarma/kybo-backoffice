@@ -31,6 +31,7 @@ import {
 import { z } from "zod";
 import type { AppDb } from "@/db/client";
 import type { Actor } from "@/lib/access";
+import { AppError } from "@/lib/errors";
 import { requireCatalogAccess } from "@/lib/access";
 import {
   customers,
@@ -76,7 +77,11 @@ import {
 } from "@/modules/preparation/publication";
 import type { SaleChannel, SaleList, SaleLookup } from "./types";
 import type { OperationalContext } from "../operations/types";
-import { lockCashSession, recordCashMovement } from "../cash/integration";
+import {
+  cashAvailable,
+  lockCashSession,
+  recordCashMovement,
+} from "../cash/integration";
 
 async function recordSalePayments(
   tx: Tx,
@@ -301,8 +306,21 @@ async function prepareLines(
   actor: Actor,
   channel: SaleChannel,
   lines: LineInput[],
+  validatedContext?: OperationalContext,
 ) {
-  const ctx = await requireOperationalContext(tx, actor, actor.branchId ?? "");
+  if (
+    validatedContext &&
+    (validatedContext.actorId !== actor.id ||
+      validatedContext.branchId !== actor.branchId)
+  )
+    throw new AppError(
+      "FORBIDDEN",
+      "El contexto no corresponde a esta persona o sucursal.",
+      403,
+    );
+  const ctx =
+    validatedContext ??
+    (await requireOperationalContext(tx, actor, actor.branchId ?? ""));
   await tx.insert(recipeGraphLock).values({ id: 1 }).onConflictDoNothing();
   await tx
     .select()
@@ -603,7 +621,6 @@ export function createSalesService(db: AppDb) {
   return {
     async create(actor: Actor | null, raw: unknown) {
       salesAccess(actor);
-      await requireOperationalContext(db, actor, actor.branchId ?? "");
       const input = parse(createSchema, raw),
         id = randomUUID();
       return salesTransaction(() =>
@@ -620,10 +637,24 @@ export function createSalesService(db: AppDb) {
             input.requestId,
             fingerprint("sale-create", input),
             id,
+            ctx,
           );
           if (old) return replaySaleDetail(tx, old, ctx.branchId);
-          if (input.payments.some((payment) => payment.collector === "local"))
-            await lockCashSession(tx, ctx);
+          let preparationContext: OperationalContext | undefined;
+          if (input.payments.some((payment) => payment.collector === "local")) {
+            // Probe once, retaining the same legacy-schema behavior as the cash helper.
+            const schemaAvailable = await cashAvailable(tx);
+            await lockCashSession(tx, ctx, { schemaAvailable });
+            // Cash refreshes permissions after its lock. Table/customer resolution
+            // may wait on another lock, so those paths keep their later live check.
+            if (
+              schemaAvailable &&
+              !input.tableId &&
+              !input.customerId &&
+              !input.newCustomer
+            )
+              preparationContext = ctx;
+          }
           if (input.origin === "delivery") {
             if (
               input.channel === "counter" ||
@@ -676,6 +707,7 @@ export function createSalesService(db: AppDb) {
             actor,
             input.channel,
             input.lines,
+            preparationContext,
           );
           const payments = await preparePayments(
             tx,

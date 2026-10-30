@@ -23,7 +23,13 @@ export async function POST(
       .union([
         z.object({ requestId: z.uuid(), completion: z.unknown() }).strict(),
         z.object({ requestId: z.uuid(), cancellation: z.unknown() }).strict(),
-        z.object({ requestId: z.uuid(), start: z.unknown() }).strict(),
+        z
+          .object({
+            requestId: z.uuid(),
+            start: z.unknown(),
+            verificationId: z.uuid().optional(),
+          })
+          .strict(),
         z.object({ requestId: z.uuid(), planning: z.unknown() }).strict(),
         z.object({ requestId: z.uuid(), cancelPlan: z.unknown() }).strict(),
         z.object({ requestId: z.uuid(), review: z.unknown() }).strict(),
@@ -46,7 +52,7 @@ export async function POST(
         actor.branchId!,
         input,
         "production-start",
-        { id, ...input },
+        { id, requestId: input.requestId, start: input.start },
         (tx, ctx, op) => startProduction(tx, ctx, op, id, input.start),
       );
     if ("planning" in input)

@@ -6,6 +6,9 @@ export type Actor = {
   catalogManager?: boolean;
   branchId?: string;
   timeZone?: string;
+  sessionId?: string;
+  accountKind?: "personal" | "store";
+  storeBranchId?: string;
 };
 
 export function requireCatalogAccess(actor: Actor | null): void {

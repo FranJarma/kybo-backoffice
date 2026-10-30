@@ -6,8 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OperationAlert } from "@/components/ui/operation-alert";
+import { safeLoginReturn } from "@/lib/login-return";
 const subscribe = () => () => {};
-export function LoginForm() {
+export function LoginForm({
+  returnTo = "/",
+  invitationToken,
+}: { returnTo?: string; invitationToken?: string } = {}) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -29,22 +33,36 @@ export function LoginForm() {
         `/api/auth/sign-in/${isEmail ? "email" : "username"}`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...(invitationToken
+              ? { "X-Kybo-Invitation": invitationToken }
+              : {}),
+          },
           body: JSON.stringify({
             [isEmail ? "email" : "username"]: identifier,
             password,
           }),
         },
       );
+      const result = await response.json();
       if (!response.ok) {
         setError(
           response.status === 429
             ? "Demasiados intentos. Probá de nuevo más tarde."
-            : "No pudimos iniciar sesión. Revisá el usuario o correo y la contraseña.",
+            : result.code === "INVITATION_INVALID"
+              ? "La invitación no está vigente o la cuenta no está habilitada. Pedí una nueva invitación a Administración."
+              : "No pudimos iniciar sesión. Revisá el usuario o correo y la contraseña.",
         );
         return;
       }
-      router.replace("/");
+      setPassword("");
+      const destination = safeLoginReturn(returnTo);
+      router.replace(
+        result.onboarding?.needed
+          ? `/onboarding?returnTo=${encodeURIComponent(destination)}`
+          : destination,
+      );
       router.refresh();
     } catch {
       setError("No hay conexión. Probá de nuevo.");

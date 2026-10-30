@@ -41,12 +41,12 @@ export async function runTaskCommand(
   taskId: string,
   raw: unknown,
 ) {
-  const input = taskCommandSchema.parse(raw);
+  const { verificationId, ...input } = taskCommandSchema.parse(raw);
   return executeCommand(
     db,
     actor,
     actor.branchId ?? "",
-    input,
+    { ...input, verificationId },
     "daily-task",
     { taskId, ...input },
     async (tx, ctx, operationId) => {
