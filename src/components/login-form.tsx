@@ -1,7 +1,18 @@
 "use client";
-import { useState, useSyncExternalStore, type FormEvent } from "react";
+import {
+  useState,
+  useSyncExternalStore,
+  useTransition,
+  type FormEvent,
+} from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, LoaderCircle, LockKeyhole, Mail } from "lucide-react";
+import {
+  ArrowRight,
+  CircleCheck,
+  LoaderCircle,
+  LockKeyhole,
+  Mail,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,7 +28,9 @@ export function LoginForm({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [phase, setPhase] = useState<"idle" | "verifying" | "opening">("idle");
+  const [navigating, startNavigation] = useTransition();
+  const busy = phase !== "idle" || navigating;
   const hydrated = useSyncExternalStore(
     subscribe,
     () => true,
@@ -25,8 +38,9 @@ export function LoginForm({
   );
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (busy) return;
     setError("");
-    setBusy(true);
+    setPhase("verifying");
     try {
       const identifier = email.trim().toLowerCase();
       const isEmail = identifier.includes("@");
@@ -48,6 +62,7 @@ export function LoginForm({
       );
       const result = await response.json();
       if (!response.ok) {
+        setPhase("idle");
         setError(
           response.status === 429
             ? "Demasiados intentos. Probá de nuevo más tarde."
@@ -61,26 +76,28 @@ export function LoginForm({
         return;
       }
       setPassword("");
+      setPhase("opening");
       const destination = safeLoginReturn(returnTo);
-      router.replace(
-        result.passwordPolicy?.required
-          ? passwordChangeLocation(
-              destination,
-              result.onboarding?.needed === true,
-            )
-          : result.onboarding?.needed
-            ? `/onboarding?returnTo=${encodeURIComponent(destination)}`
-            : destination,
-      );
-      router.refresh();
+      const nextPage = result.passwordPolicy?.required
+        ? passwordChangeLocation(
+            destination,
+            result.onboarding?.needed === true,
+          )
+        : result.onboarding?.needed
+          ? `/onboarding?returnTo=${encodeURIComponent(destination)}`
+          : destination;
+      startNavigation(() => {
+        router.replace(nextPage);
+        // The cookie was set by a fetch, so invalidate any pre-login route data.
+        router.refresh();
+      });
     } catch {
       setError("No hay conexión. Probá de nuevo.");
-    } finally {
-      setBusy(false);
+      setPhase("idle");
     }
   }
   return (
-    <form onSubmit={submit}>
+    <form onSubmit={submit} aria-busy={busy} aria-describedby="login-progress">
       <fieldset disabled={!hydrated || busy} className="space-y-6">
         <div>
           <Label htmlFor="email" required>
@@ -133,8 +150,16 @@ export function LoginForm({
           message={error}
           tone="error"
         />
-        <Button type="submit" disabled={busy} className="h-12 w-full">
-          {busy ? "Ingresando…" : "Ingresar"}
+        <Button
+          type="submit"
+          disabled={busy}
+          className="h-12 w-full disabled:opacity-100"
+        >
+          {phase === "opening"
+            ? "Abriendo Kybo…"
+            : busy
+              ? "Verificando acceso…"
+              : "Ingresar"}
           {busy ? (
             <LoaderCircle
               size={18}
@@ -146,6 +171,25 @@ export function LoginForm({
           )}
         </Button>
       </fieldset>
+      <p
+        id="login-progress"
+        role="status"
+        aria-live="polite"
+        className="mt-4 flex min-h-5 items-start gap-2 text-xs leading-5 text-muted"
+      >
+        {phase === "opening" ? (
+          <>
+            <CircleCheck
+              size={16}
+              aria-hidden="true"
+              className="mt-0.5 shrink-0 text-emerald-600"
+            />
+            <span>Acceso confirmado. Estamos abriendo tu espacio.</span>
+          </>
+        ) : phase === "verifying" ? (
+          "Estamos verificando tu acceso."
+        ) : null}
+      </p>
     </form>
   );
 }

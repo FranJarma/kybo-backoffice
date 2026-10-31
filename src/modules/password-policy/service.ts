@@ -188,8 +188,11 @@ export async function beginTemporaryPasswordLogin(
   tx: Tx,
   userId: string,
   now = new Date(),
+  knownReady = false,
 ) {
-  if (!(await passwordPolicySchemaReady(tx)))
+  // Reuse positive availability only, so a newly installed schema is still
+  // detected if the caller's earlier check found it absent.
+  if (!knownReady && !(await passwordPolicySchemaReady(tx)))
     return state(undefined, now, false);
   const [row] = await tx
     .select()

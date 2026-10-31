@@ -1,4 +1,4 @@
-import { and, eq, isNull, gt } from "drizzle-orm";
+import { and, eq, isNull, gt, sql } from "drizzle-orm";
 import { verifyPassword } from "better-auth/crypto";
 import { account, operationalUsers, session, user } from "@/db/auth-schema";
 import { branchMemberships, branches } from "@/db/branch-schema";
@@ -41,7 +41,11 @@ export async function finalizePasswordLogin(
   },
   now = new Date(),
 ): Promise<OnboardingState & { passwordPolicy?: PasswordPolicyState }> {
-  const invitationsReady = await invitationsSchemaReady(db);
+  const available = await db.execute(sql`select
+    to_regclass('public.user_invitations') is not null as invitations,
+    to_regclass('public.user_password_policies') is not null as passwords,
+    to_regclass('public.workplace_store_accounts') is not null as store`);
+  const invitationsReady = available.rows[0]?.invitations === true;
   // Cleanup survives a subsequently rejected login transaction.
   if (invitationsReady) await cleanupExpiredInvitationMessages(db, now);
   return db.transaction(async (tx) => {
@@ -85,8 +89,13 @@ export async function finalizePasswordLogin(
       tx,
       authenticated.userId,
       now,
+      available.rows[0]?.passwords === true,
     );
-    const store = await getStoreProfile(tx, authenticated.userId);
+    const store = await getStoreProfile(
+      tx,
+      authenticated.userId,
+      available.rows[0]?.store === true,
+    );
     if (store) {
       if (!store.enabled || access.role !== "staff" || access.catalogManager)
         throw denied();
