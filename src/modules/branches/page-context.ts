@@ -9,6 +9,11 @@ export async function requirePageActor() {
   } catch (error) {
     if (
       error instanceof AppError &&
+      error.code === "TEMPORARY_PASSWORD_EXPIRED"
+    )
+      redirect("/account/password");
+    if (
+      error instanceof AppError &&
       error.code === "BRANCH_ASSIGNMENT_REQUIRED"
     )
       redirect("/branch-assignment");

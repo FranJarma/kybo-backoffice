@@ -37,3 +37,4 @@ export * from "./branch-address-schema";
 export * from "./attendance-access-schema";
 export * from "./workplace-schema";
 export * from "./invitations-schema";
+export * from "./password-policy-schema";

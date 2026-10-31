@@ -3,7 +3,7 @@ import { betterAuth } from "better-auth";
 import { username as usernamePlugin } from "better-auth/plugins/username";
 import { branches, branchMemberships } from "../db/branch-schema";
 import { hashPassword } from "better-auth/crypto";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { headers } from "next/headers";
 import { z } from "zod";
 import type { AppDb } from "../db/client";
@@ -19,9 +19,11 @@ import {
 import type { Actor } from "./access";
 import { AppError } from "./errors";
 import { trustedOrigins } from "./origins";
-import { isPendingActivation } from "@/modules/invitations/queries";
 import { finalizePasswordLogin } from "@/modules/invitations/authentication";
-import { getStoreProfile } from "@/modules/workplace/access";
+import { workplaceStoreAccounts } from "../db/workplace-schema";
+import { userInvitations } from "../db/invitations-schema";
+import { userPasswordPolicies } from "../db/password-policy-schema";
+import { assertPasswordDeadline } from "@/modules/password-policy/service";
 
 const authConfigurations = new WeakMap<object, { db: AppDb; secret: string }>();
 
@@ -79,6 +81,22 @@ export async function handleAuthRequest(
       );
     }
   }
+  if (
+    request.method === "POST" &&
+    [
+      "/api/auth/change-password",
+      "/api/auth/request-password-reset",
+      "/api/auth/reset-password",
+    ].includes(new URL(request.url).pathname)
+  )
+    return Response.json(
+      {
+        error:
+          "Usá Mi contraseña en Kybo o pedí a Administración una nueva contraseña temporal.",
+        code: "PASSWORD_CHANGE_ROUTE",
+      },
+      { status: 403, headers: { "Cache-Control": "private, no-store" } },
+    );
   const signIn =
     request.method === "POST" &&
     /^\/api\/auth\/sign-in\/(email|username)$/.test(
@@ -104,18 +122,21 @@ export async function handleAuthRequest(
     const result = await response.clone().json();
     if (config && typeof result.token === "string") {
       try {
-        const onboarding = await finalizePasswordLogin(config.db, {
-          sessionToken: result.token,
-          password,
-          invitationToken: request.headers.get("X-Kybo-Invitation"),
-          secret: config.secret,
-          rpId: new URL(request.url).hostname,
-        });
+        const { passwordPolicy, ...onboarding } = await finalizePasswordLogin(
+          config.db,
+          {
+            sessionToken: result.token,
+            password,
+            invitationToken: request.headers.get("X-Kybo-Invitation"),
+            secret: config.secret,
+            rpId: new URL(request.url).hostname,
+          },
+        );
         const responseHeaders = new Headers(response.headers);
         responseHeaders.delete("Content-Length");
         responseHeaders.set("Cache-Control", "private, no-store");
         return Response.json(
-          { ...result, onboarding },
+          { ...result, onboarding, passwordPolicy },
           { status: response.status, headers: responseHeaders },
         );
       } catch (error) {
@@ -168,22 +189,74 @@ export async function actorFromHeaders(
 ): Promise<Actor | null> {
   const session = await auth.api.getSession({ headers: requestHeaders });
   if (!session?.user?.id) return null;
-  const [permissions] = await db
+  const [available] = await db
     .select({
-      role: operationalUsers.role,
-      disabled: operationalUsers.disabled,
-      catalogManager: operationalUsers.catalogManager,
+      store: sql<boolean>`to_regclass('public.workplace_store_accounts') is not null`,
+      invitations: sql<boolean>`to_regclass('public.user_invitations') is not null`,
+      passwords: sql<boolean>`to_regclass('public.user_password_policies') is not null`,
     })
     .from(operationalUsers)
     .where(eq(operationalUsers.userId, session.user.id))
     .limit(1);
-  if (
-    !permissions ||
-    permissions.disabled ||
-    (await isPendingActivation(db, session.user.id))
-  )
+  if (!available) return null;
+  const accessQuery = db
+    .select({
+      role: operationalUsers.role,
+      disabled: operationalUsers.disabled,
+      catalogManager: operationalUsers.catalogManager,
+      storeUserId: available.store
+        ? workplaceStoreAccounts.userId
+        : sql<string | null>`null`,
+      storeBranchId: available.store
+        ? workplaceStoreAccounts.branchId
+        : sql<string | null>`null`,
+      storeEnabled: available.store
+        ? workplaceStoreAccounts.enabled
+        : sql<boolean | null>`null`,
+      pendingActivation: available.invitations
+        ? sql<boolean>`${userInvitations.userId} is not null and ${userInvitations.activatedAt} is null`
+        : sql<boolean>`false`,
+      temporaryRequired: available.passwords
+        ? userPasswordPolicies.required
+        : sql<boolean>`false`,
+      temporaryExpiresAt: available.passwords
+        ? userPasswordPolicies.expiresAt
+        : sql<Date | null>`null`,
+    })
+    .from(operationalUsers)
+    .$dynamic();
+  // Detect each optional migration independently; keep permissions and expiry
+  // live without separate network round trips for each policy.
+  if (available.store)
+    accessQuery.leftJoin(
+      workplaceStoreAccounts,
+      eq(workplaceStoreAccounts.userId, operationalUsers.userId),
+    );
+  if (available.invitations)
+    accessQuery.leftJoin(
+      userInvitations,
+      eq(userInvitations.userId, operationalUsers.userId),
+    );
+  if (available.passwords)
+    accessQuery.leftJoin(
+      userPasswordPolicies,
+      eq(userPasswordPolicies.userId, operationalUsers.userId),
+    );
+  const [permissions] = await accessQuery
+    .where(eq(operationalUsers.userId, session.user.id))
+    .limit(1);
+  if (!permissions || permissions.disabled || permissions.pendingActivation)
     return null;
-  const store = await getStoreProfile(db, session.user.id);
+  assertPasswordDeadline(
+    permissions.temporaryRequired === true,
+    permissions.temporaryExpiresAt,
+  );
+  const store = permissions.storeUserId
+    ? {
+        enabled: permissions.storeEnabled,
+        branchId: permissions.storeBranchId!,
+      }
+    : null;
   if (
     store &&
     (!store.enabled ||

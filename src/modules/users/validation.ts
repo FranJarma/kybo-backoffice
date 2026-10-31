@@ -15,6 +15,7 @@ export const userCommandSchema = z
       .toLowerCase()
       .pipe(z.union([z.literal(""), z.email("Ingresá un correo válido.")])),
     password: z.string().max(128).default(""),
+    temporaryPassword: z.boolean().default(false),
     role: z.enum(["admin", "manager", "staff"]),
     disabled: z.boolean(),
     catalogManager: z.boolean(),
@@ -39,6 +40,11 @@ export const userCommandSchema = z
       );
     if ((!input.id || input.password) && input.password.length < 8)
       issue("password", "La contraseña debe tener al menos 8 caracteres.");
+    if (input.temporaryPassword && !input.password)
+      issue(
+        "password",
+        "Ingresá una nueva contraseña para emitirla como temporal.",
+      );
     if (input.id && !input.version)
       issue("version", "Actualizá la cuenta antes de guardar.");
     if (

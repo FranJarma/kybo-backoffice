@@ -22,6 +22,7 @@ export async function createDataModelTestContext(
     attendance?: boolean;
     branchAddress?: boolean;
     attendanceAccess?: boolean;
+    passwordPolicy?: boolean;
   } = {},
 ) {
   requireMigrationTestPermission();
@@ -113,6 +114,10 @@ export async function createDataModelTestContext(
     if (options.attendanceAccess)
       await client.exec(
         await readFile("drizzle/0032_attendance_workplace_access.sql", "utf8"),
+      );
+    if (options.passwordPolicy)
+      await client.exec(
+        await readFile("drizzle/0033_temporary_passwords.sql", "utf8"),
       );
     return {
       ...fixture,

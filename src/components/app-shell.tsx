@@ -42,6 +42,7 @@ import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { useSidebarPreference } from "@/lib/sidebar-preference";
 import { CashHeader } from "@/components/cash/header";
 import { WorkplaceDialog } from "@/components/workplace/actions";
+import { PasswordNotice } from "@/components/account/password-notice";
 const icons = {
   House,
   Package,
@@ -384,6 +385,18 @@ export function AppShell({
             )}
           </div>
         </SidebarHint>
+        {accountKind !== "store" && (
+          <Link
+            href="/account/password"
+            className={cn(
+              "flex min-h-11 items-center rounded-lg text-xs text-muted hover:bg-surface hover:text-brand",
+              compact ? "justify-center" : "px-2",
+            )}
+            aria-label="Mi contraseña"
+          >
+            {compact ? <ShieldCheck size={17} /> : "Mi contraseña"}
+          </Link>
+        )}
         <SignOutButton compact={compact} />
       </div>
     </>
@@ -534,6 +547,7 @@ export function AppShell({
                 : "page-container"
             }
           >
+            {accountKind !== "store" && <PasswordNotice />}
             {children}
           </main>
         </div>

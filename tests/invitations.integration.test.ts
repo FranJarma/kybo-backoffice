@@ -18,7 +18,10 @@ let c: Awaited<ReturnType<typeof createAttendanceContext>>;
 beforeAll(async () => {
   process.env.BETTER_AUTH_SECRET = secret;
   process.env.BETTER_AUTH_URL = origin;
-  c = await createAttendanceContext(undefined, { attendanceAccess: true });
+  c = await createAttendanceContext(undefined, {
+    attendanceAccess: true,
+    passwordPolicy: true,
+  });
 });
 afterAll(async () => {
   await c?.close();

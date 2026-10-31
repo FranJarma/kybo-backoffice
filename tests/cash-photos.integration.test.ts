@@ -37,7 +37,7 @@ const storage: PhotoStorage = {
   },
 };
 beforeAll(async () => {
-  c = await createDataModelTestContext();
+  c = await createDataModelTestContext({ passwordPolicy: true });
   actor.branchId = c.mapping.initialBranch.id;
   await c.db
     .insert(s.user)

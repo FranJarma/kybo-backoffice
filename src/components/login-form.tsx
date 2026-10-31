@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OperationAlert } from "@/components/ui/operation-alert";
 import { safeLoginReturn } from "@/lib/login-return";
+import { passwordChangeLocation } from "@/modules/password-policy/validation";
 const subscribe = () => () => {};
 export function LoginForm({
   returnTo = "/",
@@ -50,18 +51,26 @@ export function LoginForm({
         setError(
           response.status === 429
             ? "Demasiados intentos. Probá de nuevo más tarde."
-            : result.code === "INVITATION_INVALID"
-              ? "La invitación no está vigente o la cuenta no está habilitada. Pedí una nueva invitación a Administración."
-              : "No pudimos iniciar sesión. Revisá el usuario o correo y la contraseña.",
+            : result.code === "TEMPORARY_PASSWORD_EXPIRED" ||
+                result.code === "PASSWORD_POLICY_STALE"
+              ? result.error
+              : result.code === "INVITATION_INVALID"
+                ? "La invitación no está vigente o la cuenta no está habilitada. Pedí una nueva invitación a Administración."
+                : "No pudimos iniciar sesión. Revisá el usuario o correo y la contraseña.",
         );
         return;
       }
       setPassword("");
       const destination = safeLoginReturn(returnTo);
       router.replace(
-        result.onboarding?.needed
-          ? `/onboarding?returnTo=${encodeURIComponent(destination)}`
-          : destination,
+        result.passwordPolicy?.required
+          ? passwordChangeLocation(
+              destination,
+              result.onboarding?.needed === true,
+            )
+          : result.onboarding?.needed
+            ? `/onboarding?returnTo=${encodeURIComponent(destination)}`
+            : destination,
       );
       router.refresh();
     } catch {

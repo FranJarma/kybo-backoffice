@@ -232,6 +232,13 @@
       "when": 1793300400000,
       "tag": "0032_attendance_workplace_access",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1793386800000,
+      "tag": "0033_temporary_passwords",
+      "breakpoints": true
     }
   ]
 }

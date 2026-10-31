@@ -11,8 +11,14 @@ import { getStoreProfile } from "@/modules/workplace/access";
 import { isPendingActivation } from "@/modules/invitations/queries";
 import { workplaceStoreAccounts } from "@/db/workplace-schema";
 import { userInvitations } from "@/db/invitations-schema";
+import { userPasswordPolicies } from "@/db/password-policy-schema";
+import {
+  assertPasswordDeadline,
+  requirePasswordAccess,
+} from "@/modules/password-policy/service";
 
 async function requireActivatedAccount(db: AppDb | Tx, userId: string) {
+  await requirePasswordAccess(db, userId);
   if (await isPendingActivation(db, userId))
     throw new AppError(
       "FORBIDDEN",
@@ -54,6 +60,7 @@ export async function requireOperationalContext(
       timeZone: branches.timeZone,
       storeAvailable: sql<boolean>`to_regclass('public.workplace_store_accounts') is not null`,
       invitationsAvailable: sql<boolean>`to_regclass('public.user_invitations') is not null`,
+      passwordPolicyAvailable: sql<boolean>`to_regclass('public.user_password_policies') is not null`,
     })
     .from(branches)
     .where(and(eq(branches.id, branchId), isNull(branches.archivedAt)))
@@ -75,6 +82,12 @@ export async function requireOperationalContext(
       pendingActivation: branch?.invitationsAvailable
         ? sql<boolean>`${userInvitations.userId} is not null and ${userInvitations.activatedAt} is null`
         : sql<boolean>`false`,
+      temporaryPasswordRequired: branch?.passwordPolicyAvailable
+        ? userPasswordPolicies.required
+        : sql<boolean>`false`,
+      temporaryPasswordExpiresAt: branch?.passwordPolicyAvailable
+        ? userPasswordPolicies.expiresAt
+        : sql<Date | null>`null`,
     })
     .from(operationalUsers)
     .leftJoin(
@@ -98,12 +111,21 @@ export async function requireOperationalContext(
       userInvitations,
       eq(userInvitations.userId, operationalUsers.userId),
     );
+  if (branch?.passwordPolicyAvailable)
+    accessQuery.leftJoin(
+      userPasswordPolicies,
+      eq(userPasswordPolicies.userId, operationalUsers.userId),
+    );
   const [access] = await accessQuery.where(
     eq(operationalUsers.userId, actor.id),
   );
   const role = authorizeBranch(
     access?.account ?? null,
     access?.membership?.role ?? null,
+  );
+  assertPasswordDeadline(
+    access?.temporaryPasswordRequired === true,
+    access?.temporaryPasswordExpiresAt,
   );
   if (access?.pendingActivation)
     throw new AppError(

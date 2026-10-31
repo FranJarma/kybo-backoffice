@@ -12,7 +12,7 @@ export const testIdentityConfig = {
 };
 export async function createAttendanceContext(
   directory?: string,
-  options: { attendanceAccess?: boolean } = {},
+  options: { attendanceAccess?: boolean; passwordPolicy?: boolean } = {},
 ) {
   const c = await createDataModelTestContext({
     attendance: true,
@@ -61,14 +61,12 @@ export async function createAttendanceContext(
   if (options.attendanceAccess) {
     for (const actor of Object.values(actors)) {
       actor.sessionId = `attendance-session-${actor.id}`;
-      await c.db
-        .insert(s.session)
-        .values({
-          id: actor.sessionId,
-          userId: actor.id,
-          token: crypto.randomUUID(),
-          expiresAt: new Date(+attendanceNow + 365 * 86400000),
-        });
+      await c.db.insert(s.session).values({
+        id: actor.sessionId,
+        userId: actor.id,
+        token: crypto.randomUUID(),
+        expiresAt: new Date(+attendanceNow + 365 * 86400000),
+      });
     }
   }
   await c.db.insert(s.attendanceSettings).values({
