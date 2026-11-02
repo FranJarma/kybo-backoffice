@@ -49,3 +49,27 @@ it("rejects invalid branch policies at database level", async () => {
     ),
   ).rejects.toThrow();
 });
+it("migrates existing policies with proximity on and relaxes coordinates only after it is disabled", async () => {
+  await c.client.query(
+    "insert into attendance_settings(branch_id,enabled,latitude,longitude) values($1,true,-26.83,-65.2)",
+    [c.mapping.initialBranch.id],
+  );
+  await c.client.exec(
+    await readFile("drizzle/0034_attendance_location_policy.sql", "utf8"),
+  );
+  const { rows } = await c.client.query(
+    "select enabled,require_location,latitude from attendance_settings",
+  );
+  expect(rows).toEqual([
+    { enabled: true, require_location: true, latitude: -26.83 },
+  ]);
+  await c.client.exec(
+    "update attendance_settings set require_location=false, latitude=null, longitude=null",
+  );
+  await expect(
+    c.client.exec("update attendance_settings set require_location=true"),
+  ).rejects.toThrow();
+  expect(
+    (await c.client.query("select * from attendance_events")).rows,
+  ).toHaveLength(0);
+});

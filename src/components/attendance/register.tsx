@@ -19,6 +19,7 @@ import {
   kindLabel,
   nameOf,
   type Snapshot,
+  attendanceOrigin,
   type Command,
 } from "./shared";
 function csvCell(value: unknown) {
@@ -77,9 +78,7 @@ export function AttendanceRegister({
           e.businessDate,
           kindLabel[e.kind as keyof typeof kindLabel],
           localSchedule(e.occurredAt, data.branch.timeZone),
-          e.source === "phone"
-            ? "Dispositivo y ubicación"
-            : "Manual autorizado",
+          attendanceOrigin(e),
           e.correctionId ? "Sí" : "No",
         ]),
     ];
@@ -338,10 +337,7 @@ export function AttendanceRegister({
                     {clock(e.occurredAt, data.branch.timeZone)}
                   </strong>
                   <small>
-                    {dateLabel(e.businessDate)} ·{" "}
-                    {e.source === "phone"
-                      ? "Ubicación verificada"
-                      : "Manual autorizado"}
+                    {dateLabel(e.businessDate)} · {attendanceOrigin(e)}
                     {e.correctionId
                       ? ` · Original: ${clock(e.originalOccurredAt, data.branch.timeZone)}`
                       : ""}

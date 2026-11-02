@@ -94,6 +94,19 @@ export function evaluateLocation(
     longitude: evidence.longitude,
   };
 }
+export function attendanceLocationEvidence(
+  policy: LocationPolicy & { requireLocation?: boolean },
+  evidence: LocationEvidence | null | undefined,
+  now: Date,
+) {
+  if (policy.requireLocation === false) return { locationRequired: false };
+  if (!evidence)
+    invalid(
+      "Permití la ubicación del celular antes de fichar.",
+      "LOCATION_REQUIRED",
+    );
+  return { locationRequired: true, ...evaluateLocation(policy, evidence, now) };
+}
 export function orderedEvents<T extends TimelineEvent>(events: T[]): T[] {
   return [...events].sort(
     (a, b) =>

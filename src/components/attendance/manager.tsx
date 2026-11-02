@@ -220,7 +220,10 @@ export function AttendanceManager({
     };
     try {
       await execute(base, async (requestId) => {
-        const location = await currentLocation();
+        const location =
+          response?.ready && response.settings?.requireLocation === false
+            ? null
+            : await currentLocation();
         const payload = {
           action: "punch" as const,
           kind,
@@ -408,7 +411,9 @@ export function AttendanceManager({
                           <small>
                             {qr.error ||
                               (qr.attempt
-                                ? "Podés registrar una marca. La ubicación y el desbloqueo se verifican al confirmar."
+                                ? data.settings?.requireLocation === false
+                                  ? "Podés registrar una marca verificando el desbloqueo del celular. Esta sucursal no exige ubicación."
+                                  : "Podés registrar una marca. La ubicación y el desbloqueo se verifican al confirmar."
                                 : "Lo encontrás en la PC o tablet. Se necesita un código vigente para cada entrada, pausa o salida.")}
                           </small>
                         </span>

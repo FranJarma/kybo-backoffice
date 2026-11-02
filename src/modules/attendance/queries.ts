@@ -16,6 +16,7 @@ import type { Actor } from "@/lib/access";
 import { AppError } from "@/lib/errors";
 import { requireOperationalContext } from "@/modules/branches/context";
 import { getStoreProfile } from "@/modules/workplace/access";
+import { attendancePolicyFields } from "./policy";
 import { localSchedule } from "@/modules/production/schedule-time";
 import { unsealCode } from "@/modules/identity/crypto";
 import { effectiveEvents, type EffectiveEvent } from "./events";
@@ -77,7 +78,7 @@ export async function getAttendanceSnapshot(
         403,
       );
     const [policy] = await tx
-      .select()
+      .select(attendancePolicyFields)
       .from(attendanceSettings)
       .where(eq(attendanceSettings.branchId, ctx.branchId));
     const profiles = await tx
@@ -180,7 +181,8 @@ export async function getAttendanceSnapshot(
       assignmentId: e.assignmentId,
       correctionId: e.correctionId,
       originalOccurredAt: e.originalOccurredAt,
-      locationVerified: e.source === "phone",
+      locationVerified:
+        e.source === "phone" && e.evidence?.locationRequired !== false,
       ...(ctx.role === "admin" ? { evidence: e.evidence } : {}),
       branchId: e.branchId,
       sequence: e.sequence,
@@ -355,6 +357,7 @@ export async function getAttendanceSnapshot(
       settings: policy
         ? {
             enabled: policy.enabled,
+            requireLocation: policy.requireLocation,
             latitude: policy.latitude,
             longitude: policy.longitude,
             radiusMeters: policy.radiusMeters,

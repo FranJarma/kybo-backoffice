@@ -10,6 +10,7 @@ import {
 import type { OperationalContext } from "@/modules/operations/types";
 import { AppError } from "@/lib/errors";
 import { getStoreProfile } from "@/modules/workplace/access";
+import { attendancePolicyFields } from "./policy";
 export function requireAttendanceManager(ctx: OperationalContext) {
   if (ctx.role === "staff")
     throw new AppError(
@@ -82,7 +83,7 @@ export async function getAttendancePolicy(
   lock = false,
 ) {
   const query = tx
-    .select()
+    .select(attendancePolicyFields)
     .from(attendanceSettings)
     .where(eq(attendanceSettings.branchId, branchId));
   const [row] = lock ? await query.for("update") : await query;

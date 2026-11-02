@@ -27,6 +27,7 @@ export const attendanceSettings = pgTable(
       .primaryKey()
       .references(() => branches.id),
     enabled: boolean("enabled").notNull().default(false),
+    requireLocation: boolean("require_location").notNull().default(true),
     latitude: doublePrecision("latitude"),
     longitude: doublePrecision("longitude"),
     radiusMeters: integer("radius_meters").notNull().default(100),
@@ -48,7 +49,7 @@ export const attendanceSettings = pgTable(
     ),
     check(
       "attendance_enabled_location",
-      sql`not ${t.enabled} or (${t.latitude} is not null and ${t.longitude} is not null and ${t.maxAccuracyMeters} <= ${t.radiusMeters})`,
+      sql`not (${t.enabled} and ${t.requireLocation}) or (${t.latitude} is not null and ${t.longitude} is not null and ${t.maxAccuracyMeters} <= ${t.radiusMeters})`,
     ),
   ],
 );

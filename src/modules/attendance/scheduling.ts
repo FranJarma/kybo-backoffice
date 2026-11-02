@@ -30,6 +30,10 @@ import {
   requireAttendanceManager,
 } from "./access";
 import { effectiveEvents, entryReference, type EffectiveEvent } from "./events";
+import {
+  attendancePolicyFields,
+  attendanceLocationSchemaReady,
+} from "./policy";
 
 type Result = { id: string; [key: string]: unknown };
 type Assign = Extract<AttendanceCommand, { action: "assign" }>;
@@ -273,8 +277,14 @@ export async function runSchedulingCommand(
       role: ctx.role,
       branchId: ctx.branchId,
     });
+    if (!(await attendanceLocationSchemaReady(tx)))
+      throw new AppError(
+        "ATTENDANCE_LOCATION_SETUP",
+        "Administración debe habilitar la nueva configuración de cercanía antes de guardar.",
+        503,
+      );
     const [previous] = await tx
-      .select()
+      .select(attendancePolicyFields)
       .from(attendanceSettings)
       .where(eq(attendanceSettings.branchId, ctx.branchId))
       .for("update");
@@ -284,6 +294,7 @@ export async function runSchedulingCommand(
     const longitude = centralAddress?.longitude ?? command.longitude;
     if (
       command.enabled &&
+      command.requireLocation &&
       (latitude === null ||
         longitude === null ||
         command.maxAccuracyMeters > command.radiusMeters)

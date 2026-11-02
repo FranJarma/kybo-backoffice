@@ -225,8 +225,8 @@ export function GuidedOnboarding({
       <p className="flex gap-3 text-xs leading-6 text-muted">
         <Smartphone className="mt-1 size-5 shrink-0" />
         Podés usar Kybo desde el navegador o agregarlo a la pantalla de inicio.
-        Para fichar necesitás la verificación del celular, ubicación y un QR
-        vigente del local.
+        Para fichar necesitás la verificación del celular y un QR vigente del
+        local. La sucursal define si además exige ubicación.
       </p>
     </div>
   );
