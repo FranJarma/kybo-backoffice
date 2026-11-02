@@ -3,8 +3,10 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Fingerprint, ArrowRight, ShieldCheck, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { OperationAlert } from "@/components/ui/operation-alert";
-import { privateRequest } from "./client";
+import { enrollIdentity, privateRequest } from "./client";
 import { safeLoginReturn } from "@/lib/login-return";
 type Status = {
   name: string;
@@ -14,23 +16,56 @@ type Status = {
     branchId: string | null;
   };
 };
-export function GuidedOnboarding({ returnTo }: { returnTo: string }) {
+export function GuidedOnboarding({
+  returnTo,
+  attendanceBranchId,
+}: {
+  returnTo: string;
+  attendanceBranchId?: string;
+}) {
   const router = useRouter(),
     destination = safeLoginReturn(returnTo);
   const [data, setData] = useState<Status | null>(null),
     [error, setError] = useState(""),
+    [password, setPassword] = useState(""),
     [busy, setBusy] = useState(false),
     [done, setDone] = useState(false);
   useEffect(() => {
     const abort = new AbortController();
-    void privateRequest<Status>(
-      "/api/invitations/onboarding",
-      "",
-      undefined,
-      abort.signal,
-    )
-      .then((result) => {
+    void Promise.all([
+      privateRequest<Status>(
+        "/api/invitations/onboarding",
+        "",
+        undefined,
+        abort.signal,
+      ),
+      attendanceBranchId
+        ? privateRequest<{ ready: boolean; credentials: { id: string }[] }>(
+            "/api/identity",
+            attendanceBranchId,
+            undefined,
+            abort.signal,
+          )
+        : Promise.resolve(null),
+    ])
+      .then(([status, identity]) => {
         if (!abort.signal.aborted) {
+          if (identity && !identity.ready)
+            throw new Error(
+              "Administración debe habilitar la verificación del celular antes de fichar.",
+            );
+          const result = identity
+            ? {
+                ...status,
+                onboarding: {
+                  needed: identity.credentials.length === 0,
+                  enrollmentReady:
+                    status.onboarding.enrollmentReady &&
+                    status.onboarding.branchId === attendanceBranchId,
+                  branchId: attendanceBranchId!,
+                },
+              }
+            : status;
           setData(result);
           if (!result.onboarding.needed) {
             router.replace(
@@ -44,7 +79,11 @@ export function GuidedOnboarding({ returnTo }: { returnTo: string }) {
         if (!abort.signal.aborted) setError(e.message);
       });
     return () => abort.abort();
-  }, [router, destination]);
+  }, [router, destination, attendanceBranchId]);
+  const needsPassword =
+    !!attendanceBranchId &&
+    data?.onboarding.needed &&
+    !data.onboarding.enrollmentReady;
   async function enroll() {
     if (!data?.onboarding.branchId) return;
     setBusy(true);
@@ -54,21 +93,25 @@ export function GuidedOnboarding({ returnTo }: { returnTo: string }) {
         throw new Error(
           "Abrí Kybo desde tu celular compatible, con una conexión HTTPS, para activar la verificación.",
         );
-      const api = await import("@simplewebauthn/browser");
-      const options = await privateRequest<{
-        challengeId: string;
-        options: Parameters<typeof api.startRegistration>[0]["optionsJSON"];
-      }>("/api/identity", data.onboarding.branchId, {
-        action: "guided-register-options",
-      });
-      const response = await api.startRegistration({
-        optionsJSON: options.options,
-      });
-      await privateRequest("/api/identity", data.onboarding.branchId, {
-        action: "register-response",
-        challengeId: options.challengeId,
-        response,
-      });
+      if (needsPassword) {
+        await enrollIdentity(data.onboarding.branchId, password, "Mi celular");
+      } else {
+        const api = await import("@simplewebauthn/browser");
+        const options = await privateRequest<{
+          challengeId: string;
+          options: Parameters<typeof api.startRegistration>[0]["optionsJSON"];
+        }>("/api/identity", data.onboarding.branchId, {
+          action: "guided-register-options",
+        });
+        const response = await api.startRegistration({
+          optionsJSON: options.options,
+        });
+        await privateRequest("/api/identity", data.onboarding.branchId, {
+          action: "register-response",
+          challengeId: options.challengeId,
+          response,
+        });
+      }
       setDone(true);
     } catch (e) {
       setError(
@@ -78,6 +121,7 @@ export function GuidedOnboarding({ returnTo }: { returnTo: string }) {
           : (e as Error).message,
       );
     } finally {
+      setPassword("");
       setBusy(false);
     }
   }
@@ -115,15 +159,41 @@ export function GuidedOnboarding({ returnTo }: { returnTo: string }) {
           Continuar
           <ArrowRight />
         </Button>
-      ) : data?.onboarding.enrollmentReady ? (
-        <Button
-          className="h-12 w-full"
-          onClick={() => void enroll()}
-          disabled={busy}
+      ) : data?.onboarding.enrollmentReady || needsPassword ? (
+        <form
+          className="space-y-5"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void enroll();
+          }}
         >
-          {busy ? "Esperando tu confirmación…" : "Activar verificación"}
-          <Fingerprint />
-        </Button>
+          {needsPassword && (
+            <div>
+              <Label htmlFor="phone-account-password" required>
+                Contraseña de tu cuenta
+              </Label>
+              <Input
+                id="phone-account-password"
+                type="password"
+                autoComplete="current-password"
+                autoFocus
+                required
+                maxLength={128}
+                className="mt-2 h-12"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                disabled={busy}
+              />
+              <p className="mt-2 text-xs leading-6 text-muted">
+                Se pide una sola vez para autorizar la verificación.
+              </p>
+            </div>
+          )}
+          <Button type="submit" className="h-12 w-full" disabled={busy}>
+            {busy ? "Esperando tu confirmación…" : "Activar verificación"}
+            <Fingerprint />
+          </Button>
+        </form>
       ) : data ? (
         <div className="rounded-xl border border-line bg-surface p-4 text-sm leading-6">
           <p>
@@ -141,7 +211,7 @@ export function GuidedOnboarding({ returnTo }: { returnTo: string }) {
           Preparando tu cuenta…
         </p>
       )}
-      {!done && (
+      {!done && !attendanceBranchId && (
         <Button
           variant="ghost"
           className="w-full"
