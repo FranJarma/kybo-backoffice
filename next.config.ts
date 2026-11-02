@@ -10,5 +10,12 @@ const config: NextConfig = {
       ? (process.env.E2E_BUILD_DIR ?? ".next-e2e")
       : ".next",
   serverExternalPackages: ["@electric-sql/pglite"],
+  outputFileTracingIncludes: {
+    "/api/printing/installer": [
+      "./connector/windows/*.ps1",
+      "./connector/windows/*.cs",
+      "./connector/windows/assets/kybo-logo.png",
+    ],
+  },
 };
 export default config;

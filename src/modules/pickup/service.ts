@@ -20,6 +20,7 @@ import {
 import { parse, salesAccess, uuid } from "@/modules/sales/validation";
 import type { LocatorFleet, LocatorHistory } from "./types";
 import { locatorLockKey } from "./lifecycle";
+import { notifyLocatorChange } from "@/modules/printing/snapshot";
 
 export async function assignLocator(
   tx: Tx,
@@ -267,6 +268,7 @@ export function createPickupService(db: AppDb) {
         }
         await assignLocator(tx, actor, orderId, input.number);
         await audit(tx, actor, "sale-orders", orderId, "locator-change", input);
+        await notifyLocatorChange(tx, actor, orderId, input.requestId);
         return locatorHistory(tx, orderId);
       });
     },

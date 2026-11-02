@@ -246,6 +246,13 @@
       "when": 1793642400000,
       "tag": "0034_attendance_location_policy",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1793664000000,
+      "tag": "0035_order_printing",
+      "breakpoints": true
     }
   ]
 }

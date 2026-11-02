@@ -1,4 +1,5 @@
 "use client";
+import { LatestOrderPrinting } from "@/components/printing/order-printing";
 import { useErrorFeedback } from "@/components/ui/use-error-feedback";
 import { CashStatusGate } from "@/components/cash/status-gate";
 import {
@@ -946,6 +947,15 @@ export function SalesManager({
           Ayuda de stock
         </Button>
       </div>
+      {lastSale && view === "new" && (
+        <LatestOrderPrinting
+          key={`${actorId}:${branchId}:${lastSale.id}`}
+          actorId={actorId}
+          branchId={branchId}
+          saleId={lastSale.id}
+          onOpen={() => void selectSale(lastSale.id)}
+        />
+      )}
       {view !== "detail" && !paymentOpen && !cancelOpen && (
         <OperationNotice
           eventKey={operation.errorAttempt}
