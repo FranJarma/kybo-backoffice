@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import { issueTemporaryPassword } from "@/modules/password-policy/service";
 import { hashPassword } from "better-auth/crypto";
 import { and, eq, isNull } from "drizzle-orm";
 import {
@@ -206,6 +207,7 @@ export async function saveInvitation(
         .delete(identityEnrollmentGrants)
         .where(eq(identityEnrollmentGrants.userId, id));
     }
+    await issueTemporaryPassword(tx, id, actor.id, now);
     const expiresAt = new Date(now.getTime() + input.validityHours * 3600000);
     const baseURL = process.env.BETTER_AUTH_URL ?? "";
     let origin: string;

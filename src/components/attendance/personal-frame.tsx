@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { CalendarCheck, ChefHat, ListChecks } from "lucide-react";
 import "./personal-frame.css";
+import { PasswordNotice } from "@/components/account/password-notice";
 type PersonalSection = "attendance" | "tasks" | "production";
 export function PersonalNavigation({
   active = "attendance",
@@ -58,9 +59,18 @@ export function PersonalFrame({
         <div>
           <strong>{name}</strong>
           <span>{branchName}</span>
+          <Link
+            href="/account/password"
+            className="inline-flex min-h-8 items-center justify-end text-xs font-semibold text-blue"
+          >
+            Mi contraseña
+          </Link>
         </div>
       </header>
-      <main>{children}</main>
+      <main>
+        <PasswordNotice />
+        {children}
+      </main>
       <PersonalNavigation active={active} />
     </div>
   );

@@ -15,6 +15,7 @@ export type ManagedUser = {
   catalogManager: boolean;
   memberships: MembershipInput[];
   version: string;
+  passwordPolicy?: import("@/modules/password-policy/types").PasswordPolicyState;
   invitation?: {
     status: "pending" | "expired" | "activated";
     expiresAt: string;

@@ -20,6 +20,12 @@ import {
 import { workplaceManagementAuthorizations } from "@/db/workplace-schema";
 import { invitationsSchemaReady } from "@/modules/invitations/availability";
 import { userInvitations } from "@/db/invitations-schema";
+import {
+  requirePasswordAccess,
+  issueTemporaryPassword,
+  clearTemporaryPassword,
+  passwordPolicyStates,
+} from "@/modules/password-policy/service";
 
 const forbidden = () =>
   new AppError(
@@ -34,6 +40,7 @@ const conflict = () =>
     409,
   );
 export async function requireUserAdministrator(db: AppDb | Tx, actor: Actor) {
+  await requirePasswordAccess(db, actor.id);
   const [current] = await db
     .select()
     .from(operationalUsers)
@@ -57,6 +64,7 @@ export async function lockUserAdministration(tx: Tx, actor: Actor) {
   const administrator = operators.find(
     (operator) => operator.userId === actor.id,
   );
+  await requirePasswordAccess(tx, actor.id);
   if (
     !administrator ||
     administrator.disabled ||
@@ -109,6 +117,10 @@ async function readUsers(db: AppDb | Tx, id?: string): Promise<ManagedUser[]> {
       )
       .orderBy(asc(branches.createdAt), asc(branches.id)),
   ]);
+  const policies = await passwordPolicyStates(
+    db,
+    rows.map((row) => row.id),
+  );
   return rows.map((row) => {
     const {
       profileUpdatedAt,
@@ -126,6 +138,7 @@ async function readUsers(db: AppDb | Tx, id?: string): Promise<ManagedUser[]> {
           branchId: m.branchId,
           role: m.role as "manager" | "staff",
         })),
+      ...(policies.has(row.id) ? { passwordPolicy: policies.get(row.id) } : {}),
     };
     return {
       ...safe,
@@ -251,6 +264,12 @@ export async function saveUser(
           "No podés desactivar tu propia cuenta ni quitarte el rol de administrador.",
           400,
         );
+      if (input.id === actor.id && input.temporaryPassword)
+        throw new AppError(
+          "VALIDATION",
+          "Cambiá tu propia contraseña desde Mi contraseña, conservando tu acceso de administrador.",
+          400,
+        );
       const branchIds = input.memberships.map((m) => m.branchId);
       if (branchIds.length) {
         const active = await tx
@@ -350,6 +369,11 @@ export async function saveUser(
             target: [branchMemberships.branchId, branchMemberships.userId],
             set: { role: membership.role, revokedAt: null },
           });
+      if (input.password || !input.id) {
+        if (input.temporaryPassword)
+          await issueTemporaryPassword(tx, id, actor.id);
+        else await clearTemporaryPassword(tx, id);
+      }
       const [after] = await readUsers(tx, id);
       const accessChanged =
         before &&

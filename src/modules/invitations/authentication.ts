@@ -1,4 +1,4 @@
-import { and, eq, isNull, gt } from "drizzle-orm";
+import { and, eq, isNull, gt, sql } from "drizzle-orm";
 import { verifyPassword } from "better-auth/crypto";
 import { account, operationalUsers, session, user } from "@/db/auth-schema";
 import { branchMemberships, branches } from "@/db/branch-schema";
@@ -16,6 +16,8 @@ import { invitationsSchemaReady } from "./availability";
 import { invitationHash } from "./crypto";
 import { cleanupExpiredInvitationMessages } from "./queries";
 import type { OnboardingState } from "./types";
+import { beginTemporaryPasswordLogin } from "@/modules/password-policy/service";
+import type { PasswordPolicyState } from "@/modules/password-policy/types";
 const denied = () =>
   new AppError(
     "INVITATION_INVALID",
@@ -38,10 +40,14 @@ export async function finalizePasswordLogin(
     rpId: string;
   },
   now = new Date(),
-): Promise<OnboardingState> {
-  if (!(await invitationsSchemaReady(db))) return skipped;
+): Promise<OnboardingState & { passwordPolicy?: PasswordPolicyState }> {
+  const available = await db.execute(sql`select
+    to_regclass('public.user_invitations') is not null as invitations,
+    to_regclass('public.user_password_policies') is not null as passwords,
+    to_regclass('public.workplace_store_accounts') is not null as store`);
+  const invitationsReady = available.rows[0]?.invitations === true;
   // Cleanup survives a subsequently rejected login transaction.
-  await cleanupExpiredInvitationMessages(db, now);
+  if (invitationsReady) await cleanupExpiredInvitationMessages(db, now);
   return db.transaction(async (tx) => {
     const [authenticated] = await tx
       .select()
@@ -79,12 +85,23 @@ export async function finalizePasswordLogin(
       }))
     )
       throw denied();
-    const store = await getStoreProfile(tx, authenticated.userId);
+    const passwordPolicy = await beginTemporaryPasswordLogin(
+      tx,
+      authenticated.userId,
+      now,
+      available.rows[0]?.passwords === true,
+    );
+    const store = await getStoreProfile(
+      tx,
+      authenticated.userId,
+      available.rows[0]?.store === true,
+    );
     if (store) {
       if (!store.enabled || access.role !== "staff" || access.catalogManager)
         throw denied();
-      return skipped;
+      return { ...skipped, passwordPolicy };
     }
+    if (!invitationsReady) return { ...skipped, passwordPolicy };
     const [invitation] = await tx
       .select()
       .from(userInvitations)
@@ -123,7 +140,7 @@ export async function finalizePasswordLogin(
         .set({ activatedAt: now, messageCiphertext: null, updatedAt: now })
         .where(eq(userInvitations.userId, authenticated.userId));
     }
-    if (!invitation) return skipped;
+    if (!invitation) return { ...skipped, passwordPolicy };
     const [existing] = await tx
       .select({ id: identityCredentials.id })
       .from(identityCredentials)
@@ -135,7 +152,7 @@ export async function finalizePasswordLogin(
         ),
       )
       .limit(1);
-    if (existing) return skipped;
+    if (existing) return { ...skipped, passwordPolicy };
     const [membership] = await tx
       .select({ branchId: branchMemberships.branchId })
       .from(branchMemberships)
@@ -153,7 +170,7 @@ export async function finalizePasswordLogin(
           isNull(branchMemberships.revokedAt),
         ),
       );
-    if (!membership) return skipped;
+    if (!membership) return { ...skipped, passwordPolicy };
     await tx
       .insert(identityEnrollmentGrants)
       .values({
@@ -168,6 +185,7 @@ export async function finalizePasswordLogin(
       needed: true,
       enrollmentReady: true,
       branchId: membership.branchId,
+      passwordPolicy,
     };
   });
 }

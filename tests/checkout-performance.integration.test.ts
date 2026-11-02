@@ -35,7 +35,7 @@ const lines: Record<string, unknown>[] = [];
 let methodId: string;
 let ingredientId: string;
 beforeAll(async () => {
-  c = await createDataModelTestContext();
+  c = await createDataModelTestContext({ passwordPolicy: true });
   actor.branchId = c.mapping.initialBranch.id;
   await c.db.insert(s.user).values({
     id: actor.id,

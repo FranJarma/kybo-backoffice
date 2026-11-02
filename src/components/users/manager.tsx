@@ -40,6 +40,7 @@ type Draft = {
   username: string;
   email: string;
   password: string;
+  temporaryPassword: boolean;
   role: UserRole;
   disabled: boolean;
   catalogManager: boolean;
@@ -50,6 +51,7 @@ const empty = (): Draft => ({
   username: "",
   email: "",
   password: "",
+  temporaryPassword: true,
   role: "staff",
   disabled: false,
   catalogManager: false,
@@ -96,6 +98,7 @@ export function UsersManager({ initial }: { initial: UsersSnapshot }) {
             username: row.username ?? "",
             email: row.email ?? "",
             password: "",
+            temporaryPassword: true,
             role: row.role,
             disabled: row.disabled,
             catalogManager: row.catalogManager,
@@ -131,6 +134,8 @@ export function UsersManager({ initial }: { initial: UsersSnapshot }) {
     setError("");
     const body = {
       ...draft,
+      temporaryPassword:
+        !!draft.password && !ownAccount && draft.temporaryPassword,
       memberships: draft.role === "admin" ? [] : draft.memberships,
       ...(editing ? { id: editing.id, version: editing.version } : {}),
     };
@@ -320,6 +325,17 @@ export function UsersManager({ initial }: { initial: UsersSnapshot }) {
                         : "Pendiente"}
                     </p>
                   </div>
+                )}
+                {row.passwordPolicy?.required && (
+                  <p
+                    className={`mt-2 text-xs ${row.passwordPolicy.blocked ? "font-bold text-red-700" : "text-amber-800"}`}
+                  >
+                    {row.passwordPolicy.blocked
+                      ? "Temporal vencida · requiere nueva contraseña"
+                      : row.passwordPolicy.expiresAt
+                        ? `Cambiar antes del ${new Date(row.passwordPolicy.expiresAt).toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", hour12: false })}`
+                        : "Contraseña temporal · primer ingreso pendiente"}
+                  </p>
                 )}
               </div>
               <div className="space-y-1.5 text-sm text-muted">
@@ -545,6 +561,25 @@ export function UsersManager({ initial }: { initial: UsersSnapshot }) {
                           : "Al menos 8 caracteres. Compartila con la persona para su primer ingreso."}
                       </p>
                       {fieldError("password")}
+                      {!ownAccount && (
+                        <label className="mt-3 flex items-start gap-3 text-sm leading-5">
+                          <input
+                            type="checkbox"
+                            className="mt-1 size-4"
+                            checked={draft.temporaryPassword}
+                            onChange={(e) =>
+                              update({ temporaryPassword: e.target.checked })
+                            }
+                          />
+                          <span>
+                            Contraseña temporal
+                            <span className="mt-1 block text-xs text-muted">
+                              La persona tiene 24 horas desde su primer ingreso
+                              para cambiarla. Después se bloquea el acceso.
+                            </span>
+                          </span>
+                        </label>
+                      )}
                       {ownAccount && (
                         <p className="mt-3 text-xs leading-relaxed text-muted">
                           Si cambiás tu usuario, correo o contraseña, vas a

@@ -17,7 +17,9 @@ export function safeLoginReturn(value: unknown): string {
     const url = new URL(value, "https://kybo.invalid");
     if (url.origin !== "https://kybo.invalid" || url.hash) return "/";
     if (
-      ["/staff/attendance", "/staff/work", "/"].includes(url.pathname) &&
+      ["/staff/attendance", "/staff/work", "/account/password", "/"].includes(
+        url.pathname,
+      ) &&
       !url.search
     )
       return url.pathname;

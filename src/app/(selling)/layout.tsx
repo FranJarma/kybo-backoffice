@@ -7,6 +7,7 @@ import { shellActor } from "@/modules/branches/page-context";
 import { getDb } from "@/db/client";
 import { user } from "@/db/auth-schema";
 import { listAccessibleBranches } from "@/modules/branches/list";
+import { AppError } from "@/lib/errors";
 export default async function SellingLayout({
   children,
 }: {
@@ -16,6 +17,11 @@ export default async function SellingLayout({
   try {
     actor = await shellActor(await requireActor());
   } catch (error) {
+    if (
+      error instanceof AppError &&
+      error.code === "TEMPORARY_PASSWORD_EXPIRED"
+    )
+      redirect("/account/password");
     if (
       typeof error === "object" &&
       error &&

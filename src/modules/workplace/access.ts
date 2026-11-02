@@ -21,11 +21,18 @@ export async function workplaceSchemaReady(db: AppDb | Tx) {
   );
   return result.rows[0]?.ready === true;
 }
-export async function getStoreProfile(db: AppDb | Tx, userId: string) {
-  const available = await db.execute(
-    sql`select to_regclass('public.workplace_store_accounts') is not null as ready`,
-  );
-  if (available.rows[0]?.ready !== true) return null;
+export async function getStoreProfile(
+  db: AppDb | Tx,
+  userId: string,
+  knownReady = false,
+) {
+  // Only reuse a positive check from the same operation; never cache absence.
+  if (!knownReady) {
+    const available = await db.execute(
+      sql`select to_regclass('public.workplace_store_accounts') is not null as ready`,
+    );
+    if (available.rows[0]?.ready !== true) return null;
+  }
   const [profile] = await db
     .select({
       userId: workplaceStoreAccounts.userId,

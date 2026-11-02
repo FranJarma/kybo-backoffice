@@ -32,6 +32,7 @@ import {
 import { lockIdentity } from "@/modules/identity/service";
 import { canonicalHash } from "@/modules/identity/crypto";
 import { assignDay } from "@/modules/attendance/scheduling";
+import { beginTemporaryPasswordLogin } from "@/modules/password-policy/service";
 import { requireParticipant } from "@/modules/attendance/access";
 import { runAttendanceCommand } from "@/modules/attendance/service";
 import {
@@ -197,6 +198,7 @@ export async function authorizeManagement(
         ),
       };
     }
+    await beginTemporaryPasswordLogin(tx, manager.actor.id, now);
     await tx
       .update(limits)
       .set({ failures: 0, windowAt: now, blockedUntil: null })
