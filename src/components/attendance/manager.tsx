@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Fingerprint,
   RefreshCw,
@@ -33,6 +34,7 @@ import type { AttendanceCommand } from "@/modules/attendance/validation";
 import { addDays } from "@/modules/attendance/rules";
 import { AttendanceAttempts } from "./attempts";
 import { useAttendanceQrAttempt } from "./use-qr-attempt";
+import { attendanceQrPath } from "@/modules/attendance/qr-link";
 import "./attendance.css";
 type Mode = "attendance" | "planning" | "settings";
 type Response =
@@ -55,9 +57,13 @@ export function AttendanceManager({
   qrCode?: string;
   personalView?: boolean;
 }) {
+  const router = useRouter();
+  const [verificationReady, setVerificationReady] = useState(
+    mode !== "attendance" || !qrCode,
+  );
   const qr = useAttendanceQrAttempt(
     branchId,
-    mode === "attendance" ? qrCode : undefined,
+    mode === "attendance" && verificationReady ? qrCode : undefined,
   );
   const [response, setResponse] = useState<Response | null>(null),
     [error, setError] = useState(""),
@@ -70,6 +76,32 @@ export function AttendanceManager({
   const active = useRef(false),
     pending = useRef(new AttendanceAttempts()),
     revision = useRef(0);
+  useEffect(() => {
+    if (mode !== "attendance" || !qrCode) return;
+    const abort = new AbortController();
+    void privateRequest<{ ready: boolean; credentials: { id: string }[] }>(
+      "/api/identity",
+      branchId,
+      undefined,
+      abort.signal,
+    )
+      .then((result) => {
+        if (abort.signal.aborted) return;
+        if (!result.ready)
+          throw new Error(
+            "Administración debe habilitar la verificación del celular antes de fichar.",
+          );
+        if (result.credentials.length) setVerificationReady(true);
+        else
+          router.replace(
+            `/onboarding?returnTo=${encodeURIComponent(attendanceQrPath(qrCode))}`,
+          );
+      })
+      .catch((e) => {
+        if (!abort.signal.aborted) setError(e.message);
+      });
+    return () => abort.abort();
+  }, [branchId, mode, qrCode, router]);
   const query = filters ? `?${new URLSearchParams(filters)}` : "";
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -208,6 +240,25 @@ export function AttendanceManager({
       /* The accessible error above remains visible; never claim a saved punch. */
     }
   }
+  if (mode === "attendance" && qrCode && !verificationReady)
+    return (
+      <section className="att-page">
+        {error ? (
+          <div className="att-panel">
+            <p role="alert" className="att-error">
+              {error}
+            </p>
+            <Button variant="outline" onClick={() => window.location.reload()}>
+              Reintentar
+            </Button>
+          </div>
+        ) : (
+          <p className="att-panel" role="status">
+            Comprobando la verificación del celular…
+          </p>
+        )}
+      </section>
+    );
   const data = response?.ready ? response : null,
     manager = data && data.actor.role !== "staff" && !personalView;
   const personal =
