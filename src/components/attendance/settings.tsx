@@ -46,6 +46,9 @@ function SettingsForm({
     [accuracy, setAccuracy] = useState(policy?.maxAccuracyMeters ?? 40),
     [ttl, setTtl] = useState(policy?.codeValidityMinutes ?? 10),
     [enabled, setEnabled] = useState(policy?.enabled ?? false),
+    [requireLocation, setRequireLocation] = useState(
+      policy?.requireLocation !== false,
+    ),
     [stepUp, setStepUp] = useState(policy?.requireStepUp ?? false);
   return (
     <>
@@ -57,6 +60,7 @@ function SettingsForm({
             action: "configure",
             expectedRevision: policy?.revision ?? 0,
             enabled,
+            requireLocation,
             latitude,
             longitude,
             radiusMeters: radius,
@@ -68,82 +72,97 @@ function SettingsForm({
       >
         <section className="att-panel">
           <div className="att-panel-title">
-            <h2>Zona de fichaje</h2>
+            <h2>Ubicación al fichar</h2>
             <MapPin />
           </div>
-          <div className="att-info">
-            <MapPin aria-hidden="true" />
-            <div>
-              <strong>Dirección de la sucursal</strong>
-              {location.loading ? (
-                <p role="status">Consultando la dirección del local…</p>
-              ) : location.error ? (
-                <>
-                  <p role="alert">{location.error}</p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={location.refresh}
-                  >
-                    Volver a cargar dirección
-                  </Button>
-                </>
-              ) : (
-                <p>
-                  {location.data?.address?.address ??
-                    (latitude !== null && longitude !== null
-                      ? "Hay un punto anterior guardado. Centralizá su dirección para editarlo desde la ficha del local."
-                      : "Agregá la dirección y confirmá el punto del mapa para habilitar el fichaje.")}
-                </p>
-              )}
-              <Link
-                href={`/settings/branches?branch=${encodeURIComponent(data.branch.id)}`}
-                className="inline-flex min-h-10 items-center font-semibold text-blue hover:underline"
-              >
-                Configurar dirección del local →
-              </Link>
-            </div>
-          </div>
-          <p>
-            El celular debe estar dentro del radio del punto confirmado, con
-            suficiente precisión.
+          <label className="att-check">
+            <input
+              type="checkbox"
+              checked={requireLocation}
+              disabled={busy}
+              onChange={(event) => setRequireLocation(event.target.checked)}
+            />
+            Exigir cercanía al local
+          </label>
+          <p className="att-subtle">
+            {requireLocation
+              ? "El celular debe estar dentro del radio del punto confirmado, con suficiente precisión."
+              : "Se podrá fichar desde cualquier lugar con QR vigente y verificación del celular. No se pedirá ubicación."}
           </p>
-          <div className="att-form-grid">
-            <Field label="Radio permitido (metros)" required>
-              <input
-                type="number"
-                min={1}
-                max={10000}
-                required
-                value={radius}
-                onChange={(e) => setRadius(Number(e.target.value))}
-              />
-            </Field>
-            <Field
-              label="Precisión máxima (metros)"
-              required
-              hint="Debe ser menor o igual al radio."
-            >
-              <input
-                type="number"
-                min={1}
-                max={Math.min(radius, 1000)}
-                required
-                value={accuracy}
-                onChange={(e) => setAccuracy(Number(e.target.value))}
-              />
-            </Field>
-          </div>
+          {requireLocation && (
+            <>
+              <div className="att-info">
+                <MapPin aria-hidden="true" />
+                <div>
+                  <strong>Dirección de la sucursal</strong>
+                  {location.loading ? (
+                    <p role="status">Consultando la dirección del local…</p>
+                  ) : location.error ? (
+                    <>
+                      <p role="alert">{location.error}</p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={location.refresh}
+                      >
+                        Volver a cargar dirección
+                      </Button>
+                    </>
+                  ) : (
+                    <p>
+                      {location.data?.address?.address ??
+                        (latitude !== null && longitude !== null
+                          ? "Hay un punto anterior guardado. Centralizá su dirección para editarlo desde la ficha del local."
+                          : "Agregá la dirección y confirmá el punto del mapa para habilitar el fichaje.")}
+                    </p>
+                  )}
+                  <Link
+                    href={`/settings/branches?branch=${encodeURIComponent(data.branch.id)}`}
+                    className="inline-flex min-h-10 items-center font-semibold text-blue hover:underline"
+                  >
+                    Configurar dirección del local →
+                  </Link>
+                </div>
+              </div>
+              <div className="att-form-grid">
+                <Field label="Radio permitido (metros)" required>
+                  <input
+                    type="number"
+                    min={1}
+                    max={10000}
+                    required
+                    value={radius}
+                    onChange={(e) => setRadius(Number(e.target.value))}
+                  />
+                </Field>
+                <Field
+                  label="Precisión máxima (metros)"
+                  required
+                  hint="Debe ser menor o igual al radio."
+                >
+                  <input
+                    type="number"
+                    min={1}
+                    max={Math.min(radius, 1000)}
+                    required
+                    value={accuracy}
+                    onChange={(e) => setAccuracy(Number(e.target.value))}
+                  />
+                </Field>
+              </div>
+            </>
+          )}
           <label className="att-check">
             <input
               type="checkbox"
               checked={enabled}
               disabled={
                 busy ||
-                location.loading ||
-                !!location.error ||
-                latitude === null ||
-                longitude === null
+                (requireLocation &&
+                  (location.loading ||
+                    !!location.error ||
+                    latitude === null ||
+                    longitude === null))
               }
               onChange={(e) => setEnabled(e.target.checked)}
             />
@@ -189,7 +208,10 @@ function SettingsForm({
             dispositivos. Estas dos operaciones no requieren ubicación.
           </p>
           <Button
-            disabled={busy || location.loading || !!location.error}
+            disabled={
+              busy ||
+              (requireLocation && (location.loading || !!location.error))
+            }
             className="min-h-12 w-full"
           >
             Guardar configuración

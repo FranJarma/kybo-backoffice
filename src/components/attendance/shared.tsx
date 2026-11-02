@@ -18,6 +18,15 @@ export const kindLabel = {
   resume: "Fin de pausa",
   exit: "Salida",
 };
+export function attendanceOrigin(event: {
+  source: string;
+  locationVerified?: boolean;
+}) {
+  if (event.source === "manual") return "Manual autorizado";
+  return event.locationVerified === false
+    ? "Identidad verificada · Sin validación de ubicación"
+    : "Identidad y ubicación verificadas";
+}
 export function clock(value: string | null | undefined, zone: string) {
   return value
     ? new Intl.DateTimeFormat("es-AR", {

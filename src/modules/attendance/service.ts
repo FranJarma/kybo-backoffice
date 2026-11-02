@@ -26,7 +26,8 @@ import {
 } from "@/modules/identity/crypto";
 import { scheduleInstant } from "@/modules/production/schedule-time";
 import { attendanceCommandSchema } from "./validation";
-import { evaluateLocation } from "./rules";
+import { attendanceLocationEvidence } from "./rules";
+import { attendancePolicyFields } from "./policy";
 import { requireAttendanceManager, requireParticipant } from "./access";
 import { prepareEvents } from "./events";
 import { runSchedulingCommand } from "./scheduling";
@@ -66,7 +67,7 @@ export async function runAttendanceCommand(
     if (command.action === "configure" || command.action === "participant")
       await requireAdministrator(tx, actor);
     const [policy] = await tx
-      .select()
+      .select(attendancePolicyFields)
       .from(attendanceSettings)
       .where(eq(attendanceSettings.branchId, ctx.branchId))
       .for("update");
@@ -200,7 +201,11 @@ export async function runAttendanceCommand(
         policy!.revision,
         now,
       );
-      const evidence = evaluateLocation(policy!, command.location, now);
+      const evidence = attendanceLocationEvidence(
+        policy!,
+        command.location,
+        now,
+      );
       const prepared = await prepareEvents(
         tx,
         ctx,

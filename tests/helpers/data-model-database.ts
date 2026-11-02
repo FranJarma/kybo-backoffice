@@ -119,6 +119,10 @@ export async function createDataModelTestContext(
       await client.exec(
         await readFile("drizzle/0033_temporary_passwords.sql", "utf8"),
       );
+    if (options.attendance || options.branchAddress || options.attendanceAccess)
+      await client.exec(
+        await readFile("drizzle/0034_attendance_location_policy.sql", "utf8"),
+      );
     return {
       ...fixture,
       client,

@@ -91,7 +91,7 @@ export async function saveBranchAddress(
       );
     const ctx = await requireOperationalContext(tx, actor, branchId);
     const [policy] = await tx
-      .select()
+      .select({ revision: attendanceSettings.revision })
       .from(attendanceSettings)
       .where(eq(attendanceSettings.branchId, branchId))
       .for("update");

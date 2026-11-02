@@ -16,6 +16,7 @@ import {
   dateLabel,
   minutes,
   kindLabel,
+  attendanceOrigin,
   type Snapshot,
 } from "./shared";
 export function PersonalAttendance({
@@ -191,8 +192,16 @@ export function PersonalAttendance({
         <div className="att-verification-note">
           <MapPin size={20} />
           <span>
-            <strong>Ubicación al fichar</strong>
-            <small>Se verifica tu cercanía al local en cada marca.</small>
+            <strong>
+              {data.settings?.requireLocation === false
+                ? "Ubicación no requerida"
+                : "Ubicación al fichar"}
+            </strong>
+            <small>
+              {data.settings?.requireLocation === false
+                ? "En esta sucursal podés fichar desde cualquier lugar."
+                : "Se verifica tu cercanía al local en cada marca."}
+            </small>
           </span>
         </div>
       </section>
@@ -224,10 +233,7 @@ export function PersonalAttendance({
                 <div>
                   <strong>{kindLabel[e.kind as keyof typeof kindLabel]}</strong>
                   <small>
-                    {dateLabel(e.businessDate)} ·{" "}
-                    {e.source === "manual"
-                      ? "Manual autorizado"
-                      : "Identidad y ubicación verificadas"}
+                    {dateLabel(e.businessDate)} · {attendanceOrigin(e)}
                     {e.correctionId ? " · Corregido" : ""}
                   </small>
                 </div>

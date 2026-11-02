@@ -44,6 +44,7 @@ export async function GET(request: Request) {
       ...token,
       url,
       now: now.toISOString(),
+      requireLocation: policy.requireLocation,
       qrDataUrl: await QRCode.toDataURL(url, {
         errorCorrectionLevel: "M",
         margin: 4,

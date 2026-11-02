@@ -15,7 +15,7 @@ export const attendanceCommandSchema = z.discriminatedUnion("action", [
     .object({
       action: z.literal("punch"),
       kind: punchKindSchema,
-      location: locationSchema,
+      location: locationSchema.nullable().optional(),
       assignmentId: z.uuid().nullable().optional(),
       verificationId: z.uuid().optional(),
       qrAttemptId: z.uuid().optional(),
@@ -53,6 +53,7 @@ export const attendanceCommandSchema = z.discriminatedUnion("action", [
       action: z.literal("configure"),
       expectedRevision: z.number().int().min(0),
       enabled: z.boolean(),
+      requireLocation: z.boolean().default(true),
       latitude: z.number().finite().min(-90).max(90).nullable(),
       longitude: z.number().finite().min(-180).max(180).nullable(),
       radiusMeters: z.number().int().min(1).max(10000),

@@ -8,7 +8,12 @@ import { privateRequest } from "@/components/identity/client";
 import "./qr.css";
 import { qrClientDeadline, qrSecondsRemaining } from "./qr-clock";
 
-type QrData = { qrDataUrl: string; now: string; expiresAt: string };
+type QrData = {
+  qrDataUrl: string;
+  now: string;
+  expiresAt: string;
+  requireLocation?: boolean;
+};
 export function AttendanceQrScreen({
   branchId,
   branchName,
@@ -132,7 +137,9 @@ export function AttendanceQrScreen({
               ],
               [
                 "Verificá y confirmá",
-                "Validamos tu ubicación y el desbloqueo del celular.",
+                data?.requireLocation === false
+                  ? "Validamos el desbloqueo de tu celular."
+                  : "Validamos tu ubicación y el desbloqueo del celular.",
               ],
             ].map(([title, description], i) => (
               <li key={title}>

@@ -64,6 +64,43 @@ it("does not render administrative settings to an employee", () => {
   expect(html).not.toContain("Latitud");
   expect(html).not.toContain("Vigencia del código");
 });
+it("offers administrators a proximity control that defaults to required", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(AttendanceSettings, {
+      data: { ...snapshot, actor: { ...snapshot.actor, role: "admin" } },
+      busy: false,
+      command: async () => ({ id: "" }),
+    }),
+  );
+  expect(html).toMatch(/checked=""[^>]*\/>Exigir cercanía al local/);
+});
+it("does not claim location was verified for a phone punch made with proximity disabled", () => {
+  const data = {
+    ...snapshot,
+    settings: { ...snapshot.settings, requireLocation: false },
+    events: [
+      {
+        id: "remote-entry",
+        userId: "staff",
+        kind: "entry",
+        source: "phone",
+        locationVerified: false,
+        businessDate: snapshot.today,
+        occurredAt: snapshot.now,
+      },
+    ],
+  } as unknown as AttendanceSnapshot;
+  const html = renderToStaticMarkup(
+    React.createElement(PersonalAttendance, {
+      data,
+      busy: false,
+      onPunch: async () => {},
+    }),
+  );
+  expect(html).toContain("Ubicación no requerida");
+  expect(html).not.toContain("Identidad y ubicación verificadas");
+  expect(html).toContain("Sin validación de ubicación");
+});
 it("offers an explicit choice for an overnight entry and the next daytime shift", () => {
   const data = {
     ...snapshot,
