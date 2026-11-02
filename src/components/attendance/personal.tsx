@@ -2,7 +2,6 @@
 
 import {
   Fingerprint,
-  MapPin,
   LogIn,
   LogOut,
   Coffee,
@@ -10,6 +9,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AttendanceLocationStatus } from "./location-status";
 import {
   Badge,
   clock,
@@ -77,11 +77,22 @@ export function PersonalAttendance({
         </div>
         <p>
           {state === "out"
-            ? "Registrá tu entrada cuando estés en el local."
+            ? data.settings?.requireLocation === false
+              ? "Registrá tu entrada para comenzar la jornada."
+              : "Comprobá tu ubicación y registrá tu entrada."
             : state === "pause"
               ? "Tu pausa sigue abierta. Marcá su fin al volver."
               : "Tu entrada quedó registrada. Marcá las pausas y la salida desde acá."}
         </p>
+        {data.settings?.enabled &&
+          own?.enabled &&
+          (state === "out" || data.current.branchId === data.branch.id) && (
+            <AttendanceLocationStatus
+              scope={`${data.branch.id}:${data.actor.id}:${data.settings.revision}`}
+              policy={data.settings}
+              busy={busy}
+            />
+          )}
         <div className="att-today-shift">
           <span>
             {state === "out" && shifts.length > 1
@@ -186,21 +197,6 @@ export function PersonalAttendance({
             <small>
               Podés usar Face ID o huella; tu celular también puede ofrecer su
               código de desbloqueo.
-            </small>
-          </span>
-        </div>
-        <div className="att-verification-note">
-          <MapPin size={20} />
-          <span>
-            <strong>
-              {data.settings?.requireLocation === false
-                ? "Ubicación no requerida"
-                : "Ubicación al fichar"}
-            </strong>
-            <small>
-              {data.settings?.requireLocation === false
-                ? "En esta sucursal podés fichar desde cualquier lugar."
-                : "Se verifica tu cercanía al local en cada marca."}
             </small>
           </span>
         </div>

@@ -31,19 +31,38 @@ export type ScheduleInput = {
 function invalid(message: string, code = "ATTENDANCE_INVALID"): never {
   throw new AppError(code, message, 409);
 }
+export function locationPolicyConfigured(
+  policy: LocationPolicy,
+): policy is LocationPolicy & { latitude: number; longitude: number } {
+  return (
+    policy.latitude !== null &&
+    policy.longitude !== null &&
+    Number.isFinite(policy.latitude) &&
+    Number.isFinite(policy.longitude) &&
+    policy.radiusMeters > 0 &&
+    policy.maxAccuracyMeters > 0
+  );
+}
+export function locationDistanceMeters(
+  origin: { latitude: number; longitude: number },
+  target: { latitude: number; longitude: number },
+) {
+  const rad = (n: number) => (n * Math.PI) / 180;
+  const dLat = rad(target.latitude - origin.latitude);
+  const dLon = rad(target.longitude - origin.longitude);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(rad(origin.latitude)) *
+      Math.cos(rad(target.latitude)) *
+      Math.sin(dLon / 2) ** 2;
+  return 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(Math.max(0, 1 - a)));
+}
 export function evaluateLocation(
   policy: LocationPolicy,
   evidence: LocationEvidence,
   now: Date,
 ) {
-  if (
-    policy.latitude === null ||
-    policy.longitude === null ||
-    !Number.isFinite(policy.latitude) ||
-    !Number.isFinite(policy.longitude) ||
-    policy.radiusMeters <= 0 ||
-    policy.maxAccuracyMeters <= 0
-  )
+  if (!locationPolicyConfigured(policy))
     invalid(
       "Administración debe configurar la ubicación y el radio de esta sucursal.",
       "ATTENDANCE_NOT_CONFIGURED",
@@ -71,16 +90,7 @@ export function evaluateLocation(
       "La ubicación no tiene suficiente precisión. Probá junto al local y volvé a intentarlo.",
       "LOCATION_ACCURACY",
     );
-  const rad = (n: number) => (n * Math.PI) / 180;
-  const dLat = rad(evidence.latitude - policy.latitude);
-  const dLon = rad(evidence.longitude - policy.longitude);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(rad(policy.latitude)) *
-      Math.cos(rad(evidence.latitude)) *
-      Math.sin(dLon / 2) ** 2;
-  const distanceMeters =
-    6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(Math.max(0, 1 - a)));
+  const distanceMeters = locationDistanceMeters(policy, evidence);
   if (distanceMeters + evidence.accuracy > policy.radiusMeters)
     invalid(
       "No podemos confirmar que estés dentro de la zona del local. Acercate o solicitá ayuda al encargado.",

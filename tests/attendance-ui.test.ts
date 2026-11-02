@@ -64,6 +64,29 @@ it("does not render administrative settings to an employee", () => {
   expect(html).not.toContain("Latitud");
   expect(html).not.toContain("Vigencia del código");
 });
+it("shows proximity feedback before the personal punch action", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(PersonalAttendance, {
+      data: {
+        ...snapshot,
+        settings: {
+          ...snapshot.settings,
+          latitude: 0,
+          longitude: 0,
+          radiusMeters: 100,
+          maxAccuracyMeters: 40,
+          requireLocation: true,
+        },
+      } as unknown as AttendanceSnapshot,
+      busy: false,
+      onPunch: async () => {},
+    }),
+  );
+  expect(html).toContain("Comprobando tu ubicación");
+  expect(html.indexOf("Comprobando tu ubicación")).toBeLessThan(
+    html.indexOf("Registrar entrada"),
+  );
+});
 it("offers administrators a proximity control that defaults to required", () => {
   const html = renderToStaticMarkup(
     React.createElement(AttendanceSettings, {
