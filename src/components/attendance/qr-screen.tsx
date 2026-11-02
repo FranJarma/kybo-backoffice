@@ -100,7 +100,7 @@ export function AttendanceQrScreen({
             width={132}
             height={70}
           />
-          <span>ASISTENCIA DEL EQUIPO</span>
+          <span>Asistencia del equipo</span>
         </div>
         <Button variant="outline" asChild>
           <Link href="/sales">
@@ -109,31 +109,30 @@ export function AttendanceQrScreen({
           </Link>
         </Button>
       </header>
-      <main>
+      <div className="attendance-qr-content">
         <section className="attendance-qr-copy">
           <span className="attendance-qr-branch">
             <Store size={18} />
             {branchName}
           </span>
-          <p className="attendance-qr-eyebrow">TU JORNADA EN KYBO</p>
-          <h1>
-            Escaneá.
-            <br />
-            Verificá.
-            <br />
-            <span>Ya podés fichar.</span>
-          </h1>
-          <p>Usá la cámara de tu celular y continuá con tu cuenta personal.</p>
+          <h1>Escaneá para registrar tu asistencia</h1>
+          <p>
+            Abrí la cámara de tu celular, apuntá al QR y continuá con tu cuenta
+            personal.
+          </p>
           <ol>
             {[
-              ["Abrí tu asistencia", "Si falta sesión, ingresá con tus datos."],
+              [
+                "Ingresá con tu cuenta",
+                "Si ya tenés sesión, seguís directamente.",
+              ],
               [
                 "Elegí entrada, pausa o salida",
                 "Solo aparecen las acciones disponibles.",
               ],
               [
-                "Confirmá desde tu celular",
-                "Verificamos cercanía y el desbloqueo del teléfono.",
+                "Verificá y confirmá",
+                "Validamos tu ubicación y el desbloqueo del celular.",
               ],
             ].map(([title, description], i) => (
               <li key={title}>
@@ -153,7 +152,7 @@ export function AttendanceQrScreen({
           <div className="attendance-qr-status">
             <i className={data && remaining ? "available" : ""} />
             <strong>
-              {data && remaining ? "Código disponible" : "Esperando conexión"}
+              {data && remaining ? "Listo para escanear" : "Esperando conexión"}
             </strong>
             <span>Se actualiza solo</span>
           </div>
@@ -165,7 +164,7 @@ export function AttendanceQrScreen({
                 alt="Escaneá este QR para abrir tu fichaje personal"
                 width={560}
                 height={560}
-                priority
+                loading="eager"
               />
             ) : (
               <div className="attendance-qr-unavailable">
@@ -181,7 +180,7 @@ export function AttendanceQrScreen({
           <div className="attendance-qr-timer">
             <span>
               <Clock3 size={18} />
-              Se renueva en
+              Nuevo código en
             </span>
             <strong>{data && remaining ? `${remaining} s` : "—"}</strong>
             <progress
@@ -192,11 +191,11 @@ export function AttendanceQrScreen({
           </div>
           <p className="attendance-qr-help">
             <ScanLine size={19} />
-            Cada persona ficha con su propia cuenta. El QR no cambia la sesión
-            del puesto.
+            El fichaje se registra en tu celular. La cuenta del puesto sigue
+            abierta.
           </p>
         </section>
-      </main>
+      </div>
     </div>
   );
 }
