@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MapPin, ShieldCheck, Timer } from "lucide-react";
+import { MapPin, ShieldCheck, Smartphone, Timer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useBranchAddress } from "@/components/branches/use-address";
@@ -37,6 +37,9 @@ function SettingsForm({
   command: Command;
 }) {
   const policy = data.settings;
+  const enabledPeople = data.people.filter(
+    (person) => person.active && person.enabled,
+  ).length;
   const location = useBranchAddress(data.branch.id);
   const latitude = location.data?.address?.latitude ?? policy?.latitude ?? null;
   const longitude =
@@ -218,42 +221,71 @@ function SettingsForm({
           </Button>
         </section>
       </form>
-      <section className="att-panel">
-        <h2>Personal habilitado para fichar</h2>
-        <p>
-          Los horarios y permisos operativos de cada cuenta se conservan por
-          separado.
-        </p>
-        {data.people.map((person) => (
-          <div className="att-participant" key={person.id}>
-            <span>
-              <strong>{person.name}</strong>
-              <small>
-                {person.active ? "Cuenta activa" : "Cuenta inactiva"}
-              </small>
-            </span>
-            <input
-              aria-label={`Habilitar fichaje de ${person.name}`}
-              type="checkbox"
-              disabled={busy || !person.active || !policy}
-              checked={person.enabled}
-              onChange={(e) =>
-                void command({
-                  action: "participant",
-                  userId: person.id,
-                  enabled: e.target.checked,
-                }).catch(() => {})
-              }
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setDeviceUser(person.id)}
-            >
-              Dispositivos
-            </Button>
+      <section
+        className="att-panel att-participants"
+        aria-labelledby="attendance-participants-title"
+      >
+        <div className="att-participants-heading">
+          <div>
+            <h2 id="attendance-participants-title">
+              Personal habilitado para fichar
+            </h2>
+            <p>
+              Definí quién puede fichar en esta sucursal y revisá sus
+              dispositivos.
+            </p>
           </div>
-        ))}
+          <span className="att-participants-count">
+            {enabledPeople} {enabledPeople === 1 ? "habilitado" : "habilitados"}
+          </span>
+        </div>
+        <div className="att-participants-list">
+          <div className="att-participants-columns" aria-hidden="true">
+            <span>Persona</span>
+            <span>Fichaje</span>
+            <span>Dispositivos</span>
+          </div>
+          <ul>
+            {data.people.map((person) => (
+              <li className="att-participant" key={person.id}>
+                <div className="att-participant-person">
+                  <strong>{person.name}</strong>
+                  <small>
+                    {person.active ? "Cuenta activa" : "Cuenta inactiva"}
+                  </small>
+                </div>
+                <label className="att-participant-toggle">
+                  <input
+                    aria-label={`Habilitar fichaje de ${person.name}`}
+                    type="checkbox"
+                    role="switch"
+                    disabled={busy || !person.active || !policy}
+                    checked={person.enabled}
+                    onChange={(e) =>
+                      void command({
+                        action: "participant",
+                        userId: person.id,
+                        enabled: e.target.checked,
+                      }).catch(() => {})
+                    }
+                  />
+                  <span data-enabled={person.enabled}>
+                    {person.enabled ? "Habilitado" : "Deshabilitado"}
+                  </span>
+                </label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  aria-label={`Ver dispositivos de ${person.name}`}
+                  onClick={() => setDeviceUser(person.id)}
+                >
+                  <Smartphone aria-hidden="true" />
+                  Dispositivos
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
       </section>
       {deviceUser && (
         <ManagedDevices
