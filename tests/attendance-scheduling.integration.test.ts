@@ -323,7 +323,7 @@ it("preserves original punches and requires a reason for correction approval/rej
     approve: true,
     reason: "Contrasté la hora con el equipo.",
   });
-  const snapshot = await getAttendanceSnapshot(c.db, c.actors.staff);
+  const snapshot = await getAttendanceSnapshot(c.db, c.actors.staff, {}, now);
   expect(snapshot.events[0]).toMatchObject({
     occurredAt: "2026-10-29T12:05:00.000Z",
     originalOccurredAt: "2026-10-29T12:00:00.000Z",
@@ -362,7 +362,8 @@ it("links an unplanned entry to its assigned shift without altering the original
     reason: "Vinculé la jornada planificada.",
   });
   expect(
-    (await getAttendanceSnapshot(c.db, c.actors.staff)).events[0].assignmentId,
+    (await getAttendanceSnapshot(c.db, c.actors.staff, {}, now)).events[0]
+      .assignmentId,
   ).toBe(assignment.id);
   expect(
     (

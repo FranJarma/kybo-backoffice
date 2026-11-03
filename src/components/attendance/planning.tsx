@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Copy, Clock3 } from "lucide-react";
+import { Plus, Copy, Clock3, CalendarRange } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { privateRequest } from "@/components/identity/client";
 import { localSchedule } from "@/modules/production/schedule-time";
 import { addDays } from "@/modules/attendance/rules";
+import { AssignmentPeriodForm } from "./assignment-period-form";
 import {
   Drawer,
   Relation,
@@ -30,7 +31,8 @@ export function AttendancePlanning({
       id?: string;
     } | null>(null),
     [shift, setShift] = useState<string | null>(null),
-    [copy, setCopy] = useState(false);
+    [copy, setCopy] = useState(false),
+    [period, setPeriod] = useState(false);
   const people = data.people.filter((p) => p.active && p.enabled),
     days = Array.from({ length: 7 }, (_, i) => addDays(data.from, i));
   return (
@@ -39,14 +41,29 @@ export function AttendancePlanning({
         <div>
           <h2>Planificación semanal</h2>
           <p>
-            Asigná horarios por persona y día. Podés agregar más de un tramo sin
-            superponerlos.
+            Organizá varios días de una vez o ajustá cada horario desde el
+            calendario.
           </p>
         </div>
-        <Button variant="outline" disabled={busy} onClick={() => setCopy(true)}>
-          <Copy />
-          Copiar semana anterior
-        </Button>
+        <div className="att-planning-actions">
+          <Button
+            variant="outline"
+            disabled={busy}
+            onClick={() => setCopy(true)}
+          >
+            <Copy /> Copiar semana anterior
+          </Button>
+          <Button
+            disabled={
+              busy ||
+              !people.length ||
+              !data.shifts.some((shift) => shift.active)
+            }
+            onClick={() => setPeriod(true)}
+          >
+            <CalendarRange /> Asignar varios días
+          </Button>
+        </div>
       </div>
       <section className="att-panel att-no-padding">
         <div className="att-table-wrap">
@@ -162,6 +179,14 @@ export function AttendancePlanning({
           command={command}
           busy={busy}
           onClose={() => setEdit(null)}
+        />
+      )}
+      {period && (
+        <AssignmentPeriodForm
+          data={data}
+          busy={busy}
+          command={command}
+          onClose={() => setPeriod(false)}
         />
       )}
       {shift && (

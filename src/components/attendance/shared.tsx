@@ -69,12 +69,14 @@ export function Drawer({
   children,
   onClose,
   busy = false,
+  className,
 }: {
   title: string;
   description: string;
   children: ReactNode;
   onClose: () => void;
   busy?: boolean;
+  className?: string;
 }) {
   const error = useContext(AttendanceErrorContext);
   return (
@@ -87,7 +89,7 @@ export function Drawer({
       <Primitive.Portal>
         <Primitive.Overlay className="att-overlay" />
         <Primitive.Content
-          className="att-drawer"
+          className={`att-drawer${className ? ` ${className}` : ""}`}
           onEscapeKeyDown={(e) => {
             if (busy) e.preventDefault();
           }}

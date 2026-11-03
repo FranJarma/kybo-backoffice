@@ -48,6 +48,203 @@
   align-items: center;
   gap: 8px;
 }
+.att-planning-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.att-planning-actions button {
+  min-height: 44px;
+}
+.att-drawer.att-period-drawer {
+  width: min(700px, 100%);
+}
+.att-period-shift {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 14px 16px;
+  font-size: 14px;
+}
+.att-period-shift svg {
+  color: var(--blue);
+}
+.att-period-shift span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.att-period-dates {
+  display: grid;
+  gap: 18px;
+  border-top: 1px solid var(--line);
+  padding-top: 24px;
+}
+.att-period-section-title {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.att-period-section-title svg {
+  color: var(--blue);
+}
+.att-period-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.att-period-shortcuts button {
+  min-height: 40px;
+}
+.att-period-weekdays legend {
+  font-size: 13px;
+  font-weight: 650;
+  margin-bottom: 10px;
+}
+.att-period-weekdays > div {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+.att-period-weekdays label {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 46px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: white;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.att-period-weekdays input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.att-period-weekdays label:has(input:checked) {
+  background: #edf4ff;
+  border-color: var(--blue);
+  color: var(--blue);
+}
+.att-period-weekdays label:focus-within {
+  outline: 2px solid var(--blue);
+  outline-offset: 3px;
+}
+.att-period-weekdays label:has(input:disabled) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.att-period-dates > p {
+  font-size: 12px;
+}
+.att-period-preview {
+  border-top: 1px solid var(--line);
+  padding-top: 24px;
+}
+.att-period-preview-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.att-period-preview-heading p {
+  font-size: 12px;
+  margin-top: 6px;
+}
+.att-period-counts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+.att-period-counts strong {
+  background: #e9f7f1;
+  color: #08735b;
+  border-radius: 6px;
+  padding: 7px 10px;
+}
+.att-period-counts span {
+  color: var(--muted);
+}
+.att-period-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  max-height: 280px;
+  overflow: auto;
+}
+.att-period-rows li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px 16px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--line);
+}
+.att-period-rows li:last-child {
+  border-bottom: 0;
+}
+.att-period-rows time {
+  flex-shrink: 0;
+  font-weight: 650;
+}
+.att-period-rows span {
+  color: #08735b;
+  text-align: right;
+}
+.att-period-rows li[data-skipped] {
+  background: #f8fafc;
+}
+.att-period-rows li[data-skipped] span {
+  color: var(--muted);
+}
+.att-period-preview > p {
+  font-size: 12px;
+}
+.att-period-result {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  border: 1px solid #cce9df;
+  border-radius: 12px;
+  background: #f0faf6;
+  padding: 20px;
+}
+.att-period-result svg {
+  flex-shrink: 0;
+  color: #08735b;
+}
+.att-period-result strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 15px;
+}
+.att-period-result p {
+  font-size: 12px;
+  margin-top: 6px;
+}
+@media (max-width: 480px) {
+  .att-period-weekdays > div {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .att-planning-actions {
+    width: 100%;
+  }
+  .att-planning-actions button {
+    flex: 1 1 100%;
+  }
+}
 .att-tabs {
   display: flex;
   gap: 24px;

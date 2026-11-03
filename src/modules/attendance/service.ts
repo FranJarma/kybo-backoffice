@@ -158,9 +158,13 @@ export async function runAttendanceCommand(
     if (command.action !== "punch" && !ownCorrection)
       requireAttendanceManager(ctx);
     if (
-      ["punch", "requestManual", "redeemManual", "assign"].includes(
-        command.action,
-      )
+      [
+        "punch",
+        "requestManual",
+        "redeemManual",
+        "assign",
+        "assignPeriod",
+      ].includes(command.action)
     )
       await requireParticipant(tx, ctx.branchId, subjectId);
     if (command.action === "approveManual" || command.action === "rejectManual")
