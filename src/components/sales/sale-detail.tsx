@@ -1,4 +1,5 @@
 "use client";
+import { OrderPrinting } from "@/components/printing/order-printing";
 import { Ban, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { money } from "@/components/inventory/shared";
@@ -134,6 +135,7 @@ export function SaleDetailPanel({
         />
       </section>
       <aside className="min-w-0 space-y-4">
+        <OrderPrinting key={sale.id} saleId={sale.id} actorId={actorId} />
         <section className="rounded-xl border border-line p-4">
           <h3 className="text-sm font-bold text-brand">Resumen de la venta</h3>
           <dl className="mt-4 space-y-3 text-sm">

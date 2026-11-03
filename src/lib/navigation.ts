@@ -256,6 +256,14 @@ export const navigation = [
     access: "admin",
   },
   {
+    id: "printing-settings",
+    area: "Configuración",
+    label: "Impresión de comandas",
+    href: "/settings/printing",
+    icon: "ListChecks",
+    access: "admin",
+  },
+  {
     id: "attendance-settings",
     area: "Configuración",
     label: "Configuración de asistencia",
