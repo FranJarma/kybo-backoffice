@@ -4,6 +4,7 @@ import type { Tx } from "@/db/types";
 import type { Actor } from "@/lib/access";
 import { requireCatalogAccess } from "@/lib/access";
 import { productionOrders } from "@/db/production-order-schema";
+import { productionBatches } from "@/db/production-schema";
 import { recipeVersions } from "@/db/recipe-schema";
 import { locations, branchMemberships } from "@/db/branch-schema";
 import { user, operationalUsers } from "@/db/auth-schema";
@@ -83,9 +84,19 @@ export async function listProductionOrders(
     )
     .innerJoin(locations, eq(locations.id, productionOrders.locationId))
     .leftJoin(user, eq(user.id, productionOrders.assignedTo))
+    // Direct batch registrations use an internal order for their stock movements.
+    // Their history belongs to the batch list, not the assigned-order workflow.
+    .leftJoin(
+      productionBatches,
+      and(
+        eq(productionBatches.id, productionOrders.id),
+        eq(productionBatches.branchId, productionOrders.branchId),
+      ),
+    )
     .where(
       and(
         eq(productionOrders.branchId, actor.branchId!),
+        isNull(productionBatches.id),
         personalDepot
           ? depot
             ? eq(productionOrders.locationId, depot.id)

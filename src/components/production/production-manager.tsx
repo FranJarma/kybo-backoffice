@@ -4,24 +4,26 @@ import { FieldCaption } from "@/components/ui/field-caption";
 import { OperationAlert } from "@/components/ui/operation-alert";
 import { decimal, integer } from "@/modules/inventory/decimal";
 import { consumptionQuantity } from "@/modules/recipes/waste";
-
 import { paths } from "@/lib/navigation";
 import { ProductionOrdersPanel } from "./orders-panel";
+import { PreparationPicker } from "./preparation-picker";
+import { SearchCombobox } from "@/components/ui/search-combobox";
 import { LocationSelect } from "@/components/branches/location-select";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useId, useState, type FormEvent } from "react";
+import { Tabs } from "radix-ui";
 import Link from "next/link";
 import {
-  ChefHat,
   CircleCheck,
   AlertTriangle,
   PackageCheck,
-  Search,
   History,
   ArrowRight,
   RefreshCw,
+  ClipboardList,
+  Plus,
+  BookOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -45,7 +47,7 @@ import {
   SummaryLine,
   unitLabel,
 } from "@/components/recipes/shared";
-import type { RecipeDetail, RecipeList } from "@/modules/recipes/types";
+import type { RecipeDetail } from "@/modules/recipes/types";
 import type {
   BatchDetail,
   BatchSummary,
@@ -53,6 +55,7 @@ import type {
   ProductionOperation,
   ProductionPreview,
 } from "@/modules/production/types";
+import styles from "./production.module.css";
 
 export function ProductionManager({
   actorId,
@@ -63,481 +66,374 @@ export function ProductionManager({
   timeZone: string;
   initialRecipe?: string;
 }) {
-  const [mode, setMode] = useState<"plan" | "record">("plan");
-  const [list, setList] = useState<RecipeList>({ rows: [], total: 0 }),
-    [search, setSearch] = useState(""),
-    [offset, setOffset] = useState(0);
-  const [selectedId, setSelectedId] = useState(initialRecipe),
-    [recipe, setRecipe] = useState<RecipeDetail | null>(null),
-    [refresh, setRefresh] = useState(0);
-  const [loading, setLoading] = useState(true),
-    [recipeLoading, setRecipeLoading] = useState(!!initialRecipe),
-    [error, setError, errorAttempt] = useErrorFeedback();
-  const [saved, setSaved] = useState<BatchDetail | null>(null),
-    [history, setHistory] = useState<{ rows: BatchSummary[]; total: number }>({
-      rows: [],
-      total: 0,
-    }),
-    [historyOffset, setHistoryOffset] = useState(0);
+  const [mode, setMode] = useState("plan");
+  const [creating, setCreating] = useState(!!initialRecipe);
+  const [planRecipe, setPlanRecipe] = useState<RecipeDetail | null>(null);
+  const [recordRecipe, setRecordRecipe] = useState<RecipeDetail | null>(null);
+  const [planRecipeReady, setPlanRecipeReady] = useState(false);
+  const [recordRecipeReady, setRecordRecipeReady] = useState(false);
+  const [orderBusy, setOrderBusy] = useState(false);
+  const [refresh, setRefresh] = useState(0);
+  const [historyRefresh, setHistoryRefresh] = useState(0);
+  const [saved, setSaved] = useState<BatchDetail | null>(null);
+  const [history, setHistory] = useState<{
+    rows: BatchSummary[];
+    total: number;
+  }>({ rows: [], total: 0 });
+  const [historyOffset, setHistoryOffset] = useState(0);
+  const [historyLoading, setHistoryLoading] = useState(true);
   const [historyError, setHistoryError, historyErrorAttempt] =
-      useErrorFeedback(),
-    [batch, setBatch] = useState<BatchDetail | null>(null),
-    [batchLoading, setBatchLoading] = useState(false);
+    useErrorFeedback();
+  const [batch, setBatch] = useState<BatchDetail | null>(null);
+  const [batchLoading, setBatchLoading] = useState(false);
   const onSaved = useCallback((result: unknown) => {
     setSaved(result as BatchDetail);
-    setRecipe(null);
-    setSelectedId("");
     setHistoryOffset(0);
     setRefresh((n) => n + 1);
+    setHistoryRefresh((n) => n + 1);
   }, []);
   const operation = useOperation<ProductionOperation>(
     actorId,
     "production",
     onSaved,
   );
+  const locked = operation.locked || orderBusy;
   useEffect(() => {
+    if (mode !== "history") return;
     let live = true;
-    const timer = setTimeout(
-      () => {
-        setLoading(true);
-        getJson<RecipeList>(
-          `/api/recipes?kind=preparation&q=${encodeURIComponent(search)}&offset=${offset}`,
-        )
-          .then((data) => {
-            if (live) {
-              setList(data);
-              setError("");
-            }
-          })
-          .catch((e) => {
-            if (live) setError(e.message);
-          })
-          .finally(() => {
-            if (live) setLoading(false);
-          });
-      },
-      search ? 200 : 0,
-    );
+    getJson<{ rows: BatchSummary[]; total: number }>(
+      `/api/production?offset=${historyOffset}`,
+    )
+      .then((data) => {
+        if (live) {
+          setHistory(data);
+          setHistoryError("");
+        }
+      })
+      .catch((error) => {
+        if (live) setHistoryError(error.message);
+      })
+      .finally(() => {
+        if (live) setHistoryLoading(false);
+      });
     return () => {
       live = false;
-      clearTimeout(timer);
     };
-  }, [search, offset, refresh, setError]);
-  useEffect(() => {
-    let live = true;
-    const timer = setTimeout(() => {
-      setRecipe(null);
-      if (!selectedId) {
-        setRecipeLoading(false);
-        return;
-      }
-      setRecipeLoading(true);
-      getJson<RecipeDetail>(`/api/recipes/${selectedId}`)
-        .then((data) => {
-          if (live) {
-            if (data.kind !== "preparation" || data.archived)
-              throw new Error("Seleccioná una preparación activa.");
-            setRecipe(data);
-            setError("");
-          }
-        })
-        .catch((e) => {
-          if (live) setError(e.message);
-        })
-        .finally(() => {
-          if (live) setRecipeLoading(false);
-        });
-    }, 0);
-    return () => {
-      live = false;
-      clearTimeout(timer);
-    };
-  }, [selectedId, refresh, setError]);
-  useEffect(() => {
-    let live = true;
-    const timer = setTimeout(() => {
-      getJson<{ rows: BatchSummary[]; total: number }>(
-        `/api/production?offset=${historyOffset}`,
-      )
-        .then((data) => {
-          if (live) {
-            setHistory(data);
-            setHistoryError("");
-          }
-        })
-        .catch((e) => {
-          if (live) setHistoryError(e.message);
-        });
-    }, 0);
-    return () => {
-      live = false;
-      clearTimeout(timer);
-    };
-  }, [refresh, historyOffset, setHistoryError]);
+  }, [mode, historyRefresh, historyOffset, setHistoryError]);
   async function showBatch(id: string) {
     setBatchLoading(true);
-    setBatch(null);
     try {
       setBatch(await getJson<BatchDetail>(`/api/production/${id}`));
-    } catch (e) {
+    } catch (error) {
       setHistoryError(
-        e instanceof Error ? e.message : "No pudimos cargar el lote.",
+        error instanceof Error ? error.message : "No pudimos cargar el lote.",
       );
     } finally {
       setBatchLoading(false);
     }
   }
   return (
-    <div>
-      <div className="page-heading">
+    <div className={styles.workspace}>
+      <header className={styles.heading}>
         <div>
-          <h1 className="page-title">Registro de producción</h1>
-          <p className="page-description">
-            Registrá artículos consumidos y rendimiento real de cada lote.
+          <p className={styles.kicker}>Preparaciones e inventario</p>
+          <h1>Registro de producción</h1>
+          <p>
+            Organizá las preparaciones y registrá lo que realmente se produce.
           </p>
         </div>
-        <Button variant="outline" asChild>
-          <Link href={paths["recipes"]}>
-            Ver recetas
-            <ArrowRight />
-          </Link>
-        </Button>
-      </div>
-      {(error || operation.error) && (
-        <>
-          <OperationAlert
-            eventKey={error ? errorAttempt : operation.errorAttempt}
-            tone="error"
-            title="No pudimos completar la operación"
-            message={error || operation.error}
-          />
-          {operation.uncertain ? (
-            <div
-              role="status"
-              className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"
-            >
-              <p>El resultado del envío está pendiente de confirmar.</p>
-              <Button
-                className="mt-3"
-                variant="outline"
-                disabled={operation.busy}
-                onClick={operation.retry}
-              >
-                Reintentar mismo envío
-              </Button>
-            </div>
-          ) : error ? (
-            <Button
-              className="mt-3"
-              variant="outline"
-              onClick={() => setRefresh((n) => n + 1)}
-            >
-              Reintentar carga
-            </Button>
-          ) : null}
-        </>
-      )}
-      <div
-        className="mb-5 flex gap-6 border-b border-line"
-        aria-label="Modo de producción"
-      >
-        {(
-          [
-            ["plan", "Planificar y asignar"],
-            ["record", "Registrar lote ya producido"],
-          ] as const
-        ).map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            aria-pressed={mode === value}
-            disabled={operation.locked}
-            className={`border-b-2 px-1 py-3 text-sm ${mode === value ? "border-blue-600 text-blue-600" : "border-transparent text-muted"}`}
+        <div className={styles.headingActions}>
+          <Button variant="outline" asChild>
+            <Link href={paths["recipes"]}>
+              <BookOpen size={17} /> Ver recetas
+            </Link>
+          </Button>
+          <Button
+            disabled={locked}
             onClick={() => {
-              setMode(value);
-              setSaved(null);
+              setMode("plan");
+              setCreating(true);
             }}
           >
-            {label}
-          </button>
-        ))}
-      </div>
-      {saved ? (
-        <section className="surface-panel mb-6 p-6">
-          <div className="mb-4 flex items-center gap-3">
-            <CircleCheck className="text-emerald-600" />
-            <h2 className="text-xl font-bold" role="status">
-              Producción registrada
-            </h2>
-          </div>
-          <p className="text-sm text-muted">
-            Se descontaron los artículos y se ingresaron{" "}
-            {quantity(saved.actualOutput, saved.baseUnit)} de {saved.outputName}
-            .
-          </p>
-          <div className="my-4 grid gap-x-6 sm:grid-cols-3">
-            <dl>
-              <SummaryLine label="Costo total" value={money(saved.totalCost)} />
-            </dl>
-            <dl>
-              <SummaryLine
-                label="Lote"
-                value={saved.lotCode ?? saved.id.slice(0, 8)}
-              />
-            </dl>
-            <dl>
-              <SummaryLine
-                label="Receta"
-                value={`Versión ${saved.recipeRevision}`}
-              />
-            </dl>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Button
-              onClick={() => {
-                setSaved(null);
-                setSelectedId(saved.recipeId);
-              }}
-            >
-              Registrar otro lote
-            </Button>
-            <Button variant="outline" onClick={() => setBatch(saved)}>
-              Ver detalle del lote
-            </Button>
-            <Button variant="outline" asChild>
-              <Link href={paths["inventory"]}>Ver inventario</Link>
-            </Button>
-          </div>
-        </section>
-      ) : (
-        <>
-          <section
-            className="surface-panel mb-5 p-5"
-            aria-label="Elegir preparación"
+            <Plus size={18} /> Nueva producción
+          </Button>
+        </div>
+      </header>
+      {operation.error && (
+        <OperationAlert
+          eventKey={operation.errorAttempt}
+          tone="error"
+          title="No pudimos completar la operación"
+          message={operation.error}
+        />
+      )}
+      {operation.uncertain && (
+        <div
+          role="status"
+          className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"
+        >
+          <p>El resultado del envío está pendiente de confirmar.</p>
+          <Button
+            className="mt-3"
+            variant="outline"
+            disabled={operation.busy}
+            onClick={operation.retry}
           >
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-lg font-bold">
-                {mode === "plan"
-                  ? "¿Qué hay que preparar?"
-                  : "¿Qué preparaste?"}
-              </h2>
-              {(list.total > 6 || search) && (
-                <div className="relative w-full sm:w-64">
-                  <Search
-                    size={16}
-                    className="absolute left-3 top-3.5 text-muted"
-                  />
-                  <Input
-                    type="search"
-                    className="pl-9"
-                    aria-label="Buscar preparación"
-                    placeholder="Buscar preparación…"
-                    value={search}
-                    disabled={operation.locked}
-                    onChange={(e) => {
-                      setSearch(e.target.value);
-                      setOffset(0);
-                    }}
-                  />
+            Reintentar mismo envío
+          </Button>
+        </div>
+      )}
+      <Tabs.Root
+        value={mode}
+        onValueChange={(value) => {
+          if (!locked) setMode(value);
+        }}
+      >
+        <Tabs.List className={styles.tabs} aria-label="Registro de producción">
+          {[
+            { id: "plan", label: "Órdenes", icon: ClipboardList },
+            { id: "record", label: "Registrar lote", icon: PackageCheck },
+            { id: "history", label: "Historial", icon: History },
+          ].map(({ id, label, icon: Icon }) => (
+            <Tabs.Trigger
+              className={styles.tab}
+              value={id}
+              key={id}
+              disabled={locked}
+            >
+              <Icon size={18} />
+              {label}
+            </Tabs.Trigger>
+          ))}
+        </Tabs.List>
+        <Tabs.Content
+          value={mode === "history" ? "history" : "plan"}
+          forceMount
+          className={styles.panel}
+        >
+          <ProductionOrdersPanel
+            actorId={actorId}
+            recipe={planRecipe}
+            timeZone={timeZone}
+            canManage
+            planningOpen={creating}
+            preparationReady={planRecipeReady}
+            onPlanningClose={() => setCreating(false)}
+            planningPicker={
+              <PreparationPicker
+                initialRecipe={planRecipe?.id ?? initialRecipe}
+                onChange={setPlanRecipe}
+                onReadyChange={setPlanRecipeReady}
+                disabled={locked}
+              />
+            }
+            onBusy={setOrderBusy}
+            externallyLocked={operation.locked}
+            fixedScope={mode === "history" ? "history" : "active"}
+          />
+          <div hidden={mode !== "history"}>
+            {" "}
+            <section
+              className={styles.historySection}
+              aria-label="Lotes registrados"
+            >
+              <header className={styles.ordersHeading}>
+                <div>
+                  <h2>Lotes registrados</h2>
+                  <p>
+                    Consumos, rendimiento y costos de las producciones ya
+                    ingresadas al inventario.
+                  </p>
+                </div>
+                <span className={styles.status}>{history.total} lotes</span>
+              </header>
+              {historyError && (
+                <OperationAlert
+                  eventKey={historyErrorAttempt}
+                  tone="error"
+                  title="No pudimos cargar las producciones"
+                  message={historyError}
+                />
+              )}
+              {historyError && (
+                <Button
+                  className="m-4"
+                  variant="outline"
+                  onClick={() => {
+                    setHistoryLoading(true);
+                    setHistoryRefresh((n) => n + 1);
+                  }}
+                >
+                  Reintentar
+                </Button>
+              )}
+              {historyLoading ? (
+                <p role="status" className="p-6 text-sm text-muted">
+                  Cargando lotes…
+                </p>
+              ) : !history.rows.length ? (
+                <div className={styles.empty}>
+                  <History />
+                  <h3>Todavía no hay lotes registrados</h3>
+                  <p>
+                    Los lotes cargados desde Registrar lote aparecerán acá con
+                    su rendimiento y sus consumos.
+                  </p>
+                </div>
+              ) : (
+                <ul className="divide-y divide-line">
+                  {history.rows.map((row) => (
+                    <li key={row.id}>
+                      <button
+                        type="button"
+                        disabled={batchLoading}
+                        className={styles.historyRow}
+                        onClick={() => void showBatch(row.id)}
+                        aria-label={`Ver lote ${row.lotCode ?? row.id.slice(0, 8)}`}
+                      >
+                        <PackageCheck size={24} />
+                        <span className="min-w-0 flex-1">
+                          <span className={styles.historyTitle}>
+                            {row.outputName}
+                          </span>
+                          <span className={styles.historyInfo}>
+                            {date(row.producedOn)} · {row.actorName} ·{" "}
+                            {row.lotCode ?? row.id.slice(0, 8)}
+                          </span>
+                        </span>
+                        <span className={styles.historyAmount}>
+                          {quantity(row.actualOutput, row.baseUnit)}
+                          <span className={styles.historyInfo}>
+                            {money(row.totalCost)}
+                          </span>
+                        </span>
+                        <ArrowRight size={16} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {history.total > 50 && (
+                <div className={styles.pagination}>
+                  <span>
+                    Lotes {historyOffset + 1}–
+                    {Math.min(historyOffset + 50, history.total)} de{" "}
+                    {history.total}
+                  </span>
+                  <div>
+                    <Button
+                      variant="outline"
+                      disabled={!historyOffset || locked}
+                      onClick={() => {
+                        setHistoryLoading(true);
+                        setHistoryOffset((n) => n - 50);
+                      }}
+                    >
+                      Página anterior
+                    </Button>
+                    <Button
+                      variant="outline"
+                      disabled={historyOffset + 50 >= history.total || locked}
+                      onClick={() => {
+                        setHistoryLoading(true);
+                        setHistoryOffset((n) => n + 50);
+                      }}
+                    >
+                      Página siguiente
+                    </Button>
+                  </div>
                 </div>
               )}
-            </div>
-            {loading ? (
-              <p className="text-sm text-muted" role="status">
-                Cargando preparaciones…
-              </p>
-            ) : !list.rows.length ? (
-              <div className="py-5 text-sm text-muted">
-                <p>
-                  {search
-                    ? "No encontramos esa preparación."
-                    : "Todavía no hay recetas de preparaciones."}
-                </p>
-                <Link
-                  className="mt-2 inline-block font-semibold text-blue-700 underline"
-                  href={paths["recipes"]}
-                >
-                  Crear una receta base
-                </Link>
-              </div>
-            ) : (
-              <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
-                {list.rows.map((row) => (
-                  <button
-                    key={row.id}
-                    type="button"
-                    disabled={operation.locked || row.archived}
-                    aria-pressed={selectedId === row.id}
-                    aria-label={`Seleccionar ${row.name}`}
-                    className={`flex min-h-20 items-center gap-3 rounded-xl border p-4 text-left text-sm transition-colors disabled:opacity-50 ${selectedId === row.id ? "border-blue-500 bg-blue-50 ring-1 ring-blue-100" : "border-line hover:bg-surface"}`}
-                    onClick={() => {
-                      if (row.id === selectedId) {
-                        if (recipe) return;
-                        setRefresh((n) => n + 1);
-                      }
-                      setRecipe(null);
-                      setRecipeLoading(true);
-                      setSelectedId(row.id);
-                      setError("");
-                      operation.clearError();
-                    }}
-                  >
-                    <ChefHat className="shrink-0 text-orange-600" size={24} />
-                    <span className="min-w-0 flex-1 break-words font-semibold">
-                      {row.name}
-                      <span className="mt-1 block text-xs font-normal text-muted">
-                        {row.archived
-                          ? "Archivado"
-                          : `${quantity(row.yieldQuantity, row.baseUnit)} por receta`}
-                      </span>
-                    </span>
-                    <span
-                      className={`flex size-5 shrink-0 items-center justify-center rounded-full border ${selectedId === row.id ? "border-blue-500" : "border-slate-300"}`}
-                    >
-                      {selectedId === row.id && (
-                        <span className="size-3 rounded-full bg-blue-500" />
-                      )}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
-            {list.total > 100 && (
-              <div className="mt-4 flex justify-end gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!offset}
-                  onClick={() => setOffset((n) => n - 100)}
-                >
-                  Anterior
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={offset + 100 >= list.total}
-                  onClick={() => setOffset((n) => n + 100)}
-                >
-                  Siguiente
-                </Button>
-              </div>
-            )}
-          </section>
-          {mode === "plan" && (
-            <ProductionOrdersPanel
-              actorId={actorId}
-              recipe={recipe}
-              timeZone={timeZone}
-              canManage
-            />
-          )}
-          {recipeLoading ? (
-            <p className="surface-panel p-8 text-sm text-muted" role="status">
-              Cargando receta…
-            </p>
-          ) : mode === "record" && recipe ? (
-            <ProductionForm
-              timeZone={timeZone}
-              key={`${recipe.versionId}:${refresh}`}
-              recipe={recipe}
-              locked={operation.locked}
-              operationStatus={operation.status}
-              onConfirm={(data) => operation.submit("/api/production", data)}
-              onReload={() => setRefresh((n) => n + 1)}
-            />
-          ) : mode === "record" && !loading && list.rows.length > 0 ? (
-            <Notice>
-              Elegí una preparación para ingresar sus consumos y el rendimiento
-              del lote.
-            </Notice>
-          ) : null}
-        </>
-      )}
-      <section
-        className="surface-panel mt-7 overflow-hidden"
-        aria-label="Historial de producción"
-      >
-        <div className="flex items-center gap-3 border-b border-line p-5">
-          <History size={19} className="text-blue-600" />
-          <h2 className="text-lg font-bold">Últimas producciones</h2>
-          <span className="ml-auto text-xs text-muted">
-            {history.total} lotes
-          </span>
-        </div>
-        {historyError && (
-          <>
-            <OperationAlert
-              eventKey={historyErrorAttempt}
-              tone="error"
-              title="No pudimos cargar las producciones"
-              message={historyError}
-            />
-            <Button
-              className="m-4"
-              variant="outline"
-              onClick={() => setRefresh((n) => n + 1)}
-            >
-              Reintentar
-            </Button>
-          </>
-        )}
-        {!history.rows.length ? (
-          <p className="p-6 text-sm text-muted">
-            Los lotes registrados aparecerán acá, con sus consumos, costos y
-            responsable.
-          </p>
-        ) : (
-          <ul className="divide-y divide-line">
-            {history.rows.map((row) => (
-              <li key={row.id}>
-                <button
-                  type="button"
-                  disabled={batchLoading}
-                  className="flex w-full flex-wrap items-center gap-3 p-5 text-left hover:bg-surface"
-                  onClick={() => void showBatch(row.id)}
-                  aria-label={`Ver lote ${row.lotCode ?? row.id.slice(0, 8)}`}
-                >
-                  <PackageCheck size={23} className="text-blue-600" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block break-words text-sm font-semibold">
-                      {row.outputName}
-                    </span>
-                    <span className="mt-1 block text-xs text-muted">
-                      {date(row.producedOn)} · {row.actorName} ·{" "}
-                      {row.lotCode ?? row.id.slice(0, 8)}
-                    </span>
-                  </span>
-                  <span className="text-right text-sm font-semibold tabular-nums">
-                    {quantity(row.actualOutput, row.baseUnit)}
-                    <span className="mt-1 block text-xs font-normal text-muted">
-                      {money(row.totalCost)}
-                    </span>
-                  </span>
-                  <ArrowRight size={16} className="text-muted" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        {history.total > 50 && (
-          <div className="flex justify-end gap-2 border-t border-line p-4">
-            <Button
-              variant="outline"
-              disabled={!historyOffset}
-              onClick={() => setHistoryOffset((n) => n - 50)}
-            >
-              Anterior
-            </Button>
-            <Button
-              variant="outline"
-              disabled={historyOffset + 50 >= history.total}
-              onClick={() => setHistoryOffset((n) => n + 50)}
-            >
-              Siguiente
-            </Button>
+            </section>
           </div>
-        )}
-      </section>
+        </Tabs.Content>
+        <Tabs.Content value="record" forceMount className={styles.panel}>
+          <div className={styles.sectionHeading}>
+            <div>
+              <h2>Registrar un lote producido</h2>
+              <p>
+                Para preparaciones hechas sin una orden asignada. Si ya tiene
+                una orden, finalizala desde Órdenes.
+              </p>
+            </div>
+          </div>
+          {saved ? (
+            <section className="surface-panel p-6">
+              <div className="mb-4 flex items-center gap-3">
+                <CircleCheck className="text-emerald-600" />
+                <h2 className="text-lg font-bold" role="status">
+                  Producción registrada
+                </h2>
+              </div>
+              <p className="text-sm text-muted">
+                Se descontaron los insumos y se ingresaron{" "}
+                {quantity(saved.actualOutput, saved.baseUnit)} de{" "}
+                {saved.outputName}.
+              </p>
+              <div className="my-4">
+                <SummaryLine
+                  label="Costo total"
+                  value={money(saved.totalCost)}
+                />
+                <SummaryLine
+                  label="Lote"
+                  value={saved.lotCode ?? saved.id.slice(0, 8)}
+                />
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  onClick={() => {
+                    setSaved(null);
+                    setRefresh((n) => n + 1);
+                  }}
+                >
+                  Registrar otro lote
+                </Button>
+                <Button variant="outline" onClick={() => setBatch(saved)}>
+                  Ver detalle del lote
+                </Button>
+              </div>
+            </section>
+          ) : (
+            <>
+              <section className={styles.recordPicker}>
+                <PreparationPicker
+                  initialRecipe={recordRecipe?.id}
+                  refreshKey={refresh}
+                  onChange={setRecordRecipe}
+                  onReadyChange={setRecordRecipeReady}
+                  disabled={locked}
+                />
+              </section>
+              {recordRecipe ? (
+                <ProductionForm
+                  key={`${recordRecipe.versionId}:${refresh}`}
+                  recipe={recordRecipe}
+                  timeZone={timeZone}
+                  locked={locked || !recordRecipeReady}
+                  operationStatus={operation.status}
+                  onConfirm={(data) =>
+                    operation.submit("/api/production", data)
+                  }
+                  onReload={() => {
+                    setRecordRecipe(null);
+                    setRefresh((n) => n + 1);
+                  }}
+                />
+              ) : (
+                <div className={styles.empty}>
+                  <PackageCheck />
+                  <h3>Elegí qué preparaste</h3>
+                  <p>
+                    La receta completa los insumos previstos. Después podés
+                    ajustar el consumo y la cantidad obtenida.
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+        </Tabs.Content>
+      </Tabs.Root>
       <Dialog
         open={!!batch}
         onOpenChange={(open) => {
@@ -573,6 +469,7 @@ function ProductionForm({
   onConfirm: (data: ProductionOperation) => void;
   onReload: () => void;
 }) {
+  const formId = useId();
   const [multiplier, setMultiplier] = useState("1"),
     [locationId, setLocationId] = useState(""),
     [actual, setActual] = useState(inputDecimal(recipe.yieldQuantity));
@@ -641,6 +538,7 @@ function ProductionForm({
   }
   async function submit(e: FormEvent) {
     e.preventDefault();
+    if (disabled) return;
     setBusy(true);
     invalidate();
     const input: ProductionInput = {
@@ -675,39 +573,65 @@ function ProductionForm({
     }
   }
   return (
-    <form
-      onSubmit={submit}
-      className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(330px,0.8fr)]"
-    >
-      <section className="surface-panel min-w-0 p-5 sm:p-6">
+    <form onSubmit={submit} className={styles.recordForm}>
+      <section className={styles.recordMain}>
         <fieldset disabled={disabled}>
-          <h2 className="mb-4 text-xl font-bold">Datos del lote</h2>
-          <LocationSelect
-            value={locationId}
-            onChange={(value) => {
-              setLocationId(value);
-              invalidate();
-            }}
-            disabled={disabled}
-          />
-          <div className="grid gap-4 sm:grid-cols-2">
+          <h2>Datos y rendimiento</h2>
+          <p className={styles.recordMeta}>
+            {recipe.name} · {date(today(timeZone))} · Hora de la sucursal
+          </p>
+          <div className={styles.formGrid}>
+            <LocationSelect
+              value={locationId}
+              onChange={(value) => {
+                setLocationId(value);
+                invalidate();
+              }}
+              disabled={disabled}
+              label="Lugar de preparación"
+            />
             <Field
-              label="Recetas base"
+              label="Cantidad de tandas"
               value={multiplier}
               onChange={multiply}
               required
-            />
-            <Field
-              label="Fecha de producción"
-              value={date(today(timeZone))}
-              hint="Registro del día · hora de la sucursal"
+              hint={`Una tanda: ${quantity(recipe.yieldQuantity, recipe.baseUnit)}`}
             />
           </div>
+          <div className={styles.yield}>
+            <Field
+              label="Esperado"
+              value={expected ? quantity(expected) : ""}
+              unit={recipe.baseUnit}
+            />
+            <Field
+              label="Producción real"
+              value={actual}
+              onChange={(v) => {
+                invalidate();
+                setActual(v);
+              }}
+              unit={recipe.baseUnit}
+              required
+            />
+          </div>
+          {preview && (
+            <div className="mt-4">
+              <Notice>
+                Diferencia:{" "}
+                <strong>
+                  {quantity(preview.yieldDifference, recipe.baseUnit)}
+                </strong>
+                . El costo se distribuye sobre lo que realmente produjiste.
+              </Notice>
+            </div>
+          )}
           <div className="my-5 border-t border-line" />
           <div className="mb-4">
-            <h2 className="text-xl font-bold">Artículos utilizados</h2>
+            <h2 className="text-xl font-bold">Insumos utilizados</h2>
             <p className="mt-1 text-sm text-muted">
-              Ajustá las cantidades al consumo real de este lote.
+              Cantidades según la receta. Ajustalas si usaste más o menos en
+              este lote.
             </p>
           </div>
           <div>
@@ -722,7 +646,9 @@ function ProductionForm({
               return (
                 <div
                   key={line.id}
-                  className="grid items-center gap-3 border-b border-line py-4 last:border-0 sm:grid-cols-[minmax(0,1fr)_155px]"
+                  className={styles.ingredientRow}
+                  role="group"
+                  aria-label={option?.name ?? `Ingrediente ${i + 1}`}
                 >
                   <div className="min-w-0">
                     <div className="flex items-center gap-3">
@@ -750,22 +676,33 @@ function ProductionForm({
                       </p>
                     )}
                     {(line.optional || line.options.length > 1) && (
-                      <label className="mt-2 block text-xs font-medium">
-                        <FieldCaption
+                      <div className="mt-2 block text-xs font-medium">
+                        <label htmlFor={formId + line.id}>
+                          <FieldCaption
+                            required={!line.optional}
+                            optional={line.optional}
+                          >
+                            Alternativa de producción {i + 1}
+                          </FieldCaption>
+                        </label>
+                        <SearchCombobox
+                          id={formId + line.id}
+                          label={`Alternativa de producción ${i + 1}`}
                           required={!line.optional}
-                          optional={line.optional}
-                        >
-                          Alternativa de producción {i + 1}
-                        </FieldCaption>
-                        <select
-                          className="form-control mt-2"
-                          aria-label={`Alternativa de producción ${i + 1}`}
-                          required={!line.optional}
+                          disabled={disabled}
                           value={selection.optionId ?? ""}
-                          onChange={(e) => {
+                          selectedLabel={option?.name ?? ""}
+                          options={line.options}
+                          onSearch={() => {}}
+                          placeholder={
+                            line.optional
+                              ? "No utilizar o elegir alternativa…"
+                              : "Elegí una alternativa…"
+                          }
+                          onChange={(value) => {
                             invalidate();
                             const chosen = line.options.find(
-                              (o) => o.id === e.target.value,
+                              (o) => o.id === value,
                             );
                             let qty = "0";
                             if (chosen) {
@@ -795,21 +732,12 @@ function ProductionForm({
                               ),
                             );
                           }}
-                        >
-                          {line.optional && (
-                            <option value="">No utilizar</option>
-                          )}
-                          {line.options.map((o) => (
-                            <option value={o.id} key={o.id}>
-                              {o.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                        />
+                      </div>
                     )}
                   </div>
                   <Field
-                    label={`Consumo real ${i + 1}`}
+                    label="Consumo real"
                     value={selection.quantity}
                     unit={option?.baseUnit ?? "g"}
                     disabled={!option}
@@ -827,36 +755,6 @@ function ProductionForm({
               );
             })}
           </div>
-          <div className="mb-5 mt-4 border-t border-line" />
-          <h2 className="mb-4 text-xl font-bold">Rendimiento</h2>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field
-              label="Esperado"
-              value={expected ? quantity(expected) : ""}
-              unit={recipe.baseUnit}
-            />
-            <Field
-              label="Producción real"
-              value={actual}
-              onChange={(v) => {
-                invalidate();
-                setActual(v);
-              }}
-              unit={recipe.baseUnit}
-              required
-            />
-          </div>
-          {preview && (
-            <div className="mt-4">
-              <Notice>
-                Diferencia:{" "}
-                <strong>
-                  {quantity(preview.yieldDifference, recipe.baseUnit)}
-                </strong>
-                . El costo se distribuye sobre lo que realmente produjiste.
-              </Notice>
-            </div>
-          )}
           <div className="mb-5 mt-6 border-t border-line" />
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
@@ -894,9 +792,10 @@ function ProductionForm({
           </label>
         </fieldset>
       </section>
-      <aside className="min-w-0 space-y-4">
-        <section className="surface-panel p-5 sm:p-6">
-          <h2 className="mb-2 text-xl font-bold">Resumen del lote</h2>
+      <aside className={styles.recordAside}>
+        <section className={styles.recordSummary}>
+          <p className={styles.kicker}>Antes de guardar</p>
+          <h2 className="mt-2 mb-2">Resumen del lote</h2>
           <dl>
             <SummaryLine label="Preparación" value={recipe.name} />
             <SummaryLine
@@ -912,7 +811,7 @@ function ProductionForm({
               value={
                 preview
                   ? quantity(preview.actualOutput, recipe.baseUnit)
-                  : "Revisar lote"
+                  : quantity(actual || "0", recipe.baseUnit)
               }
             />
             <SummaryLine
@@ -984,7 +883,7 @@ function ProductionForm({
             .
           </Notice>
         )}
-        <section className="surface-panel space-y-3 p-5">
+        <section className={styles.recordActions}>
           <Button
             className="w-full"
             type="submit"
@@ -1013,8 +912,8 @@ function ProductionForm({
             Guardar lote
           </Button>
           <p className="text-center text-xs leading-relaxed text-muted">
-            Se descontarán los artículos y se sumará el preparado al stock.
-            Revisá los datos antes de guardar.
+            Se descontarán los insumos y se sumará el preparado al stock. Revisá
+            los datos antes de guardar.
           </p>
         </section>
         {recipe.notes && (
