@@ -12,6 +12,7 @@ import {
   ScanLine,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tabs } from "@/components/ui/tabs";
 import {
   privateRequest,
   RequestFailure,
@@ -354,10 +355,9 @@ export function AttendanceManager({
         {data && (
           <>
             {mode === "attendance" && (
-              <>
-                <div
+              <Tabs.Root value={tab} onValueChange={setTab}>
+                <Tabs.List
                   className="att-tabs"
-                  role="tablist"
                   aria-label="Vistas de asistencia"
                 >
                   {[
@@ -369,12 +369,7 @@ export function AttendanceManager({
                         ]
                       : []),
                   ].map(([id, label]) => (
-                    <button
-                      key={id}
-                      role="tab"
-                      aria-selected={tab === id}
-                      onClick={() => setTab(id)}
-                    >
+                    <Tabs.Trigger key={id} value={id} disabled={busy}>
                       {label}
                       {id === "manual" &&
                       data.manualRequests.some(
@@ -388,98 +383,100 @@ export function AttendanceManager({
                           }
                         </span>
                       ) : null}
-                    </button>
+                    </Tabs.Trigger>
                   ))}
-                </div>
-                {tab === "register" && (
-                  <DateFilter data={data} onApply={setFilters} busy={busy} />
-                )}
-                {tab === "personal" && (
-                  <>
-                    <div
-                      className={`att-qr-access ${qr.error ? "att-error" : "att-panel"}`}
-                      role={qr.error ? "alert" : "status"}
-                    >
-                      <div className="att-verification-note">
-                        <ScanLine size={24} />
-                        <span>
-                          <strong>
-                            {qr.opening
-                              ? "Validando el QR del local…"
-                              : qr.attempt
-                                ? "QR del local recibido"
-                                : "Escaneá el QR del local"}
-                          </strong>
-                          <small>
-                            {qr.error ||
-                              (qr.attempt
-                                ? data.settings?.requireLocation === false
-                                  ? "Podés registrar una marca verificando el desbloqueo del celular. Esta sucursal no exige ubicación."
-                                  : "Podés registrar una marca. La ubicación y el desbloqueo se verifican al confirmar."
-                                : "Lo encontrás en la PC o tablet. Se necesita un código vigente para cada entrada, pausa o salida.")}
-                          </small>
-                        </span>
+                </Tabs.List>
+                <Tabs.Content value={tab}>
+                  {tab === "register" && (
+                    <DateFilter data={data} onApply={setFilters} busy={busy} />
+                  )}
+                  {tab === "personal" && (
+                    <>
+                      <div
+                        className={`att-qr-access ${qr.error ? "att-error" : "att-panel"}`}
+                        role={qr.error ? "alert" : "status"}
+                      >
+                        <div className="att-verification-note">
+                          <ScanLine size={24} />
+                          <span>
+                            <strong>
+                              {qr.opening
+                                ? "Validando el QR del local…"
+                                : qr.attempt
+                                  ? "QR del local recibido"
+                                  : "Escaneá el QR del local"}
+                            </strong>
+                            <small>
+                              {qr.error ||
+                                (qr.attempt
+                                  ? data.settings?.requireLocation === false
+                                    ? "Podés registrar una marca verificando el desbloqueo del celular. Esta sucursal no exige ubicación."
+                                    : "Podés registrar una marca. La ubicación y el desbloqueo se verifican al confirmar."
+                                  : "Lo encontrás en la PC o tablet. Se necesita un código vigente para cada entrada, pausa o salida.")}
+                            </small>
+                          </span>
+                        </div>
+                        <p className="att-subtle">
+                          Vas a fichar como <strong>{data.actor.name}</strong>
+                        </p>
                       </div>
-                      <p className="att-subtle">
-                        Vas a fichar como <strong>{data.actor.name}</strong>
-                      </p>
-                    </div>
-                    <PersonalAttendance
+                      <PersonalAttendance
+                        data={data}
+                        busy={busy}
+                        onPunch={punch}
+                      />
+                      <div className="att-personal-footer">
+                        <Button
+                          variant="ghost"
+                          onClick={() => setCorrection(true)}
+                        >
+                          Solicitar corrección de mis fichajes
+                        </Button>
+                        <InstallInstructions />
+                      </div>
+                      <section className="att-panel">
+                        <h2>Mis próximos horarios</h2>
+                        {data.assignments.filter((a) => a.userId === actorId)
+                          .length ? (
+                          data.assignments
+                            .filter((a) => a.userId === actorId)
+                            .map((a) => (
+                              <div className="att-device" key={a.id}>
+                                <strong>
+                                  {dateLabel(a.businessDate)} · {a.name}
+                                </strong>
+                                <span>
+                                  {a.startsAt
+                                    ? `${new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit", timeZone: data.branch.timeZone }).format(new Date(a.startsAt))} – ${new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit", timeZone: data.branch.timeZone }).format(new Date(a.endsAt!))}`
+                                    : "Franco"}
+                                </span>
+                              </div>
+                            ))
+                        ) : (
+                          <p className="att-subtle">
+                            No tenés horarios en el período consultado.
+                          </p>
+                        )}
+                        <DateFilter
+                          data={data}
+                          onApply={setFilters}
+                          busy={busy}
+                        />
+                      </section>
+                    </>
+                  )}
+                  {tab === "register" && manager && (
+                    <AttendanceRegister
                       data={data}
                       busy={busy}
-                      onPunch={punch}
+                      command={execute}
                     />
-                    <div className="att-personal-footer">
-                      <Button
-                        variant="ghost"
-                        onClick={() => setCorrection(true)}
-                      >
-                        Solicitar corrección de mis fichajes
-                      </Button>
-                      <InstallInstructions />
-                    </div>
-                    <section className="att-panel">
-                      <h2>Mis próximos horarios</h2>
-                      {data.assignments.filter((a) => a.userId === actorId)
-                        .length ? (
-                        data.assignments
-                          .filter((a) => a.userId === actorId)
-                          .map((a) => (
-                            <div className="att-device" key={a.id}>
-                              <strong>
-                                {dateLabel(a.businessDate)} · {a.name}
-                              </strong>
-                              <span>
-                                {a.startsAt
-                                  ? `${new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit", timeZone: data.branch.timeZone }).format(new Date(a.startsAt))} – ${new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit", timeZone: data.branch.timeZone }).format(new Date(a.endsAt!))}`
-                                  : "Franco"}
-                              </span>
-                            </div>
-                          ))
-                      ) : (
-                        <p className="att-subtle">
-                          No tenés horarios en el período consultado.
-                        </p>
-                      )}
-                      <DateFilter
-                        data={data}
-                        onApply={setFilters}
-                        busy={busy}
-                      />
-                    </section>
-                  </>
-                )}
-                {tab === "register" && manager && (
-                  <AttendanceRegister
-                    data={data}
-                    busy={busy}
-                    command={execute}
-                  />
-                )}
-                {tab === "manual" && manager && (
-                  <ManualRequests data={data} busy={busy} command={execute} />
-                )}
-              </>
+                  )}
+                  {tab === "manual" && manager && (
+                    <ManualRequests data={data} busy={busy} command={execute} />
+                  )}
+                </Tabs.Content>
+              </Tabs.Root>
             )}
             {mode === "planning" && manager && (
               <>

@@ -251,20 +251,6 @@
   border-bottom: 1px solid var(--line);
   margin: 26px 0;
 }
-.att-tabs > button {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  padding: 14px 0;
-  border-bottom: 3px solid transparent;
-  font-size: 14px;
-  color: var(--muted);
-  font-weight: 650;
-}
-.att-tabs > button[aria-selected="true"] {
-  border-color: var(--accent);
-  color: var(--ink);
-}
 .att-count {
   font-size: 11px;
   background: #fff1df;
@@ -1114,7 +1100,7 @@
   display: flex;
   justify-content: center;
   color: #7589a8;
-  min-height: 36px;
+  min-height: 44px;
 }
 .att-add-shift:hover {
   border-color: var(--blue);

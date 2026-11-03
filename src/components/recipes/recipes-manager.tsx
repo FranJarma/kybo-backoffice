@@ -230,7 +230,7 @@ export function RecipesManager({ actorId }: { actorId: string }) {
             type="button"
             aria-pressed={kind === value}
             disabled={operation.locked}
-            className={`min-h-12 border-b-2 px-4 text-sm font-semibold ${kind === value ? "border-orange-500 text-brand" : "border-transparent text-muted hover:text-brand"}`}
+            className={`min-h-12 border-b-2 px-4 text-sm font-semibold ${kind === value ? "border-blue text-blue" : "border-transparent text-muted hover:text-blue"}`}
             onClick={() => {
               setKind(value);
               setSearch("");

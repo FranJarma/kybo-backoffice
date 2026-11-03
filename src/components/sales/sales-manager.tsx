@@ -908,22 +908,24 @@ export function SalesManager({
       <div className="flex flex-wrap items-center gap-3 border-b border-line">
         <button
           disabled={locked || view === "append"}
+          aria-pressed={showCart}
           onClick={() => {
             if (view !== "new") newSale();
           }}
-          className={`min-h-12 border-b-2 px-3 text-sm font-bold ${showCart ? "border-orange-500 text-brand" : "border-transparent text-muted"}`}
+          className={`min-h-12 border-b-2 px-3 text-sm font-bold ${showCart ? "border-blue text-blue" : "border-transparent text-muted"}`}
         >
           Nueva venta
         </button>
         <button
           disabled={locked || view === "append"}
+          aria-pressed={view === "history"}
           onClick={() => {
             setHistoryOpened(true);
             setReturnView("history");
             setView("history");
             setNotice("");
           }}
-          className={`min-h-12 border-b-2 px-3 text-sm font-bold ${view === "history" ? "border-orange-500 text-brand" : "border-transparent text-muted"}`}
+          className={`min-h-12 border-b-2 px-3 text-sm font-bold ${view === "history" ? "border-blue text-blue" : "border-transparent text-muted"}`}
         >
           Historial
         </button>

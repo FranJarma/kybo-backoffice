@@ -1,5 +1,6 @@
 "use client";
 import { money, quantity } from "@/lib/number-format";
+import { decimal } from "@/modules/inventory/decimal";
 import {
   ProductCostSummary,
   useProductCosts,
@@ -28,6 +29,7 @@ import {
 import { ProductDirectCost } from "@/components/products/direct-cost";
 import { ProductPricePreview } from "@/components/products/price-preview";
 import { ProductPrices } from "@/components/catalog/product-price";
+import { IngredientActions } from "@/components/catalog/ingredient-actions";
 import { ProductCostDetails } from "@/components/products/cost-details";
 import {
   ProductProfitability,
@@ -41,7 +43,6 @@ import {
   ArchiveRestore,
   Box,
   CreditCard,
-  Copy,
   CupSoda,
   Package,
   Pencil,
@@ -73,8 +74,16 @@ import type {
 } from "@/modules/catalog/types";
 
 type Draft = Record<string, string>;
-const formTabClassName =
-  "min-h-11 shrink-0 border-b-2 border-transparent bg-transparent px-1 py-3 text-sm font-medium whitespace-nowrap text-muted transition-colors hover:text-blue aria-selected:border-blue aria-selected:font-semibold aria-selected:text-blue focus-visible:rounded-sm disabled:cursor-not-allowed disabled:text-slate-400 disabled:hover:text-slate-400";
+function priceIssue(value = "") {
+  if (!value.trim()) return "";
+  try {
+    decimal(value, 2);
+    return "";
+  } catch (error) {
+    return error instanceof Error ? error.message : "Revisá este precio.";
+  }
+}
+const formTabClassName = "section-tab";
 const ItemSuppliersTab = dynamic(() =>
   import("@/components/items/suppliers-tab").then((m) => m.ItemSuppliersTab),
 );
@@ -257,6 +266,8 @@ export function CatalogManager({
   const [dropTarget, setDropTarget] = useState<DropPosition | null>(null);
   const [orderNotice, setOrderNotice] = useState("");
   const reorderFocus = useRef<string | null>(null);
+  const formOpener = useRef<HTMLElement | null>(null);
+  const searchInput = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (loading || !reorderFocus.current) return;
     const handle = Array.from(
@@ -435,7 +446,16 @@ export function CatalogManager({
       clearTimeout(timer);
     };
   }, [definition, referenceSearch]);
-  function openForm(row: CatalogRow | null, duplicate = false) {
+  function openForm(
+    row: CatalogRow | null,
+    duplicate = false,
+    opener?: HTMLElement | null,
+  ) {
+    formOpener.current =
+      opener ??
+      (document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null);
     setProductSetup(null);
     setSetupGeneration((n) => n + 1);
     setManualCode(Boolean(row && !duplicate));
@@ -504,6 +524,17 @@ export function CatalogManager({
         "data-next-tab",
       ) === "recipe";
     if (editing === undefined || uploading || saving) return;
+    if (entity === "products") {
+      const invalid = definition.fields.find(
+        (field) =>
+          field.key.startsWith("price") && priceIssue(draft[field.key]),
+      );
+      if (invalid) {
+        setFormError(`${invalid.label}: ${priceIssue(draft[invalid.key])}`);
+        document.getElementById(`${formId}-${invalid.key}`)?.focus();
+        return;
+      }
+    }
     if (entity === "products" && !productSetup) {
       setFormError("Esperá a que cargue la configuración de la sucursal.");
       return;
@@ -590,6 +621,14 @@ export function CatalogManager({
       if (!response.ok) {
         setLoadError(await readError(response));
         return;
+      }
+      if (
+        ingredientsOnly &&
+        document.activeElement
+          ?.closest("[data-catalog-row]")
+          ?.getAttribute("data-catalog-row") === row.id
+      ) {
+        searchInput.current?.focus({ preventScroll: true });
       }
       setRefresh((n) => n + 1);
     } catch {
@@ -688,6 +727,16 @@ export function CatalogManager({
       name: field.key,
       value,
       required: field.required,
+      "aria-invalid":
+        entity === "products" && field.key.startsWith("price")
+          ? !!priceIssue(value)
+          : undefined,
+      "aria-describedby":
+        entity === "products" &&
+        field.key.startsWith("price") &&
+        priceIssue(value)
+          ? `${id}-error`
+          : undefined,
       onChange: (
         event: React.ChangeEvent<
           HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
@@ -787,6 +836,16 @@ export function CatalogManager({
           {field.label}
         </Label>
         {fieldControl(field)}
+        {entity === "products" &&
+          field.key.startsWith("price") &&
+          priceIssue(draft[field.key]) && (
+            <p
+              id={`${formId}-${field.key}-error`}
+              className="text-xs text-destructive"
+            >
+              {priceIssue(draft[field.key])}
+            </p>
+          )}
         {entity === "items" &&
           field.key === "code" &&
           !editing &&
@@ -853,7 +912,9 @@ export function CatalogManager({
   function rowActions(row: CatalogRow) {
     const ArchiveIcon = row.archivedAt ? ArchiveRestore : Archive;
     return (
-      <div className="flex flex-wrap items-center gap-1 md:justify-end">
+      <div
+        className={`flex items-center gap-1 md:justify-end ${ingredientsOnly ? "flex-nowrap" : "flex-wrap"}`}
+      >
         <Button
           size="sm"
           variant="ghost"
@@ -863,32 +924,33 @@ export function CatalogManager({
           <Pencil size={15} aria-hidden="true" />
           Editar
         </Button>
-        {ingredientsOnly && !row.archivedAt && (
+        {ingredientsOnly ? (
+          <IngredientActions
+            name={row.name}
+            archived={!!row.archivedAt}
+            pending={actionId === row.id}
+            onDuplicate={(opener) => openForm(row, true, opener)}
+            onArchive={() => void toggleArchive(row)}
+            onFocusFallback={() =>
+              searchInput.current?.focus({ preventScroll: true })
+            }
+          />
+        ) : (
           <Button
             size="sm"
             variant="ghost"
-            onClick={() => openForm(row, true)}
-            aria-label={`Duplicar ingrediente ${row.name}`}
-            className="text-muted hover:bg-blue-50 hover:text-blue"
+            disabled={actionId === row.id}
+            onClick={() => toggleArchive(row)}
+            className="text-muted hover:bg-slate-100 hover:text-brand"
           >
-            <Copy size={15} aria-hidden="true" />
-            Duplicar
+            <ArchiveIcon size={15} aria-hidden="true" />
+            {actionId === row.id
+              ? "Guardando…"
+              : row.archivedAt
+                ? "Restaurar"
+                : "Archivar"}
           </Button>
         )}
-        <Button
-          size="sm"
-          variant="ghost"
-          disabled={actionId === row.id}
-          onClick={() => toggleArchive(row)}
-          className="text-muted hover:bg-slate-100 hover:text-brand"
-        >
-          <ArchiveIcon size={15} aria-hidden="true" />
-          {actionId === row.id
-            ? "Guardando…"
-            : row.archivedAt
-              ? "Restaurar"
-              : "Archivar"}
-        </Button>
       </div>
     );
   }
@@ -921,7 +983,9 @@ export function CatalogManager({
         </div>
         <Button onClick={() => openForm(null)} className="w-fit" size="lg">
           <Plus size={20} aria-hidden="true" />
-          Nuevo {definition.singular}
+          {entity === "categories"
+            ? "Crear categoría"
+            : `Nuevo ${definition.singular}`}
         </Button>
       </div>
 
@@ -933,6 +997,7 @@ export function CatalogManager({
             className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted"
           />
           <Input
+            ref={searchInput}
             aria-label={`Buscar ${definition.title.toLowerCase()}`}
             placeholder={`Buscar ${definition.singular}…`}
             value={search}
@@ -1059,7 +1124,7 @@ export function CatalogManager({
         ) : (
           <>
             <div className="hidden md:block">
-              <Table>
+              <Table data-density={ingredientsOnly ? "compact" : undefined}>
                 <thead>
                   <tr className="border-b border-line bg-slate-50/80">
                     {definition.columns.map((column) => (
@@ -1231,7 +1296,13 @@ export function CatalogManager({
       >
         {editing !== undefined && (
           <DialogContent
-            className={`gap-0 bg-white p-5 sm:p-8 ${entity === "items" ? "catalog-dialog flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] flex-col overflow-hidden sm:max-w-6xl lg:px-10" : entity === "products" ? "max-h-[96dvh] w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-7xl lg:p-10" : "max-h-[94dvh] overflow-y-auto sm:max-w-5xl lg:p-10"}`}
+            className={`gap-0 bg-white p-5 sm:p-8 ${entity === "items" || entity === "products" ? `catalog-dialog flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] flex-col overflow-hidden ${entity === "products" ? "sm:max-w-7xl" : "sm:max-w-6xl"} lg:px-10` : "max-h-[94dvh] overflow-y-auto sm:max-w-2xl"}`}
+            onCloseAutoFocus={(event) => {
+              if (formOpener.current?.isConnected) {
+                event.preventDefault();
+                formOpener.current.focus({ preventScroll: true });
+              }
+            }}
             onEscapeKeyDown={(event) => {
               if (
                 event.target instanceof HTMLElement &&
@@ -1247,7 +1318,7 @@ export function CatalogManager({
               <DialogTitle className="text-2xl font-bold tracking-tight text-brand">
                 {editing
                   ? `Editar ${definition.singular}`
-                  : `Nuevo ${definition.singular}`}
+                  : `Crear ${definition.singular}`}
               </DialogTitle>
               <DialogDescription className="mt-2 text-sm leading-relaxed text-muted">
                 {copiedFrom
@@ -1476,6 +1547,7 @@ export function CatalogManager({
                 )}
                 {editing && recipeOpened && (
                   <div
+                    className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
                     hidden={productTab === "product"}
                     role="tabpanel"
                     id={`${formId}-panel-recipe`}
@@ -1574,14 +1646,14 @@ export function CatalogManager({
               }
               onSubmit={submit}
               className={
-                entity === "items"
+                entity === "items" || entity === "products"
                   ? "flex min-h-0 flex-1 flex-col"
                   : "space-y-8"
               }
             >
               <div
                 className={
-                  entity === "items"
+                  entity === "items" || entity === "products"
                     ? "catalog-scroll-region min-h-0 space-y-7 overflow-y-auto overscroll-contain px-2 pt-2 pb-6 [scrollbar-gutter:stable]"
                     : "space-y-8"
                 }
@@ -1751,7 +1823,12 @@ export function CatalogManager({
                     <div className="mb-6 mt-3 max-w-md">
                       {definition.fields
                         .filter((field) => field.key === "vatRate")
-                        .map(renderField)}
+                        .map((field) =>
+                          renderField({
+                            ...field,
+                            hint: "Confirmá la alícuota antes de vender.",
+                          }),
+                        )}
                     </div>
                     <p className="mb-4 text-xs leading-5 text-muted">
                       Cargá el precio final que paga el cliente. El IVA se
@@ -1764,25 +1841,42 @@ export function CatalogManager({
                     <div className="grid gap-7 pt-3 lg:grid-cols-3">
                       {(["Counter", "PedidosYa", "UberEats"] as const).map(
                         (channel) => (
-                          <div key={channel} className="min-w-0 space-y-6">
+                          <div
+                            key={channel}
+                            className="min-w-0 space-y-4 rounded-lg border border-line bg-white p-4"
+                          >
                             {priceFields
                               .filter(
                                 (field) =>
                                   field.key === `enabled${channel}` ||
-                                  field.key === `price${channel}`,
+                                  (field.key === `price${channel}` &&
+                                    (channel === "Counter" ||
+                                      draft[`enabled${channel}`] === "true" ||
+                                      !!priceIssue(draft[`price${channel}`]))),
                               )
-                              .map(renderField)}
-                            <ProductPricePreview
-                              price={draft[`price${channel}`] ?? ""}
-                              rate={draft.vatRate ?? ""}
-                              label={
-                                channel === "Counter"
-                                  ? "Mostrador"
-                                  : channel === "PedidosYa"
-                                    ? "PedidosYa"
-                                    : "Uber Eats"
-                              }
-                            />
+                              .map((field) =>
+                                renderField(
+                                  field.key === "priceCounter"
+                                    ? { ...field, hint: undefined }
+                                    : field,
+                                ),
+                              )}
+                            {(channel === "Counter" ||
+                              draft[`enabled${channel}`] === "true") &&
+                              !priceIssue(draft[`price${channel}`]) &&
+                              draft[`price${channel}`]?.trim() && (
+                                <ProductPricePreview
+                                  price={draft[`price${channel}`] ?? ""}
+                                  rate={draft.vatRate ?? ""}
+                                  label={
+                                    channel === "Counter"
+                                      ? "Mostrador"
+                                      : channel === "PedidosYa"
+                                        ? "PedidosYa"
+                                        : "Uber Eats"
+                                  }
+                                />
+                              )}
                           </div>
                         ),
                       )}

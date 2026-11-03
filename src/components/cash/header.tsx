@@ -215,7 +215,8 @@ export function CashHeader({
             openingOnly
             onDismiss={() => {
               setOpening(false);
-              trigger.current?.focus();
+              // Wait for the loading button to become enabled and the portal to close.
+              requestAnimationFrame(() => trigger.current?.focus());
             }}
           />
         </Suspense>

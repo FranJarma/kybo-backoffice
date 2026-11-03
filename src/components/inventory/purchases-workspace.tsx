@@ -3,6 +3,7 @@ import { useCallback, useState } from "react";
 import Link from "next/link";
 import { Plus, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tabs } from "@/components/ui/tabs";
 import { PurchaseOrdersManager } from "./purchase-orders-manager";
 import { PurchasesManager } from "./purchases-manager";
 import { PurchaseNeeds } from "./purchase-needs";
@@ -70,61 +71,60 @@ export function PurchasesWorkspace({
           </Button>
         </div>
       </header>
-      <nav
-        aria-label="Compras"
-        className="flex gap-5 overflow-x-auto border-b border-line sm:gap-8"
+      <Tabs.Root
+        value={tab}
+        className="space-y-6"
+        onValueChange={(id) => {
+          if (locked) return;
+          setTab(id);
+          if (id !== "orders") setDraft(undefined);
+        }}
       >
-        {[
-          ["needs", "Para comprar"],
-          ["orders", "Pedidos"],
-          ["receipts", "Recepciones"],
-        ].map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            disabled={locked}
-            aria-current={tab === id ? "page" : undefined}
-            className={`min-h-12 shrink-0 border-b-2 px-1 pb-3 text-sm transition-colors disabled:opacity-60 ${tab === id ? "border-primary font-bold text-brand" : "border-transparent font-medium text-muted-foreground hover:text-brand"}`}
-            onClick={() => {
-              setTab(id);
-              if (id !== "orders") setDraft(undefined);
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </nav>
-      {initialNotice && (
-        <p role="status" className="rounded-lg bg-blue-50 p-4 text-sm">
-          {initialNotice}
-        </p>
-      )}
-      {tab === "needs" ? (
-        <PurchaseNeeds
-          actorId={actorId}
-          timeZone={timeZone}
-          onPrepare={prepare}
-          initialConfigurationId={initialConfigurationId}
-          onBusy={setLocked}
-        />
-      ) : tab === "orders" ? (
-        <PurchaseOrdersManager
-          key={`orders:${sequence}`}
-          actorId={actorId}
-          timeZone={timeZone}
-          initialOrderId={initialOrderId}
-          initialDraft={draft}
-          embedded
-          onBusy={setLocked}
-        />
-      ) : (
-        <PurchasesManager
-          actorId={actorId}
-          timeZone={timeZone}
-          embedded
-          onBusy={setLocked}
-        />
-      )}
+        <Tabs.List aria-label="Compras">
+          {[
+            ["needs", "Para comprar"],
+            ["orders", "Pedidos"],
+            ["receipts", "Recepciones"],
+          ].map(([id, label]) => (
+            <Tabs.Trigger key={id} value={id} disabled={locked}>
+              {label}
+            </Tabs.Trigger>
+          ))}
+        </Tabs.List>
+        <Tabs.Content value={tab} className="space-y-6">
+          {initialNotice && (
+            <p role="status" className="rounded-lg bg-blue-50 p-4 text-sm">
+              {initialNotice}
+            </p>
+          )}
+          {tab === "needs" ? (
+            <PurchaseNeeds
+              actorId={actorId}
+              timeZone={timeZone}
+              onPrepare={prepare}
+              initialConfigurationId={initialConfigurationId}
+              onBusy={setLocked}
+            />
+          ) : tab === "orders" ? (
+            <PurchaseOrdersManager
+              key={`orders:${sequence}`}
+              actorId={actorId}
+              timeZone={timeZone}
+              initialOrderId={initialOrderId}
+              initialDraft={draft}
+              embedded
+              onBusy={setLocked}
+            />
+          ) : (
+            <PurchasesManager
+              actorId={actorId}
+              timeZone={timeZone}
+              embedded
+              onBusy={setLocked}
+            />
+          )}
+        </Tabs.Content>
+      </Tabs.Root>
     </div>
   );
 }
