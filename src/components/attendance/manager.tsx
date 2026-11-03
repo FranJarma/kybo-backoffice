@@ -176,7 +176,9 @@ export function AttendanceManager({
           ? "Fichaje registrado."
           : command.action === "copyWeek"
             ? `Semana copiada: ${result.copied ?? 0} horarios. Los días ocupados se conservaron.`
-            : "Cambios guardados.",
+            : command.action === "assignPeriod"
+              ? `${result.created ?? 0} horarios agregados. ${result.skipped ?? 0} fechas conservadas.`
+              : "Cambios guardados.",
       );
       try {
         await load();

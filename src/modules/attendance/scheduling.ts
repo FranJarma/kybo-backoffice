@@ -34,6 +34,7 @@ import {
   attendancePolicyFields,
   attendanceLocationSchemaReady,
 } from "./policy";
+import { planAssignmentPeriod } from "./period-planning";
 
 type Result = { id: string; [key: string]: unknown };
 type Assign = Extract<AttendanceCommand, { action: "assign" }>;
@@ -434,6 +435,57 @@ export async function runSchedulingCommand(
     return { id, revision: values.revision };
   }
   if (command.action === "assign") return assignDay(tx, ctx, command, now);
+  if (command.action === "assignPeriod") {
+    const plan = await planAssignmentPeriod(
+      tx,
+      ctx,
+      command,
+      command.expectedShiftRevision,
+    );
+    const additions = plan.rows
+      .filter((row) => row.status === "available")
+      .map((row) => ({
+        id: randomUUID(),
+        branchId: ctx.branchId,
+        userId: command.userId,
+        businessDate: row.businessDate,
+        kind: "work" as const,
+        shiftId: plan.shift.id,
+        name: plan.shift.name,
+        startsAt: new Date(row.startsAt),
+        endsAt: new Date(row.endsAt),
+        pauseMinutes: plan.shift.pauseMinutes,
+        timeZone: ctx.timeZone,
+        revision: 1,
+        reason: "",
+        updatedBy: ctx.actorId,
+        updatedAt: now,
+      }));
+    if (additions.length) {
+      await tx.insert(attendanceAssignments).values(additions);
+      await tx.insert(auditEvents).values(
+        additions.map((values) => ({
+          actorId: ctx.actorId,
+          entity: "attendance_assignment",
+          recordId: values.id,
+          action: "changed",
+          before: null,
+          after: values,
+          createdAt: now,
+        })),
+      );
+    }
+    return {
+      id: randomUUID(),
+      created: additions.length,
+      skipped: plan.rows.length - additions.length,
+      rows: plan.rows.map((row) => ({
+        businessDate: row.businessDate,
+        status: row.status === "available" ? "created" : "skipped",
+        reason: row.reason,
+      })),
+    };
+  }
   if (command.action === "cancelAssignment") {
     const [previous] = await tx
       .select()
