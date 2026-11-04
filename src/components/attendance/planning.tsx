@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { Plus, Copy, Clock3, CalendarRange } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { privateRequest } from "@/components/identity/client";
 import { localSchedule } from "@/modules/production/schedule-time";
 import { addDays } from "@/modules/attendance/rules";
@@ -20,10 +21,12 @@ export function AttendancePlanning({
   data,
   busy,
   command,
+  navigation,
 }: {
   data: Snapshot;
   busy: boolean;
   command: Command;
+  navigation?: ReactNode;
 }) {
   const [edit, setEdit] = useState<{
       userId: string;
@@ -32,17 +35,38 @@ export function AttendancePlanning({
     } | null>(null),
     [shift, setShift] = useState<string | null>(null),
     [copy, setCopy] = useState(false),
-    [period, setPeriod] = useState(false);
+    [period, setPeriod] = useState(false),
+    [search, setSearch] = useState("");
+  const hintId = useId();
   const people = data.people.filter((p) => p.active && p.enabled),
     days = Array.from({ length: 7 }, (_, i) => addDays(data.from, i));
+  const normalize = (value: string) =>
+    value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLocaleLowerCase("es");
+  const visiblePeople = people.filter((person) =>
+    normalize(person.name).includes(normalize(search.trim())),
+  );
+  const assignmentCount = data.assignments.filter(
+    (a) =>
+      days.includes(a.businessDate) &&
+      people.some((person) => person.id === a.userId),
+  ).length;
   return (
-    <>
-      <div className="att-section-bar">
+    <div className="att-planning-workspace">
+      <div className="att-planning-toolbar">
         <div>
-          <h2>Planificación semanal</h2>
-          <p>
-            Organizá varios días de una vez o ajustá cada horario desde el
-            calendario.
+          {navigation ?? <h2>Planificación semanal</h2>}
+          <p className="att-planning-summary">
+            {people.length}{" "}
+            {people.length === 1
+              ? "persona habilitada"
+              : "personas habilitadas"}{" "}
+            · {assignmentCount}{" "}
+            {assignmentCount === 1
+              ? "asignación esta semana"
+              : "asignaciones esta semana"}
           </p>
         </div>
         <div className="att-planning-actions">
@@ -65,29 +89,61 @@ export function AttendancePlanning({
           </Button>
         </div>
       </div>
-      <section className="att-panel att-no-padding">
-        <div className="att-table-wrap">
+      <div className="att-planning-filter">
+        <Input
+          aria-label="Buscar persona en la planificación"
+          placeholder="Buscar en el equipo…"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          disabled={busy}
+        />
+        <p id={hintId}>
+          Seleccioná un horario para editarlo.{" "}
+          <span className="att-calendar-scroll-hint">
+            Deslizá el calendario para ver los siete días.
+          </span>
+        </p>
+      </div>
+      <section className="att-panel att-no-padding" aria-busy={busy}>
+        <div
+          className="att-table-wrap"
+          role="region"
+          aria-label="Calendario semanal del equipo"
+          aria-describedby={hintId}
+          tabIndex={0}
+        >
           <table className="att-calendar">
+            <caption className="sr-only">
+              Planificación del {dateLabel(data.from)} al {dateLabel(data.to)}
+            </caption>
             <thead>
               <tr>
-                <th>Equipo</th>
+                <th scope="col">Equipo</th>
                 {days.map((day) => (
-                  <th key={day}>
+                  <th
+                    key={day}
+                    scope="col"
+                    data-today={day === data.today || undefined}
+                    aria-current={day === data.today ? "date" : undefined}
+                  >
                     {new Intl.DateTimeFormat("es-AR", {
                       weekday: "short",
                       timeZone: "UTC",
                     }).format(new Date(day + "T12:00:00Z"))}
+                    {day === data.today && (
+                      <span className="att-today-label">Hoy</span>
+                    )}
                     <small>{dateLabel(day)}</small>
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {people.map((person) => (
+              {visiblePeople.map((person) => (
                 <tr key={person.id}>
-                  <th>{person.name}</th>
+                  <th scope="row">{person.name}</th>
                   {days.map((day) => (
-                    <td key={day}>
+                    <td key={day} data-today={day === data.today || undefined}>
                       {data.assignments
                         .filter(
                           (a) =>
@@ -97,6 +153,8 @@ export function AttendancePlanning({
                           <button
                             className={`att-shift ${a.kind === "off" ? "off" : ""}`}
                             key={a.id}
+                            disabled={busy}
+                            aria-label={`Editar horario de ${person.name}, ${dateLabel(day)}, ${a.name}`}
                             onClick={() =>
                               setEdit({ userId: person.id, day, id: a.id })
                             }
@@ -116,9 +174,11 @@ export function AttendancePlanning({
                       <button
                         aria-label={`Agregar horario para ${person.name}, ${dateLabel(day)}`}
                         className="att-add-shift"
+                        disabled={busy}
                         onClick={() => setEdit({ userId: person.id, day })}
                       >
                         <Plus size={16} />
+                        <span>Asignar</span>
                       </button>
                     </td>
                   ))}
@@ -127,6 +187,12 @@ export function AttendancePlanning({
             </tbody>
           </table>
         </div>
+        {people.length > 0 && !visiblePeople.length && (
+          <div className="att-empty">
+            <strong>No hay personas que coincidan</strong>
+            <p>Probá con otro nombre.</p>
+          </div>
+        )}
         {!people.length && (
           <div className="att-empty">
             <Clock3 />
@@ -146,7 +212,11 @@ export function AttendancePlanning({
               guardados se conservan.
             </p>
           </div>
-          <Button variant="outline" onClick={() => setShift("new")}>
+          <Button
+            variant="outline"
+            disabled={busy}
+            onClick={() => setShift("new")}
+          >
             <Plus />
             Crear turno
           </Button>
@@ -156,6 +226,7 @@ export function AttendancePlanning({
             <button
               key={s.id}
               className="att-shift"
+              disabled={busy}
               onClick={() => setShift(s.id)}
             >
               <strong>
@@ -206,7 +277,7 @@ export function AttendancePlanning({
           onClose={() => setCopy(false)}
         />
       )}
-    </>
+    </div>
   );
 }
 function CopyWeek({
@@ -332,7 +403,7 @@ function AssignmentForm({
   busy: boolean;
   onClose: () => void;
 }) {
-  const old = data.assignments.find((a) => a.id === edit.id),
+  const [old] = useState(() => data.assignments.find((a) => a.id === edit.id)),
     [userId, setUser] = useState(edit.userId),
     [day, setDay] = useState(edit.day),
     [kind, setKind] = useState<"work" | "off">(old?.kind ?? "work"),
@@ -544,7 +615,7 @@ function ShiftForm({
   busy: boolean;
   onClose: () => void;
 }) {
-  const old = data.shifts.find((s) => s.id === id),
+  const [old] = useState(() => data.shifts.find((s) => s.id === id)),
     [name, setName] = useState(old?.name ?? ""),
     [start, setStart] = useState(old?.start ?? "09:00"),
     [end, setEnd] = useState(old?.end ?? "17:00"),
@@ -578,7 +649,6 @@ function ShiftForm({
       >
         <Field required label="Nombre">
           <input
-            autoFocus
             required
             maxLength={60}
             value={name}

@@ -1,7 +1,7 @@
 .att-page {
   max-width: 1520px;
   margin: 0 auto;
-  padding: 28px 32px 48px;
+  padding: 24px 24px 48px;
   color: var(--ink);
 }
 .att-page h1 {
@@ -9,7 +9,7 @@
   line-height: 1.2;
   letter-spacing: -1px;
   font-weight: 750;
-  margin: 7px 0 10px;
+  margin: 0 0 8px;
 }
 .att-page h2,
 .att-drawer h2 {
@@ -55,6 +55,157 @@
 }
 .att-planning-actions button {
   min-height: 44px;
+}
+.att-ready-content {
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+.att-read-feedback {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+}
+.att-read-feedback > span {
+  flex: 1 1 240px;
+}
+.att-read-progress {
+  margin-bottom: 16px;
+  color: var(--blue) !important;
+}
+.att-planning-workspace {
+  container-type: inline-size;
+}
+.att-planning-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 20px;
+}
+.att-planning-toolbar .att-planning-summary {
+  margin-top: 8px;
+  font-size: 13px;
+}
+.att-planning-filter {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.att-planning-filter > input {
+  max-width: 320px;
+}
+.att-planning-filter > p {
+  font-size: 12px;
+}
+.att-calendar th[data-today] {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+.att-calendar td[data-today] {
+  background: #f8fbff;
+}
+.att-today-label {
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.att-calendar button:disabled,
+.att-shift-templates button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.att-calendar button:focus-visible,
+.att-shift-templates button:focus-visible,
+.att-table-wrap:focus-visible,
+.att-period-preview h3:focus,
+.att-period-result h3:focus {
+  outline: 2px solid var(--blue);
+  outline-offset: 3px;
+}
+.att-context {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.att-qr-access {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+}
+.att-qr-access > svg {
+  flex: none;
+  color: var(--blue);
+}
+.att-qr-access p {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.att-verification-help {
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 13px;
+}
+.att-verification-help summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  cursor: pointer;
+}
+.att-verification-help p {
+  font-size: 12px;
+}
+.att-drawer-footer {
+  flex: none;
+  padding: 16px 24px;
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line);
+  min-width: 0;
+  margin: 0;
+  background: white;
+}
+.att-period-footer {
+  display: grid;
+  gap: 12px;
+}
+.att-period-footer > p {
+  font-size: 12px;
+}
+.att-period-footer > div {
+  display: flex;
+  gap: 12px;
+}
+.att-period-footer button {
+  flex: 1;
+  min-width: 0;
+  height: auto;
+  padding-inline: 12px;
+  white-space: normal;
+  font-size: 13px;
+}
+@container (min-width: 1020px) {
+  .att-calendar-scroll-hint {
+    display: none;
+  }
+}
+@container (max-width: 900px) {
+  .att-planning-toolbar,
+  .att-planning-filter {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+}
+@container (max-width: 600px) {
+  .att-planning-filter > input {
+    max-width: none;
+  }
 }
 .att-drawer.att-period-drawer {
   width: min(700px, 100%);
@@ -274,26 +425,25 @@
   margin-bottom: 24px;
 }
 .att-clock-card {
-  box-shadow: 0 5px 18px #10264a04;
   display: grid;
-  gap: 20px;
-  border-top: 3px solid var(--accent);
+  gap: 12px;
 }
 .att-clock-card h2 {
-  font-size: 28px;
-  letter-spacing: -0.8px;
+  font-size: 21px;
+  letter-spacing: -0.4px;
+  overflow-wrap: anywhere;
 }
 .att-clock-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
   gap: 12px;
 }
 .att-badge {
   display: inline-flex;
   width: fit-content;
   align-items: center;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1.4;
   border-radius: 6px;
@@ -317,7 +467,7 @@
 .att-today-shift {
   display: grid;
   gap: 8px;
-  padding: 16px 18px;
+  padding: 10px 12px;
   background: var(--surface);
   border-radius: 10px;
 }
@@ -386,6 +536,14 @@
   border-color: #c9e6d6;
   background: #edf8f2;
   color: #08735b;
+  grid-template-columns: 22px minmax(0, 1fr) 44px;
+  padding: 12px;
+}
+.att-location-status[data-state="inside"] .att-location-refresh {
+  grid-column: 3;
+  grid-row: 1;
+  width: 44px;
+  padding: 0;
 }
 .att-location-status[data-state="outside"],
 .att-location-status[data-state="inaccurate"],
@@ -601,6 +759,10 @@
   font-size: 13px;
   margin-top: 10px;
 }
+.att-drawer > header .att-drawer-progress {
+  color: var(--blue);
+  font-weight: 650;
+}
 .att-drawer-body {
   padding: 28px;
   overflow: auto;
@@ -609,6 +771,10 @@
   flex-direction: column;
   gap: 24px;
   flex: 1;
+  min-height: 0;
+  min-width: 0;
+  margin: 0;
+  border: 0;
 }
 .att-icon-button {
   padding: 10px;
@@ -1002,7 +1168,7 @@
   white-space: nowrap;
 }
 .att-table th {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 650;
   color: var(--muted);
   padding: 17px 24px;
@@ -1016,7 +1182,7 @@
   display: block;
   color: var(--muted);
   margin-top: 7px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .att-line {
   display: block;
@@ -1040,7 +1206,7 @@
   background: #f8fafd;
   font-size: 12px;
   font-weight: 700;
-  padding: 18px 14px;
+  padding: 12px;
   border-bottom: 1px solid var(--line);
   width: 13%;
 }
@@ -1049,20 +1215,22 @@
 }
 .att-calendar th > small {
   display: block;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--muted);
   margin-top: 6px;
 }
 .att-calendar td {
-  padding: 10px;
+  padding: 8px;
   vertical-align: top;
   border-bottom: 1px solid var(--line);
   border-left: 1px solid var(--line);
-  height: 130px;
+  height: 88px;
 }
 .att-calendar tbody th {
   background: white;
+  font-size: 13px;
+  overflow-wrap: anywhere;
 }
 .att-shift {
   display: flex;
@@ -1071,26 +1239,27 @@
   gap: 6px;
   background: #eef5ff;
   color: #174d91;
-  border-left: 3px solid #3a80df;
+  border: 1px solid #c8daf2;
   border-radius: 7px;
   padding: 12px 10px;
   width: 100%;
   margin-bottom: 8px;
-  font-size: 11px;
-  min-height: 84px;
+  font-size: 13px;
+  min-height: 72px;
+  font-variant-numeric: tabular-nums;
 }
 .att-shift strong {
-  font-size: 12px;
+  font-size: 13px;
 }
 .att-shift small {
-  color: #5a769a;
-  font-size: 10px;
+  color: var(--muted);
+  font-size: 12px;
 }
 .att-shift.off {
   background: #f4f5f7;
   color: var(--muted);
   border-color: #a6b2c3;
-  min-height: 40px;
+  min-height: 44px;
 }
 .att-add-shift {
   border: 1px dashed #cfdaea;
@@ -1099,8 +1268,11 @@
   width: 100%;
   display: flex;
   justify-content: center;
-  color: #7589a8;
+  color: var(--muted);
   min-height: 44px;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
 }
 .att-add-shift:hover {
   border-color: var(--blue);
@@ -1115,7 +1287,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 26px;
+  margin-bottom: 0;
   font-size: 14px;
 }
 .att-segmented {
@@ -1131,11 +1303,11 @@
   border-radius: 6px;
   font-size: 12px;
   font-weight: 650;
+  min-height: 44px;
 }
 .att-segmented > button[aria-pressed="true"] {
   background: white;
   color: var(--blue);
-  box-shadow: 0 1px 5px #10264a12;
 }
 .att-details {
   font-size: 13px;
@@ -1190,6 +1362,20 @@
   }
 }
 @media (max-width: 700px) {
+  .att-mode-planning .att-page-heading {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 16px;
+  }
+  .att-mode-planning .att-toolbar {
+    width: auto;
+  }
+  .att-field input:not([type="checkbox"]),
+  .att-field select,
+  .att-field textarea {
+    font-size: 16px;
+  }
   .att-page {
     padding: 22px 16px 36px;
   }
@@ -1224,7 +1410,7 @@
     padding: 0;
   }
   .att-clock-card {
-    gap: 20px;
+    gap: 12px;
   }
   .att-panel-title {
     margin-bottom: 20px;

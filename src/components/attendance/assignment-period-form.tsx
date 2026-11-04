@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  useContext,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import {
   CalendarRange,
   CheckCircle2,
@@ -18,6 +25,7 @@ import {
 } from "@/modules/attendance/period";
 import {
   Drawer,
+  AttendanceReadOnlyContext,
   Field,
   Relation,
   dateLabel,
@@ -57,6 +65,14 @@ export function AssignmentPeriodForm({
   const [error, setError] = useState("");
   const controller = useRef<AbortController | null>(null);
   const confirming = useRef(false);
+  const formId = useId();
+  const previewHeading = useRef<HTMLHeadingElement>(null);
+  const resultHeading = useRef<HTMLHeadingElement>(null);
+  const readOnly = useContext(AttendanceReadOnlyContext);
+  useEffect(() => {
+    if (result) resultHeading.current?.focus();
+    else if (preview) previewHeading.current?.focus();
+  }, [preview, result]);
   useEffect(() => () => controller.current?.abort(), []);
   const selectedShift = data.shifts.find((shift) => shift.id === shiftId);
   const available =
@@ -76,7 +92,7 @@ export function AssignmentPeriodForm({
   }
   async function review(event: FormEvent) {
     event.preventDefault();
-    if (busy || checking) return;
+    if (busy || checking || readOnly) return;
     invalidate();
     const request = new AbortController();
     controller.current = request;
@@ -102,7 +118,8 @@ export function AssignmentPeriodForm({
     }
   }
   async function confirm() {
-    if (!preview || !available || busy || confirming.current) return;
+    if (!preview || !available || busy || readOnly || confirming.current)
+      return;
     confirming.current = true;
     try {
       const response = await command({
@@ -131,13 +148,65 @@ export function AssignmentPeriodForm({
       className="att-period-drawer"
       onClose={onClose}
       busy={busy}
+      footer={
+        result ? (
+          <Button className="min-h-12 w-full" onClick={onClose}>
+            Listo
+          </Button>
+        ) : (
+          <div className="att-period-footer">
+            <p>
+              {preview
+                ? `${available} por agregar · ${preview.rows.length - available} se omiten`
+                : "Revisá las fechas antes de asignar los horarios."}
+            </p>
+            <div>
+              <Button
+                type="submit"
+                form={formId}
+                variant={preview ? "outline" : "default"}
+                className="min-h-12"
+                disabled={busy || checking || readOnly}
+              >
+                {checking ? (
+                  <>
+                    <LoaderCircle
+                      className="animate-spin motion-reduce:animate-none"
+                      aria-hidden="true"
+                    />{" "}
+                    Revisando fechas…
+                  </>
+                ) : (
+                  <>
+                    <CalendarRange aria-hidden="true" /> Revisar fechas
+                  </>
+                )}
+              </Button>
+              {preview && available > 0 && (
+                <Button
+                  type="button"
+                  className="min-h-12"
+                  disabled={busy || checking || readOnly}
+                  onClick={() => void confirm()}
+                >
+                  {busy
+                    ? "Asignando horarios…"
+                    : `Confirmar ${available} ${available === 1 ? "horario" : "horarios"}`}
+                </Button>
+              )}
+            </div>
+          </div>
+        )
+      }
     >
       {result ? (
         <section className="att-stack" aria-label="Resultado de la asignación">
           <div className="att-period-result" role="status">
             <CheckCircle2 size={28} aria-hidden="true" />
             <div>
-              <h3>Horarios asignados</h3>
+              <h3 ref={resultHeading} tabIndex={-1}>
+                Horarios asignados
+              </h3>
               <strong>
                 {result.created === 1
                   ? "1 horario agregado"
@@ -151,12 +220,9 @@ export function AssignmentPeriodForm({
             </div>
           </div>
           <PeriodRows rows={result.rows} />
-          <Button className="min-h-12" onClick={onClose}>
-            Listo
-          </Button>
         </section>
       ) : (
-        <form className="att-stack" onSubmit={review}>
+        <form id={formId} className="att-stack" onSubmit={review}>
           <fieldset disabled={busy} className="att-stack">
             <Relation
               label="Empleado"
@@ -296,23 +362,6 @@ export function AssignmentPeriodForm({
               {error}
             </p>
           )}
-          <Button
-            type="submit"
-            variant="outline"
-            className="min-h-12"
-            disabled={busy || checking}
-          >
-            {checking ? (
-              <>
-                <LoaderCircle className="animate-spin" aria-hidden="true" />{" "}
-                Revisando fechas…
-              </>
-            ) : (
-              <>
-                <CalendarRange aria-hidden="true" /> Revisar fechas
-              </>
-            )}
-          </Button>
           {preview && (
             <section
               className="att-period-preview att-stack"
@@ -320,7 +369,9 @@ export function AssignmentPeriodForm({
             >
               <div className="att-period-preview-heading">
                 <div>
-                  <h3>Revisá antes de confirmar</h3>
+                  <h3 ref={previewHeading} tabIndex={-1}>
+                    Revisá antes de confirmar
+                  </h3>
                   <p>
                     {preview.shift.name} · {preview.shift.start} –{" "}
                     {preview.shift.end}
@@ -338,18 +389,11 @@ export function AssignmentPeriodForm({
                 Al guardar volvemos a comprobar las fechas. Si alguien asignó un
                 horario mientras revisabas, se conservará y te lo indicaremos.
               </p>
-              {available ? (
-                <Button
-                  type="button"
-                  className="min-h-12"
-                  disabled={busy}
-                  onClick={() => void confirm()}
-                >
-                  {busy
-                    ? "Asignando horarios…"
-                    : `Confirmar ${available} ${available === 1 ? "horario" : "horarios"}`}
-                </Button>
-              ) : (
+              <p role="status" className="sr-only">
+                {available} horarios por agregar;{" "}
+                {preview.rows.length - available} fechas se conservan.
+              </p>
+              {!available && (
                 <p role="status" className="att-info">
                   No hay fechas libres para agregar. Ajustá el período o los
                   días seleccionados.
