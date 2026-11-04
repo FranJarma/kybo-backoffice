@@ -1,5 +1,6 @@
 "use client";
 import { money, quantity } from "@/lib/number-format";
+import { stockUnitCost } from "@/components/inventory/stock-format";
 import { decimal } from "@/modules/inventory/decimal";
 import {
   ProductCostSummary,
@@ -29,6 +30,7 @@ import {
 import { ProductDirectCost } from "@/components/products/direct-cost";
 import { ProductPricePreview } from "@/components/products/price-preview";
 import { ProductPrices } from "@/components/catalog/product-price";
+import { ProductListRow } from "@/components/catalog/product-list-row";
 import { IngredientActions } from "@/components/catalog/ingredient-actions";
 import { ProductCostDetails } from "@/components/products/cost-details";
 import {
@@ -38,9 +40,7 @@ import {
 import { PhotoEditor, ProductPhoto } from "@/components/products/photo";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import {
-  Archive,
   ArrowRight,
-  ArchiveRestore,
   Box,
   CreditCard,
   CupSoda,
@@ -51,6 +51,7 @@ import {
   Search,
   Truck,
   Users,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -183,7 +184,7 @@ const columnNames: Record<string, string> = {
   phone: "Teléfono",
   kind: "Tipo",
   baseUnit: "Unidad base",
-  unitCost: "Costo / unidad",
+  unitCost: "Costo de referencia",
   priceCounter: "Mostrador",
   prices: "Precios",
   pricePedidosYa: "PedidosYa",
@@ -218,12 +219,21 @@ function RecordStatus({ row }: { row: CatalogRow }) {
   );
 }
 
-function RecordValue({ row, column }: { row: CatalogRow; column: string }) {
+function RecordValue({
+  row,
+  column,
+  compact = false,
+}: {
+  row: CatalogRow;
+  column: string;
+  compact?: boolean;
+}) {
   if (column === "prices") {
     const price = (key: string) =>
       row[key] == null || row[key] === "" ? null : String(row[key]);
     return (
       <ProductPrices
+        compact={compact}
         counter={price("priceCounter")}
         pedidosya={price("pricePedidosYa")}
         ubereats={price("priceUberEats")}
@@ -234,6 +244,12 @@ function RecordValue({ row, column }: { row: CatalogRow; column: string }) {
     return (
       <span className="rounded-lg bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
         Pendiente
+      </span>
+    );
+  if (column === "unitCost" && row[column] != null)
+    return (
+      <span className="font-medium text-brand">
+        {stockUnitCost(String(row[column]), row.baseUnit)}
       </span>
     );
   return displayValue(row, column);
@@ -258,6 +274,7 @@ export function CatalogManager({
     [total, setTotal] = useState(0),
     [loading, setLoading] = useState(true),
     [loadError, setLoadError, loadErrorAttempt] = useErrorFeedback();
+  const [listReadError, setListReadError] = useState("");
   const [search, setSearch] = useState(""),
     [copiedFrom, setCopiedFrom] = useState(""),
     [itemClass, setItemClass] = useState(""),
@@ -322,11 +339,12 @@ export function CatalogManager({
     entity === "products" && productTab === "cost" && editing !== undefined,
     `${costRevision}:${editing?.revision ?? 0}`,
   );
-  function costSummary(row: CatalogRow) {
+  function costSummary(row: CatalogRow, compact = false) {
     return (
       <ProductCostSummary
         model={costs?.products[row.id]}
         error={costs?.error}
+        compact={compact}
       />
     );
   }
@@ -349,15 +367,19 @@ export function CatalogManager({
           });
           if (!response.ok) throw new Error(await readError(response));
           const result = (await response.json()) as ListResult;
+          if (controller.signal.aborted) return;
           setRows(result.rows);
           setTotal(result.total);
+          setListReadError("");
         } catch (error) {
-          if (!controller.signal.aborted)
-            setLoadError(
+          if (!controller.signal.aborted) {
+            const message =
               error instanceof Error
                 ? error.message
-                : "No pudimos cargar los registros.",
-            );
+                : "No pudimos cargar los registros.";
+            setListReadError(message);
+            setLoadError(message);
+          }
         } finally {
           if (!controller.signal.aborted) setLoading(false);
         }
@@ -607,6 +629,7 @@ export function CatalogManager({
     }
   }
   async function toggleArchive(row: CatalogRow) {
+    if (actionId || loading || listReadError) return;
     setActionId(row.id);
     setLoadError("");
     try {
@@ -623,7 +646,6 @@ export function CatalogManager({
         return;
       }
       if (
-        ingredientsOnly &&
         document.activeElement
           ?.closest("[data-catalog-row]")
           ?.getAttribute("data-catalog-row") === row.id
@@ -643,7 +665,8 @@ export function CatalogManager({
     row: CatalogRow,
     destination: "up" | "down" | DropPosition,
   ) {
-    if (actionId || loading || search.trim() || archived) return;
+    if (actionId || loading || listReadError || search.trim() || archived)
+      return;
     setActionId(row.id);
     setLoadError("");
     setOrderNotice("Guardando orden…");
@@ -910,47 +933,33 @@ export function CatalogManager({
       : undefined;
   }
   function rowActions(row: CatalogRow) {
-    const ArchiveIcon = row.archivedAt ? ArchiveRestore : Archive;
+    const pending = !!actionId || loading || !!listReadError;
     return (
-      <div
-        className={`flex items-center gap-1 md:justify-end ${ingredientsOnly ? "flex-nowrap" : "flex-wrap"}`}
-      >
+      <div className="flex flex-nowrap items-center gap-1 md:justify-end">
         <Button
           size="sm"
           variant="ghost"
+          disabled={pending}
           onClick={() => openForm(row)}
           className="text-brand hover:bg-blue-50 hover:text-blue"
         >
           <Pencil size={15} aria-hidden="true" />
           Editar
         </Button>
-        {ingredientsOnly ? (
-          <IngredientActions
-            name={row.name}
-            archived={!!row.archivedAt}
-            pending={actionId === row.id}
-            onDuplicate={(opener) => openForm(row, true, opener)}
-            onArchive={() => void toggleArchive(row)}
-            onFocusFallback={() =>
-              searchInput.current?.focus({ preventScroll: true })
-            }
-          />
-        ) : (
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={actionId === row.id}
-            onClick={() => toggleArchive(row)}
-            className="text-muted hover:bg-slate-100 hover:text-brand"
-          >
-            <ArchiveIcon size={15} aria-hidden="true" />
-            {actionId === row.id
-              ? "Guardando…"
-              : row.archivedAt
-                ? "Restaurar"
-                : "Archivar"}
-          </Button>
-        )}
+        <IngredientActions
+          name={row.name}
+          archived={!!row.archivedAt}
+          pending={pending}
+          onDuplicate={
+            ingredientsOnly
+              ? (opener) => openForm(row, true, opener)
+              : undefined
+          }
+          onArchive={() => void toggleArchive(row)}
+          onFocusFallback={() =>
+            searchInput.current?.focus({ preventScroll: true })
+          }
+        />
       </div>
     );
   }
@@ -981,7 +990,12 @@ export function CatalogManager({
             {definition.description}
           </p>
         </div>
-        <Button onClick={() => openForm(null)} className="w-fit" size="lg">
+        <Button
+          onClick={() => openForm(null)}
+          disabled={!!actionId}
+          className="w-fit"
+          size="lg"
+        >
           <Plus size={20} aria-hidden="true" />
           {entity === "categories"
             ? "Crear categoría"
@@ -1001,7 +1015,10 @@ export function CatalogManager({
             aria-label={`Buscar ${definition.title.toLowerCase()}`}
             placeholder={`Buscar ${definition.singular}…`}
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setLoading(true);
+              setSearch(e.target.value);
+            }}
             className="h-12 bg-white pl-11"
           />
         </div>
@@ -1011,7 +1028,10 @@ export function CatalogManager({
             <select
               className="form-control mt-1"
               value={itemClass}
-              onChange={(event) => setItemClass(event.target.value)}
+              onChange={(event) => {
+                setLoading(true);
+                setItemClass(event.target.value);
+              }}
             >
               <option value="">Todas las clases</option>
               {itemClasses.map((option) => (
@@ -1033,7 +1053,12 @@ export function CatalogManager({
               size="sm"
               variant="ghost"
               aria-pressed={!archived}
-              onClick={() => setArchived(false)}
+              onClick={() => {
+                if (archived) {
+                  setLoading(true);
+                  setArchived(false);
+                }
+              }}
               className={
                 !archived
                   ? "bg-blue-50 font-semibold text-blue hover:bg-blue-50 hover:text-blue"
@@ -1046,7 +1071,12 @@ export function CatalogManager({
               size="sm"
               variant="ghost"
               aria-pressed={archived}
-              onClick={() => setArchived(true)}
+              onClick={() => {
+                if (!archived) {
+                  setLoading(true);
+                  setArchived(true);
+                }
+              }}
               className={
                 archived
                   ? "bg-blue-50 font-semibold text-blue hover:bg-blue-50 hover:text-blue"
@@ -1063,6 +1093,7 @@ export function CatalogManager({
             title="Actualizar lista"
             disabled={loading}
             onClick={() => {
+              setLoading(true);
               setCostRevision((n) => n + 1);
               setRefresh((n) => n + 1);
             }}
@@ -1088,11 +1119,24 @@ export function CatalogManager({
         eventKey={loadErrorAttempt}
         tone="error"
       />
+      {listReadError && (
+        <p
+          role="alert"
+          className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
+        >
+          {listReadError} Actualizá la lista para volver a consultar.{" "}
+          {rows.length > 0 && "Se conservan los últimos resultados."}
+        </p>
+      )}
       <Card
-        className="surface-panel gap-0 overflow-hidden py-0 shadow-none"
+        className="@container surface-panel gap-0 overflow-hidden py-0 shadow-none"
         aria-busy={loading}
       >
-        {loading && rows.length === 0 ? (
+        {listReadError && rows.length === 0 ? (
+          <p className="p-8 text-center text-sm text-muted">
+            Reintentá la consulta para ver los registros.
+          </p>
+        ) : loading && rows.length === 0 ? (
           <div className="flex min-h-64 items-center justify-center gap-3 text-sm text-muted">
             <RefreshCw
               size={18}
@@ -1123,7 +1167,11 @@ export function CatalogManager({
           </div>
         ) : (
           <>
-            <div className="hidden md:block">
+            <div
+              className={
+                ingredientsOnly ? "hidden md:block" : "hidden @[960px]:block"
+              }
+            >
               <Table data-density={ingredientsOnly ? "compact" : undefined}>
                 <thead>
                   <tr className="border-b border-line bg-slate-50/80">
@@ -1209,70 +1257,74 @@ export function CatalogManager({
                 </tbody>
               </Table>
             </div>
-            <div className="divide-y divide-line md:hidden">
-              {rows.map((row) => (
-                <article
-                  key={row.id}
-                  data-catalog-row={row.id}
-                  style={dropStyle(row.id)}
-                  className="p-4"
-                >
-                  <div className="flex items-start gap-3">
-                    {reorderHandle(row)}
-                    <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue">
-                      <EntityIcon size={21} aria-hidden="true" />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <h2 className="break-words font-semibold text-brand">
-                        <span className="mb-2 block w-16">
-                          {entity === "products" && (
-                            <ProductPhoto
-                              id={String(row.imageAssetId ?? "") || null}
-                              name={row.name}
-                            />
-                          )}
-                        </span>
-                        {row.name}
-                      </h2>
-                      <div className="mt-1.5">
-                        <RecordStatus row={row} />
+            <div
+              className={
+                ingredientsOnly
+                  ? "divide-y divide-line md:hidden"
+                  : "divide-y divide-line @[960px]:hidden"
+              }
+            >
+              {rows.map((row) =>
+                entity === "products" ? (
+                  <ProductListRow
+                    key={row.id}
+                    row={row}
+                    style={dropStyle(row.id)}
+                    reorderHandle={reorderHandle(row)}
+                    cost={costSummary(row, true)}
+                    status={<RecordStatus row={row} />}
+                    actions={rowActions(row)}
+                  />
+                ) : (
+                  <article
+                    key={row.id}
+                    data-catalog-row={row.id}
+                    style={dropStyle(row.id)}
+                    className="p-4"
+                  >
+                    <div className="flex items-start gap-3">
+                      {reorderHandle(row)}
+                      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue">
+                        <EntityIcon size={21} aria-hidden="true" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <h2 className="break-words font-semibold text-brand">
+                          {row.name}
+                        </h2>
+                        <div className="mt-1.5">
+                          <RecordStatus row={row} />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <dl className="mt-4 space-y-2.5">
-                    {definition.columns
-                      .filter((column) => column !== "name")
-                      .map((column) => (
-                        <div
-                          key={column}
-                          className={
-                            column === "prices"
-                              ? "space-y-2.5 text-sm"
-                              : "flex justify-between gap-4 text-sm"
-                          }
-                        >
-                          <dt className="shrink-0 text-muted">
-                            {columnNames[column] ?? column}
-                          </dt>
-                          <dd
-                            className={`min-w-0 break-words text-brand tabular-nums ${column === "prices" ? "text-left" : "text-right"}`}
+                    <dl className="mt-4 space-y-2.5">
+                      {definition.columns
+                        .filter((column) => column !== "name")
+                        .map((column) => (
+                          <div
+                            key={column}
+                            className={
+                              column === "prices"
+                                ? "space-y-2.5 text-sm"
+                                : "flex justify-between gap-4 text-sm"
+                            }
                           >
-                            <RecordValue row={row} column={column} />
-                          </dd>
-                        </div>
-                      ))}
-                  </dl>
-                  {entity === "products" && (
+                            <dt className="shrink-0 text-muted">
+                              {columnNames[column] ?? column}
+                            </dt>
+                            <dd
+                              className={`min-w-0 break-words text-brand tabular-nums ${column === "prices" ? "text-left" : "text-right"}`}
+                            >
+                              <RecordValue row={row} column={column} compact />
+                            </dd>
+                          </div>
+                        ))}
+                    </dl>
                     <div className="mt-4 border-t border-line pt-3">
-                      <p className="text-xs text-muted">Costo estimado</p>
-                      {costSummary(row)}
+                      {rowActions(row)}
                     </div>
-                  )}
-                  <div className="mt-4 border-t border-line pt-3">
-                    {rowActions(row)}
-                  </div>
-                </article>
-              ))}
+                  </article>
+                ),
+              )}
             </div>
           </>
         )}
@@ -1297,6 +1349,8 @@ export function CatalogManager({
         {editing !== undefined && (
           <DialogContent
             className={`gap-0 bg-white p-5 sm:p-8 ${entity === "items" || entity === "products" ? `catalog-dialog flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] flex-col overflow-hidden ${entity === "products" ? "sm:max-w-7xl" : "sm:max-w-6xl"} lg:px-10` : "max-h-[94dvh] overflow-y-auto sm:max-w-2xl"}`}
+            showCloseButton={false}
+            aria-busy={saving || uploading || recipeBusy || suppliersBusy}
             onCloseAutoFocus={(event) => {
               if (formOpener.current?.isConnected) {
                 event.preventDefault();
@@ -1312,9 +1366,17 @@ export function CatalogManager({
             }}
           >
             <div className="mb-4 shrink-0 border-b border-line pb-5 pr-5">
-              <p className="eyebrow mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
-                {definition.title}
-              </p>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                aria-label="Cerrar formulario"
+                className="absolute right-4 top-4"
+                disabled={saving || uploading || recipeBusy || suppliersBusy}
+                onClick={closeForm}
+              >
+                <X aria-hidden="true" />
+              </Button>
               <DialogTitle className="text-2xl font-bold tracking-tight text-brand">
                 {editing
                   ? `Editar ${definition.singular}`

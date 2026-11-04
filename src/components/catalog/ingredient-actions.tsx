@@ -16,7 +16,7 @@ export function IngredientActions({
   name: string;
   archived: boolean;
   pending: boolean;
-  onDuplicate: (opener: HTMLButtonElement | null) => void;
+  onDuplicate?: (opener: HTMLButtonElement | null) => void;
   onArchive: () => void;
   onFocusFallback: () => void;
 }) {
@@ -61,13 +61,13 @@ export function IngredientActions({
             else onFocusFallback();
           }}
         >
-          {!archived && (
+          {!archived && onDuplicate && (
             <DropdownMenu.Item
               disabled={pending}
               className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg px-3 outline-none data-highlighted:bg-secondary data-highlighted:text-blue"
               onSelect={() => {
                 openingForm.current = true;
-                onDuplicate(trigger.current);
+                onDuplicate?.(trigger.current);
               }}
             >
               <Copy size={16} aria-hidden="true" /> Duplicar

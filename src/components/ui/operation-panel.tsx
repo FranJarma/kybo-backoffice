@@ -1,5 +1,5 @@
 "use client";
-import type { ReactNode } from "react";
+import type { ReactNode, ComponentProps } from "react";
 import { X } from "lucide-react";
 import {
   Dialog,
@@ -15,6 +15,8 @@ export function OperationPanel({
   children,
   footer,
   locked = false,
+  size = "default",
+  onOpenAutoFocus,
   onClose,
 }: {
   title: string;
@@ -23,6 +25,8 @@ export function OperationPanel({
   children: ReactNode;
   footer?: ReactNode;
   locked?: boolean;
+  size?: "default" | "wide";
+  onOpenAutoFocus?: ComponentProps<typeof DialogContent>["onOpenAutoFocus"];
   onClose: () => void;
 }) {
   return (
@@ -33,9 +37,17 @@ export function OperationPanel({
       }}
     >
       <DialogContent
+        onOpenAutoFocus={onOpenAutoFocus}
+        onEscapeKeyDown={(event) => {
+          if (
+            event.target instanceof HTMLElement &&
+            event.target.matches('[role="combobox"][aria-expanded="true"]')
+          )
+            event.preventDefault();
+        }}
         style={{ borderRadius: 0 }}
         showCloseButton={false}
-        className="inset-y-0 right-0 left-auto flex h-dvh max-h-dvh w-full max-w-full translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-y-0 border-r-0 bg-white p-0 sm:max-w-[600px] data-[state=open]:animate-none data-[state=closed]:animate-none"
+        className={`inset-y-0 right-0 left-auto flex h-dvh max-h-dvh w-full max-w-full translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-y-0 border-r-0 bg-white p-0 ${size === "wide" ? "sm:max-w-3xl lg:max-w-4xl" : "sm:max-w-[600px]"} data-[state=open]:animate-none data-[state=closed]:animate-none`}
       >
         <header className="flex shrink-0 items-start justify-between gap-5 border-b border-line px-5 py-6 sm:px-7">
           <div className="min-w-0 space-y-2">
