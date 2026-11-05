@@ -277,8 +277,8 @@ export function PersonalWork({
           )}
         </>
       )}
-      {data?.ready && tab === "production" && (
-        <>
+      {data?.ready && (
+        <div hidden={tab !== "production"}>
           <p className="text-xs text-muted">
             La producción asignada se registra en Depósito.
           </p>
@@ -290,10 +290,20 @@ export function PersonalWork({
           <div className="grid gap-4 md:grid-cols-2">
             {data.production.rows.map((order) => (
               <ProductionWorkCard
-                key={`${order.id}:${order.revision}`}
+                key={`${key}:${order.id}`}
                 order={order}
                 locked={locked}
                 timeZone={data.branch.timeZone}
+                onReport={(target, report) => {
+                  if (locked || active.current) return;
+                  active.current = true;
+                  setNotice("");
+                  production.submit(`/api/production/orders/${target.id}`, {
+                    requestId: crypto.randomUUID(),
+                    report,
+                  });
+                  active.current = false;
+                }}
                 onAct={(target, action) => {
                   if (locked || active.current) return;
                   active.current = true;
@@ -314,7 +324,7 @@ export function PersonalWork({
               Se muestran las primeras 100 tareas asignadas.
             </p>
           )}
-        </>
+        </div>
       )}
     </section>
   );

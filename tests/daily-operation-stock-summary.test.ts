@@ -1,5 +1,8 @@
 import { expect, it } from "vitest";
-import { summarizeStockByItem } from "@/modules/daily-operations/stock-summary";
+import {
+  summarizeStockByItem,
+  stockNeedsReplenishment,
+} from "@/modules/daily-operations/stock-summary";
 import type { StockRow } from "@/modules/daily-operations/types";
 const row = (
   locationId: string,
@@ -60,4 +63,22 @@ it("50 items across three locations remain 50 records with their separate units 
   expect(summaries[0].unit).toBe("g");
   expect(summaries[1].unit).toBe("unit");
   expect(summarizeStockByItem(stock, "Barra")[0].available).toBe("0.000000");
+});
+it("checks each actual location minimum rather than comparing a branch total to one policy", () => {
+  const stock = [
+    {
+      ...row("Barra", "1000.000000"),
+      minimumQuantity: "2000.000000",
+      targetQuantity: "5000.000000",
+    },
+    row("Depósito", "20000.000000"),
+  ];
+  const [summary] = summarizeStockByItem(stock, "");
+  expect(summary.available).toBe("21000.000000");
+  expect(summary.locations.filter(stockNeedsReplenishment)).toHaveLength(1);
+  expect(summary).not.toHaveProperty("minimumQuantity");
+  expect(
+    stockNeedsReplenishment({ ...stock[0], available: "2000.000000" }),
+  ).toBe(false);
+  expect(stockNeedsReplenishment(row("Sin regla", "0.000000"))).toBe(false);
 });

@@ -43,16 +43,19 @@ export function TransferDraftForm({
   directory,
   onSuccess,
   blocked,
+  onBusy,
 }: {
   actorId: string;
   directory?: TransferDirectory;
   onSuccess: () => void;
   blocked: boolean;
+  onBusy?: (busy: boolean) => void;
 }) {
   const quantityId = useId(),
     originId = useId();
   const editorRef = useRef<HTMLDivElement>(null),
     restoreOriginFocus = useRef(false);
+  const quantityRef = useRef<HTMLInputElement>(null);
   const [origins, setOrigins] =
     useState<{ id: string; name: string; code: string }[]>();
   const [originLoadError, setOriginLoadError] = useState("");
@@ -107,6 +110,9 @@ export function TransferDraftForm({
     completed,
   );
   const locked = blocked || operation.locked;
+  useEffect(() => {
+    onBusy?.(operation.locked);
+  }, [operation.locked, onBusy]);
   const focusOriginSelect = useCallback(
     (select: HTMLSelectElement | null) => {
       if (changingOrigin) select?.focus();
@@ -245,15 +251,8 @@ export function TransferDraftForm({
           Reintentar confirmación
         </Button>
       )}
-      <Card className="gap-0 overflow-hidden p-0">
-        <div className="border-b p-5 sm:px-6">
-          <h2 className="text-lg font-bold">Nuevo traslado</h2>
-          <p className="mt-1 text-sm text-muted">
-            Armá la lista de insumos y confirmá todo junto. Podés revisar
-            cantidades y destinos antes de confirmar.
-          </p>
-        </div>
-        <form onSubmit={submit}>
+      <Card className="gap-0 p-0">
+        <form aria-label="Nuevo traslado" onSubmit={submit}>
           <fieldset disabled={locked} className="space-y-6 p-5 sm:p-6">
             <div className="grid gap-5 sm:grid-cols-2">
               <div className={fieldClass}>
@@ -361,9 +360,8 @@ export function TransferDraftForm({
               <div>
                 <h3 className="font-bold">Insumos a trasladar</h3>
                 <p className="mt-1 text-sm text-muted">
-                  El destino se sugiere según los mínimos de reposición. Si
-                  agregás otra vez el mismo insumo al mismo destino, sumamos la
-                  cantidad.
+                  El destino se sugiere según los mínimos. Podés cambiarlo por
+                  insumo.
                 </p>
               </div>
               <div
@@ -391,6 +389,8 @@ export function TransferDraftForm({
                     setItem(row);
                     setAmount("");
                     setDestinationOverride(null);
+                    if (id)
+                      requestAnimationFrame(() => quantityRef.current?.focus());
                   }}
                 />
                 <div className={fieldClass}>
@@ -402,6 +402,7 @@ export function TransferDraftForm({
                   <div className="relative">
                     <Input
                       id={quantityId}
+                      ref={quantityRef}
                       aria-required={!!unit || undefined}
                       inputMode="decimal"
                       value={amount}
@@ -459,6 +460,20 @@ export function TransferDraftForm({
                   Agregar insumo
                 </Button>
               </div>
+              {itemId && directory && (
+                <p
+                  role="status"
+                  className={`text-sm ${destination ? "text-muted" : "font-semibold text-amber-900"}`}
+                >
+                  {!destination
+                    ? destinationOverride !== null
+                      ? "Elegí el destino para este insumo."
+                      : "Elegí el destino: no hay un único mínimo configurado para este insumo."
+                    : destinationOverride !== null
+                      ? `Destino elegido manualmente: ${options.find((option) => option.id === destination)?.name ?? "destino"}`
+                      : `Destino sugerido por mínimos: ${options.find((option) => option.id === destination)?.name ?? "destino"}`}
+                </p>
+              )}
               {!draft.length ? (
                 <p className="rounded-xl border border-dashed bg-surface/50 p-6 text-center text-sm text-muted">
                   Agregá los insumos que vas a trasladar. Todavía no se movió
@@ -472,9 +487,12 @@ export function TransferDraftForm({
                       ? "insumo en la lista"
                       : "insumos en la lista"}
                   </p>
-                  <ol aria-label="Insumos del traslado" className="space-y-3">
+                  <ol
+                    aria-label="Insumos del traslado"
+                    className="divide-y divide-line border-y border-line"
+                  >
                     {draft.map((line) => (
-                      <li key={line.id} className="rounded-xl border p-4">
+                      <li key={line.id} className="py-3">
                         <fieldset
                           aria-label={`Insumo: ${line.name}`}
                           className="grid items-end gap-3 min-[480px]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:grid-cols-[minmax(0,1.3fr)_minmax(0,.6fr)_minmax(0,1fr)_auto]"
@@ -542,8 +560,20 @@ export function TransferDraftForm({
           </fieldset>
           <div
             data-transfer-footer
-            className="flex flex-wrap items-center justify-between gap-4 border-t bg-surface/60 p-5 sm:px-6"
+            className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-4 border-t border-line bg-white p-5 sm:px-6 [@media(max-height:600px)]:static"
           >
+            {(error || operation.error) && (
+              <details className="w-full rounded-lg border border-red-200 bg-red-50 px-3 text-sm text-red-900">
+                <summary className="min-h-12 content-center cursor-pointer font-semibold">
+                  {operation.uncertain
+                    ? "Resultado pendiente de verificar · Ver detalle"
+                    : "No se confirmó el traslado · Ver detalle"}
+                </summary>
+                <p className="whitespace-pre-wrap pb-3 leading-relaxed">
+                  {error || operation.error}
+                </p>
+              </details>
+            )}
             <p className="flex max-w-xl items-start gap-2 text-sm text-muted">
               <Info className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
               <span>

@@ -741,9 +741,9 @@ export function SalesManager({
   return (
     <div
       data-pos
-      className="flex h-full min-h-0 flex-col gap-3 [&>div:not([data-pos-workspace])]:shrink-0"
+      className="flex h-full min-h-0 flex-col gap-2 [&>div:not([data-pos-workspace])]:shrink-0"
     >
-      <CashStatusGate key={branchId} branchId={branchId} />
+      <CashStatusGate key={branchId} branchId={branchId} actorId={actorId} />
       <Dialog
         open={!!configuring}
         onOpenChange={(open) => {
@@ -833,7 +833,7 @@ export function SalesManager({
             ))}
         </DialogContent>
       </Dialog>
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line">
         <div>
           <h1
             data-pos-title
@@ -843,9 +843,44 @@ export function SalesManager({
             Punto de venta
           </h1>
         </div>
+        <div className="order-3 flex w-full min-w-0 items-center gap-1 overflow-x-auto sm:order-none sm:w-auto sm:flex-1">
+          <button
+            disabled={locked || view === "append"}
+            aria-pressed={showCart}
+            onClick={() => {
+              if (view !== "new") newSale();
+            }}
+            className={`min-h-12 border-b-2 px-3 text-sm font-bold ${showCart ? "border-blue text-blue" : "border-transparent text-muted"}`}
+          >
+            Nueva venta
+          </button>
+          <button
+            disabled={locked || view === "append"}
+            aria-pressed={view === "history"}
+            onClick={() => {
+              setHistoryOpened(true);
+              setReturnView("history");
+              setView("history");
+              setNotice("");
+            }}
+            className={`min-h-12 border-b-2 px-3 text-sm font-bold ${view === "history" ? "border-blue text-blue" : "border-transparent text-muted"}`}
+          >
+            Historial
+          </button>
+          {lastSale && (
+            <Button
+              className="min-h-12"
+              variant="ghost"
+              disabled={locked || view === "append"}
+              onClick={() => void selectSale(lastSale.id)}
+            >
+              Última venta #{lastSale.number}
+            </Button>
+          )}
+        </div>
         <Button
           variant="outline"
-          className="min-h-12 xl:hidden"
+          className="ml-auto min-h-12"
           aria-expanded={toolsOpen}
           aria-controls="pos-tools"
           onClick={() => setToolsOpen((open) => !open)}
@@ -855,7 +890,7 @@ export function SalesManager({
         </Button>
         <div
           id="pos-tools"
-          className={`${toolsOpen ? "flex" : "hidden"} w-full flex-wrap gap-2 rounded-xl border border-line bg-white p-3 xl:flex xl:w-auto xl:border-0 xl:bg-transparent xl:p-0`}
+          className={`${toolsOpen ? "flex" : "hidden"} order-4 w-full flex-wrap gap-2 rounded-xl border border-line bg-white p-3`}
         >
           <PickupActions
             key={branchId}
@@ -894,6 +929,15 @@ export function SalesManager({
             <RotateCw size={17} />
             Actualizar carta
           </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            className="min-h-12 text-muted"
+            onClick={() => setStockHelpOpen(true)}
+          >
+            <Info size={16} />
+            Ayuda de stock
+          </Button>
           {!showCart && (
             <Button onClick={newSale} disabled={locked}>
               <Plus size={17} />
@@ -905,50 +949,6 @@ export function SalesManager({
       {accountKind === "store" && (
         <WorkplaceSummary key={branchId} branchId={branchId} />
       )}
-      <div className="flex flex-wrap items-center gap-3 border-b border-line">
-        <button
-          disabled={locked || view === "append"}
-          aria-pressed={showCart}
-          onClick={() => {
-            if (view !== "new") newSale();
-          }}
-          className={`min-h-12 border-b-2 px-3 text-sm font-bold ${showCart ? "border-blue text-blue" : "border-transparent text-muted"}`}
-        >
-          Nueva venta
-        </button>
-        <button
-          disabled={locked || view === "append"}
-          aria-pressed={view === "history"}
-          onClick={() => {
-            setHistoryOpened(true);
-            setReturnView("history");
-            setView("history");
-            setNotice("");
-          }}
-          className={`min-h-12 border-b-2 px-3 text-sm font-bold ${view === "history" ? "border-blue text-blue" : "border-transparent text-muted"}`}
-        >
-          Historial
-        </button>
-        {lastSale && (
-          <Button
-            className="min-h-12"
-            variant="ghost"
-            disabled={locked || view === "append"}
-            onClick={() => void selectSale(lastSale.id)}
-          >
-            Última venta #{lastSale.number}
-          </Button>
-        )}
-        <Button
-          type="button"
-          variant="ghost"
-          className="ml-auto min-h-12 text-muted"
-          onClick={() => setStockHelpOpen(true)}
-        >
-          <Info size={16} />
-          Ayuda de stock
-        </Button>
-      </div>
       {lastSale && view === "new" && (
         <LatestOrderPrinting
           key={`${actorId}:${branchId}:${lastSale.id}`}
@@ -965,6 +965,8 @@ export function SalesManager({
           uncertain={operation.uncertain}
           busy={operation.busy}
           retry={operation.retry}
+          canDiscard={operation.canDiscard}
+          onDiscard={operation.discardRejected}
         />
       )}
       {error && (
@@ -986,6 +988,58 @@ export function SalesManager({
         </p>
       )}
       <div hidden={!showCart} className={showCart ? "contents" : "hidden"}>
+        <div className="@container shrink-0">
+          {isAppend && appendSale ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4">
+              <div>
+                <p className="text-sm font-bold text-brand">
+                  Nuevo pedido · {appendSale.tableName}
+                </p>
+                <p className="mt-1 text-xs text-muted">
+                  Venta #{appendSale.number} · saldo actual{" "}
+                  {money(appendSale.balanceDue)}
+                </p>
+              </div>
+              <Button
+                disabled={locked}
+                variant="ghost"
+                onClick={() => {
+                  if (savedDraft.current) {
+                    restoreDraft(savedDraft.current.draft);
+                    setReturnView(savedDraft.current.view);
+                    savedDraft.current = null;
+                  }
+                  setDetail(appendSale);
+                  activeDetailId.current = appendSale.id;
+                  setAppendSale(null);
+                  setView("detail");
+                }}
+              >
+                <ArrowLeft size={15} />
+                Volver a la cuenta
+              </Button>
+              <fieldset className="w-full min-w-0 border-t border-blue-100 pt-3">
+                <legend className="px-1 text-xs font-semibold text-muted">
+                  Acciones
+                </legend>
+                <div className="mt-1 max-w-sm">{orderActions}</div>
+              </fieldset>
+            </div>
+          ) : (
+            <OrderControls
+              origin={origin}
+              fulfillment={fulfillment}
+              locked={locked}
+              originLocked={lines.length > 0}
+              onOriginChange={changeOrigin}
+              onFulfillmentChange={(value) => {
+                setFulfillment(value);
+                setTableId("");
+              }}
+              actions={orderActions}
+            />
+          )}
+        </div>
         <div
           data-pos-workspace
           className="grid min-h-0 gap-3 flex-1 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_440px] 2xl:grid-cols-[minmax(0,1fr)_480px]"
@@ -994,58 +1048,6 @@ export function SalesManager({
             data-pos-catalogue
             className={`${tabletPanel === "products" ? "flex" : "hidden"} min-h-0 min-w-0 flex-col gap-3 lg:flex`}
           >
-            <div className="shrink-0">
-              {isAppend && appendSale ? (
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4">
-                  <div>
-                    <p className="text-sm font-bold text-brand">
-                      Nuevo pedido · {appendSale.tableName}
-                    </p>
-                    <p className="mt-1 text-xs text-muted">
-                      Venta #{appendSale.number} · saldo actual{" "}
-                      {money(appendSale.balanceDue)}
-                    </p>
-                  </div>
-                  <Button
-                    disabled={locked}
-                    variant="ghost"
-                    onClick={() => {
-                      if (savedDraft.current) {
-                        restoreDraft(savedDraft.current.draft);
-                        setReturnView(savedDraft.current.view);
-                        savedDraft.current = null;
-                      }
-                      setDetail(appendSale);
-                      activeDetailId.current = appendSale.id;
-                      setAppendSale(null);
-                      setView("detail");
-                    }}
-                  >
-                    <ArrowLeft size={15} />
-                    Volver a la cuenta
-                  </Button>
-                  <fieldset className="w-full min-w-0 border-t border-blue-100 pt-3">
-                    <legend className="px-1 text-xs font-semibold text-muted">
-                      Acciones
-                    </legend>
-                    <div className="mt-1 max-w-sm">{orderActions}</div>
-                  </fieldset>
-                </div>
-              ) : (
-                <OrderControls
-                  origin={origin}
-                  fulfillment={fulfillment}
-                  locked={locked}
-                  originLocked={lines.length > 0}
-                  onOriginChange={changeOrigin}
-                  onFulfillmentChange={(value) => {
-                    setFulfillment(value);
-                    setTableId("");
-                  }}
-                  actions={orderActions}
-                />
-              )}
-            </div>
             {!isAppend &&
               (origin !== "counter" || fulfillment === "dine_in") && (
                 <section className="surface-panel grid shrink-0 gap-3 p-3 sm:grid-cols-2">
@@ -1503,6 +1505,8 @@ export function SalesManager({
           error={operation.error}
           uncertain={operation.uncertain}
           onRetry={operation.retry}
+          canDiscard={operation.canDiscard}
+          onDiscard={operation.discardRejected}
           onClose={() => setPaymentOpen(false)}
           onConfirm={(payments) => {
             if (view === "detail" && detail)

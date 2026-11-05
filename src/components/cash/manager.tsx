@@ -33,6 +33,11 @@ import {
 } from "@/components/ui/dialog";
 import { OperationAlert } from "@/components/ui/operation-alert";
 import { money } from "@/lib/number-format";
+import {
+  closeDraftKey,
+  readCloseDraft,
+  writeCloseDraft,
+} from "./close-draft-storage";
 import { cents, integer } from "@/modules/inventory/decimal";
 import { expenseCategories } from "@/modules/overheads/types";
 import type { CashCommand, CashSnapshot } from "@/modules/cash/types";
@@ -94,6 +99,14 @@ export function CashManager({
   onDismiss?: () => void;
 }) {
   const [snapshot, setSnapshot] = useState<CashSnapshot>();
+  const snapshotEpoch = useRef(0);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const [selectedId, setSelectedId] = useState<string | null>(null),
     [generation, setGeneration] = useState(0);
   const [view, setView] = useState<"day" | "history">("day"),
@@ -109,6 +122,72 @@ export function CashManager({
     [closeStep, setCloseStep] = useState(0);
   const [closeDraft, setCloseDraft] = useState<CloseDraft | null>(null),
     [draftSession, setDraftSession] = useState<string | null>(null);
+  const draftKey = closeDraftKey(actorId, branchId);
+  const restoredSession = useRef<string | null>(null);
+  const activeCashSession = useRef<{ key: string; id: string | null } | null>(
+    null,
+  );
+  const [draftStorageError, setDraftStorageError] = useState("");
+  const restoreCashDraft = useCallback(
+    (data: CashSnapshot) => {
+      if (!mounted.current || openingOnly || data.branchId !== branchId) return;
+      const sessionId = data.current?.id ?? null;
+      activeCashSession.current = { key: draftKey, id: sessionId };
+      const identity = `${draftKey}:${sessionId}`;
+      if (restoredSession.current === identity) return;
+      try {
+        const restored = readCloseDraft(
+          sessionStorage,
+          draftKey,
+          sessionId,
+          branchId,
+        );
+        restoredSession.current = identity;
+        if (restored && data.capabilities.close) {
+          setCloseDraft(restored);
+          setDraftSession(sessionId);
+          setCloseStep(0);
+        } else {
+          setCloseDraft(null);
+          setDraftSession(null);
+          setCloseStep(0);
+          setCloseOpen(false);
+        }
+      } catch {
+        setDraftStorageError(
+          "No se pudo recuperar el borrador de esta pestaña. Revisá los datos antes de cerrar.",
+        );
+      }
+    },
+    [branchId, draftKey, openingOnly],
+  );
+  function saveCloseDraft(next: CloseDraft, sessionId: string) {
+    if (
+      !mounted.current ||
+      activeCashSession.current?.key !== draftKey ||
+      activeCashSession.current.id !== sessionId
+    )
+      return;
+    try {
+      writeCloseDraft(sessionStorage, draftKey, sessionId, next);
+      setDraftStorageError("");
+    } catch {
+      setDraftStorageError(
+        "No se pudo guardar el borrador en esta pestaña. Mantené Caja abierta hasta terminar el cierre.",
+      );
+    }
+  }
+  function updateCloseDraft(next: CloseDraft) {
+    if (
+      !mounted.current ||
+      !draftSession ||
+      activeCashSession.current?.key !== draftKey ||
+      activeCashSession.current.id !== draftSession
+    )
+      return;
+    setCloseDraft(next);
+    saveCloseDraft(next, draftSession);
+  }
   const lastCommand = useRef<CashCommand | null>(null);
   const initialFundInput = useRef<HTMLInputElement>(null);
   const openingFocusPending = useRef(false);
@@ -130,13 +209,13 @@ export function CashManager({
     "cash",
     (raw) => {
       const result = raw as CashSnapshot;
+      snapshotEpoch.current++;
+      setLoading(false);
+      restoreCashDraft(result);
       setSnapshot(result);
       setAction(null);
       setCloseOpen(false);
-      if (!result.current || result.current.id !== draftSession) {
-        setCloseDraft(null);
-        setDraftSession(null);
-      } else setCloseStep(0);
+      setCloseStep(0);
       setSelectedId(null);
       setView("day");
       setError("");
@@ -167,13 +246,15 @@ export function CashManager({
   }, [action, loading, busy, operation.locked, focusOpeningFund]);
   useEffect(() => {
     const controller = new AbortController();
+    const epoch = ++snapshotEpoch.current;
     void cashBranchRequest<CashSnapshot>(
       branchId,
       `/api/cash${selectedId ? `?sessionId=${encodeURIComponent(selectedId)}` : ""}`,
       { signal: controller.signal },
     )
       .then((data) => {
-        if (!controller.signal.aborted) {
+        if (!controller.signal.aborted && epoch === snapshotEpoch.current) {
+          restoreCashDraft(data);
           setSnapshot(data);
           setError("");
           if (openingOnly) {
@@ -185,20 +266,24 @@ export function CashManager({
         }
       })
       .catch((error) => {
-        if (!controller.signal.aborted) setError((error as Error).message);
+        if (!controller.signal.aborted && epoch === snapshotEpoch.current)
+          setError((error as Error).message);
       })
       .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
+        if (!controller.signal.aborted && epoch === snapshotEpoch.current)
+          setLoading(false);
       });
     return () => controller.abort();
-  }, [selectedId, generation, branchId, openingOnly]);
+  }, [selectedId, generation, branchId, openingOnly, restoreCashDraft]);
   function refresh() {
+    snapshotEpoch.current++;
     setLoading(true);
     setError("");
     setGeneration((value) => value + 1);
   }
   function selectSession(id: string | null) {
     if (id === selectedId) return;
+    snapshotEpoch.current++;
     setLoading(true);
     setError("");
     setSelectedId(id);
@@ -211,9 +296,11 @@ export function CashManager({
   }
   useEffect(() => {
     if (!operation.error) return;
+    const controller = new AbortController();
     const timer = setTimeout(() => {
       setError(operation.error);
       if (operation.status === 409) {
+        const epoch = ++snapshotEpoch.current;
         setCloseStep(0);
         setError(
           "La caja cambió mientras trabajabas. Conservamos tu borrador; revisá el efectivo y los movimientos actualizados antes de confirmar.",
@@ -221,8 +308,12 @@ export function CashManager({
         void cashBranchRequest<CashSnapshot>(
           branchId,
           `/api/cash${selectedId ? `?sessionId=${encodeURIComponent(selectedId)}` : ""}`,
+          { signal: controller.signal },
         )
           .then((refreshed) => {
+            if (controller.signal.aborted || epoch !== snapshotEpoch.current)
+              return;
+            restoreCashDraft(refreshed);
             setSnapshot(refreshed);
             const command = lastCommand.current;
             if (
@@ -231,22 +322,30 @@ export function CashManager({
             ) {
               setCloseOpen(false);
               setError(
-                "Otra persona ya cerró esta jornada. Revisá su cierre en Historial. Tu borrador sigue asociado a esa jornada y no se aplicará a otra caja.",
+                "Otra persona ya cerró esta jornada. Revisá su cierre en Historial. El borrador anterior no se aplicará a otra caja.",
               );
             }
           })
           .catch(() => {
             /* Preserve the last snapshot and the complete draft. */
+          })
+          .finally(() => {
+            if (!controller.signal.aborted && epoch === snapshotEpoch.current)
+              setLoading(false);
           });
       }
     }, 0);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [
     operation.error,
     operation.errorAttempt,
     operation.status,
     branchId,
     selectedId,
+    restoreCashDraft,
   ]);
   function startAction(next: FormAction) {
     if (operation.locked) return;
@@ -268,9 +367,11 @@ export function CashManager({
     if (operation.locked) return;
     if (!snapshot?.current) return;
     if (!closeDraft || draftSession !== snapshot.current.id) {
-      setCloseDraft(newCloseDraft(snapshot.timeZone));
+      const next = newCloseDraft(snapshot.timeZone);
+      setCloseDraft(next);
       setDraftSession(snapshot.current.id);
       setCloseStep(0);
+      saveCloseDraft(next, snapshot.current.id);
     }
     setError("");
     setCloseOpen(true);
@@ -1242,13 +1343,13 @@ export function CashManager({
           snapshot={snapshot}
           sessionId={draftSession!}
           draft={closeDraft}
-          onChange={setCloseDraft}
+          onChange={updateCloseDraft}
           step={closeStep}
           onStep={setCloseStep}
           busy={busy}
           uncertain={operation.uncertain}
           recovery={recovery}
-          error={operation.uncertain ? "" : error}
+          error={operation.uncertain ? "" : error || draftStorageError}
           onError={setError}
           onDismiss={() => {
             setCloseOpen(false);

@@ -744,6 +744,116 @@ test("private photo, reviewed values and draft survive back navigation and dismi
     page.getByRole("heading", { name: "Arqueo confirmado" }),
   ).toBeVisible();
 });
+test("cash close resumes its count, posnet fields and private photo after leaving the page", async ({
+  page,
+}) => {
+  const posted = await mount(page);
+  await startClose(page);
+  await fillLot(page);
+  await page
+    .getByRole("button", {
+      name: "Guardar borrador y salir del cierre",
+      exact: true,
+    })
+    .click();
+  await page.reload();
+  await page.addScriptTag({ path: bundle });
+  await page
+    .getByRole("button", { name: "Continuar cierre", exact: true })
+    .click();
+  await expect(
+    page.getByLabel("Efectivo contado", { exact: true }),
+  ).toHaveValue("1.000,10");
+  await page.getByRole("button", { name: "Continuar", exact: true }).click();
+  await expect(
+    page.getByLabel("Número de lote 1", { exact: true }),
+  ).toHaveValue("003");
+  await expect(
+    page.getByText("Comprobante agregado", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Atrás", exact: true }).click();
+  await expect(
+    page.getByLabel("Efectivo contado", { exact: true }),
+  ).toHaveValue("1.000,10");
+  expect(posted).toEqual([]);
+});
+
+test("a delayed conflict read cannot erase the draft of a newer cash journey", async ({
+  page,
+}) => {
+  await mount(page, snapshot(), { conflict: true });
+  await expect(
+    page.getByRole("button", { name: "Cerrar caja", exact: true }),
+  ).toBeVisible();
+  let releaseOld!: () => void;
+  const delayed = new Promise<void>((resolve) => {
+    releaseOld = resolve;
+  });
+  let reads = 0;
+  const newer = snapshot();
+  newer.current = newer.selected = {
+    ...session(),
+    id: "new-session",
+    businessDate: "2026-10-28",
+    revision: 1,
+  };
+  newer.sessions = [newer.current];
+  await page.route("**/api/cash", async (route) => {
+    if (route.request().method() !== "GET") return route.fallback();
+    if (++reads === 1) {
+      await delayed;
+      return route.fulfill({
+        headers: { "X-Journey-Stale": "true" },
+        json: { ...snapshot(), current: null, selected: null, sessions: [] },
+      });
+    }
+    return route.fulfill({ json: newer });
+  });
+  await startClose(page);
+  await fillLot(page);
+  await page.getByRole("button", { name: "Continuar", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Confirmar cierre", exact: true })
+    .click();
+  await expect.poll(() => reads).toBe(1);
+  await page
+    .getByRole("button", {
+      name: "Guardar borrador y salir del cierre",
+      exact: true,
+    })
+    .click();
+  await page
+    .getByRole("button", { name: "Actualizar caja", exact: true })
+    .click();
+  await expect.poll(() => reads).toBe(2);
+  await page
+    .getByRole("button", { name: /^(Cerrar caja|Continuar cierre)$/ })
+    .click();
+  await page.getByLabel("Efectivo contado", { exact: true }).fill("777");
+  await page
+    .getByRole("button", { name: "Guardar y salir", exact: true })
+    .click();
+  const stale = page.waitForResponse(
+    (response) => response.headers()["x-journey-stale"] === "true",
+  );
+  releaseOld();
+  await (await stale).finished();
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  await page.reload();
+  await page.addScriptTag({ path: bundle });
+  await page
+    .getByRole("button", { name: "Continuar cierre", exact: true })
+    .click();
+  await expect(
+    page.getByLabel("Efectivo contado", { exact: true }),
+  ).toHaveValue("777");
+});
+
 test("concurrent collection preserves the whole draft and requires reviewing updated figures", async ({
   page,
 }) => {
@@ -1140,8 +1250,8 @@ test("unavailable migration and closed-branch POS status provide an actionable s
   data.current = null;
   await mount(page, data, { view: "status" });
   await expect(
-    page.getByRole("link", { name: "Abrir caja", exact: true }),
-  ).toHaveAttribute("href", "/finance/cash");
+    page.getByRole("button", { name: "Abrir caja", exact: true }),
+  ).toBeEnabled();
 });
 test("administrator sets nullable fund and per-person grants with the shared autocomplete", async ({
   page,
@@ -1483,6 +1593,82 @@ test("an uncertain expense survives dismissal and refresh and retries the exact 
   await expect.poll(() => posted.length).toBe(2);
   expect(posted[1]).toEqual(posted[0]);
 });
+for (const timing of ["read-first", "replay-first"])
+  test(`pending expense replay preserves the saved close draft (${timing})`, async ({
+    page,
+  }) => {
+    const posted = await mount(page, snapshot(), { failFirst: true });
+    await startClose(page);
+    await fillLot(page);
+    await page
+      .getByRole("button", {
+        name: "Guardar borrador y salir del cierre",
+        exact: true,
+      })
+      .click();
+    await page
+      .getByRole("button", { name: "Registrar gasto", exact: true })
+      .click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByLabel("Importe", { exact: true }).fill("120,50");
+    await dialog.getByLabel("Concepto del gasto").fill("Limpieza");
+    await dialog
+      .getByRole("button", { name: "Registrar gasto", exact: true })
+      .click();
+    await expect(
+      dialog.getByRole("button", {
+        name: "Reintentar la misma operación",
+        exact: true,
+      }),
+    ).toBeVisible();
+    await dialog
+      .getByRole("button", { name: "Cerrar formulario", exact: true })
+      .click();
+    let releaseRead!: () => void, releaseReplay!: () => void;
+    const readGate = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    const replayGate = new Promise<void>((resolve) => {
+      releaseReplay = resolve;
+    });
+    await page.route("**/api/cash", async (route) => {
+      if (route.request().method() === "GET") {
+        await readGate;
+        return route.fulfill({ json: snapshot() });
+      }
+      await replayGate;
+      return route.fallback();
+    });
+    try {
+      await page.reload();
+      await page.addScriptTag({ path: bundle });
+      await page
+        .getByRole("button", {
+          name: "Reintentar la misma operación",
+          exact: true,
+        })
+        .click();
+      if (timing === "read-first") {
+        releaseRead();
+        await expect(
+          page.getByRole("heading", { name: /Jornada del/ }),
+        ).toBeVisible();
+      }
+      releaseReplay();
+      await expect.poll(() => posted.length).toBe(2);
+      await page
+        .getByRole("button", { name: "Continuar cierre", exact: true })
+        .click();
+      await expect(
+        page.getByLabel("Efectivo contado", { exact: true }),
+      ).toHaveValue("1.000,10");
+      expect(posted[1]).toEqual(posted[0]);
+    } finally {
+      releaseRead();
+      releaseReplay();
+    }
+  });
+
 test("review can attach a pending posnet receipt while preserving the original close", async ({
   page,
 }) => {

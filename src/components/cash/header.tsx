@@ -1,6 +1,6 @@
 "use client";
 
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Banknote, ChevronRight, WalletCards } from "lucide-react";
@@ -8,10 +8,8 @@ import { Button } from "@/components/ui/button";
 import { money } from "@/lib/number-format";
 import type { CashStatus } from "@/modules/cash/types";
 import { cashBranchRequest } from "./shared";
+import { CashOpeningAction } from "./opening-action";
 
-const Opening = lazy(() =>
-  import("./manager").then(({ CashManager }) => ({ default: CashManager })),
-);
 const openingButtonClassName = "h-11 rounded-lg px-3 shadow-none";
 
 export function CashHeader({
@@ -24,8 +22,6 @@ export function CashHeader({
   const path = usePathname();
   const [status, setStatus] = useState<CashStatus | null>(null);
   const [unavailable, setUnavailable] = useState(false);
-  const [opening, setOpening] = useState(false);
-  const trigger = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!branchId) return;
@@ -151,23 +147,11 @@ export function CashHeader({
           </span>
         )
       ) : status?.canOpen && operationActorId ? (
-        <Button
-          ref={trigger}
-          type="button"
-          variant="outline-primary"
+        <CashOpeningAction
+          branchId={branchId}
+          actorId={operationActorId}
           className={openingButtonClassName}
-          disabled={opening}
-          onClick={() => {
-            if (path === "/finance/cash")
-              window.dispatchEvent(
-                new CustomEvent("kybo:cash-open", { detail: { branchId } }),
-              );
-            else setOpening(true);
-          }}
-        >
-          <Banknote size={18} aria-hidden="true" />
-          {opening ? "Abriendo…" : "Abrir caja"}
-        </Button>
+        />
       ) : status?.canOpen ? (
         <Button
           asChild
@@ -200,27 +184,6 @@ export function CashHeader({
           Consultando caja…
         </span>
       )}
-      {opening ? (
-        <Suspense
-          fallback={
-            <span role="status" className="sr-only">
-              Cargando apertura de caja…
-            </span>
-          }
-        >
-          <Opening
-            key={operationActorId}
-            branchId={branchId}
-            actorId={operationActorId}
-            openingOnly
-            onDismiss={() => {
-              setOpening(false);
-              // Wait for the loading button to become enabled and the portal to close.
-              requestAnimationFrame(() => trigger.current?.focus());
-            }}
-          />
-        </Suspense>
-      ) : null}
     </div>
   );
 }

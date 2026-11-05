@@ -172,6 +172,14 @@
   color: #8a4e00;
   background: #fff4e4;
 }
+.status[data-status="review"] {
+  color: #783c00;
+  background: #fff4e4;
+}
+.order:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+}
 .schedule {
   display: flex;
   flex-wrap: wrap;

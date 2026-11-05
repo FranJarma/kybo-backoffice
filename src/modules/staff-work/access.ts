@@ -80,13 +80,21 @@ export async function requirePreparationTaskAccess(
     throw forbidden();
 }
 
+export async function canDeliverOrders(
+  db: AppDb | Tx,
+  ctx: OperationalContext,
+) {
+  if (ctx.role !== "staff" || !(await workplaceSchemaReady(db))) return true;
+  return (
+    ctx.accountKind === "store" || !!(await getStoreProfile(db, ctx.actorId))
+  );
+}
+
 export async function requireDeliveryAccess(
   db: AppDb | Tx,
   ctx: OperationalContext,
 ) {
-  if (ctx.role !== "staff" || !(await workplaceSchemaReady(db))) return;
-  if (ctx.accountKind === "store" || (await getStoreProfile(db, ctx.actorId)))
-    return;
+  if (await canDeliverOrders(db, ctx)) return;
   throw new AppError(
     "FORBIDDEN",
     "La entrega al cliente se registra desde el puesto del local.",

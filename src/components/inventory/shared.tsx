@@ -42,7 +42,7 @@ async function errorText(response: Response) {
   }
 }
 
-type Pending<T> = { url: string; payload: T };
+type Pending<T> = { url: string; payload: T; outcomeUncertain?: boolean };
 function currentBranchId() {
   return typeof document === "undefined"
     ? ""
@@ -258,7 +258,11 @@ export function useOperation<T>(
         }
       }
       let response: Response;
+      const inFlight = { ...operation, outcomeUncertain: true };
       try {
+        // Persist uncertainty before dispatch: a closed tab or lost response
+        // must never turn a potentially committed command into a safe discard.
+        sessionStorage.setItem(storageKey, JSON.stringify(inFlight));
         response = await fetch(operation.url, {
           method: "POST",
           headers: {
@@ -268,7 +272,7 @@ export function useOperation<T>(
           body: JSON.stringify(payload),
         });
       } catch {
-        setPending(operation);
+        setPending(inFlight);
         setUncertain(true);
         setError(
           "No pudimos confirmar el resultado. Reintentá el mismo envío; no vuelvas a cargar la operación.",
@@ -296,7 +300,18 @@ export function useOperation<T>(
           setPending(null);
           setUncertain(false);
         } else {
-          setPending(operation);
+          const preserved = {
+            ...operation,
+            outcomeUncertain:
+              operation.outcomeUncertain !== false ||
+              ![401, 403].includes(response.status),
+          };
+          try {
+            sessionStorage.setItem(storageKey, JSON.stringify(preserved));
+          } catch {
+            preserved.outcomeUncertain = true;
+          }
+          setPending(preserved);
           setUncertain(true);
         }
         setError(message);
@@ -318,7 +333,7 @@ export function useOperation<T>(
           throw Error("La respuesta no confirma la operación de Caja.");
         sessionStorage.removeItem(storageKey);
       } catch {
-        setPending(operation);
+        setPending(inFlight);
         setUncertain(true);
         setError(
           "El servidor respondió, pero no pudimos confirmar el resultado. Reintentá el mismo envío.",
@@ -336,7 +351,7 @@ export function useOperation<T>(
   );
   const submit = (url: string, payload: T) => {
     if (!ready || pending || busy || !urlFor(kind, url)) return;
-    const operation = { url, payload };
+    const operation = { url, payload, outcomeUncertain: false };
     try {
       sessionStorage.setItem(storageKey, JSON.stringify(operation));
     } catch {
@@ -355,6 +370,7 @@ export function useOperation<T>(
       pending: !!pending,
       busy,
       status,
+      outcomeUncertain: pending?.outcomeUncertain,
     }),
     discardRejected: () => {
       try {
@@ -363,6 +379,7 @@ export function useOperation<T>(
             pending: !!pending,
             busy,
             status,
+            outcomeUncertain: pending?.outcomeUncertain,
           })
         )
           return false;

@@ -8,6 +8,8 @@ import {
   deliverLines,
 } from "@/modules/fulfillment/service";
 import { AppError } from "@/lib/errors";
+import { requireOperationalContext } from "@/modules/branches/context";
+import { canDeliverOrders } from "@/modules/staff-work/access";
 import { returnResale } from "@/modules/fulfillment/returns";
 import { stockMovements } from "@/db/stock-movement-schema";
 import { stockDocuments, stockReturns } from "@/db/inventory-document-schema";
@@ -136,6 +138,12 @@ export async function GET(
             )
         : [];
     return {
+      capabilities: {
+        deliver: await canDeliverOrders(
+          db,
+          await requireOperationalContext(db, actor, actor.branchId!),
+        ),
+      },
       combos: parents.map((p) => ({
         ...p,
         progress: comboProgress(

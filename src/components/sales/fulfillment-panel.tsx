@@ -13,6 +13,7 @@ import { getJson, useOperation, quantity } from "@/components/inventory/shared";
 import { LocationSelect } from "@/components/branches/location-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { OperationNotice } from "./shared";
 import { decimal, integer, six } from "@/modules/inventory/decimal";
 type Row = {
   notes?: string | null;
@@ -35,6 +36,7 @@ type Row = {
   } | null;
 };
 type State = {
+  capabilities?: { deliver: boolean };
   combos?: {
     id: string;
     name: string;
@@ -92,17 +94,23 @@ export function SaleFulfillmentPanel({
   return (
     <div className={renderOrders ? "space-y-4" : "surface-panel space-y-4 p-5"}>
       {!renderOrders && <h3 className="font-bold">Preparación y entrega</h3>}
-      {(error || operation.error) && (
+      {error && (
         <OperationAlert
-          eventKey={error ? errorAttempt : operation.errorAttempt}
+          eventKey={errorAttempt}
           tone="error"
           title="No pudimos completar la operación"
-          message={error || operation.error}
+          message={error}
         />
       )}
-      {operation.uncertain && (
-        <Button onClick={operation.retry}>Reintentar el mismo envío</Button>
-      )}
+      <OperationNotice
+        error={operation.error}
+        eventKey={operation.errorAttempt}
+        uncertain={operation.uncertain}
+        busy={operation.busy}
+        retry={operation.retry}
+        canDiscard={operation.canDiscard}
+        onDiscard={operation.discardRejected}
+      />
       {!renderOrders &&
         data?.combos?.map((combo) => (
           <p key={combo.id} className="rounded-lg bg-surface p-3 text-sm">
@@ -121,6 +129,7 @@ export function SaleFulfillmentPanel({
                 key={`${row.lineId}:${version}`}
                 row={row}
                 actorId={actorId}
+                canDeliver={data?.capabilities?.deliver ?? canManage}
                 disabled={operation.locked || !!data?.cancelled}
                 submit={operation.submit}
                 compact
@@ -136,6 +145,7 @@ export function SaleFulfillmentPanel({
               key={`${row.lineId}:${version}`}
               row={row}
               actorId={actorId}
+              canDeliver={data.capabilities?.deliver ?? canManage}
               disabled={operation.locked || data.cancelled}
               submit={operation.submit}
             />
@@ -178,12 +188,14 @@ export function SaleFulfillmentPanel({
 function ProgressRow({
   row: r,
   actorId,
+  canDeliver,
   disabled,
   submit,
   compact = false,
 }: {
   row: Row;
   actorId: string;
+  canDeliver: boolean;
   disabled: boolean;
   submit: (url: string, payload: Record<string, unknown>) => void;
   compact?: boolean;
@@ -245,7 +257,7 @@ function ProgressRow({
           Entregado: {r.progress.delivered} · Cancelado: {r.progress.cancelled}
         </p>
       )}
-      {remaining > 0 && (
+      {remaining > 0 && (completing || canDeliver) && (
         <form onSubmit={save} className="flex items-end gap-3">
           <label className="text-sm">
             <FieldCaption required>Cantidad</FieldCaption>
@@ -264,6 +276,11 @@ function ProgressRow({
             {completing ? "Terminar preparación" : "Entregar"}
           </Button>
         </form>
+      )}
+      {remaining > 0 && !completing && !canDeliver && (
+        <p className="text-sm text-muted">
+          La entrega se registra desde el puesto del local.
+        </p>
       )}
     </div>
   );

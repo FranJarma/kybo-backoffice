@@ -1,11 +1,18 @@
 "use client";
+import { ReceiptCostSummary } from "./receipt-cost-summary";
 import { LocationSelect } from "@/components/branches/location-select";
 import {
   ShippingEditor,
   blankShipping,
   shippingPreview,
 } from "./shipping-editor";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import {
   Plus,
   ArrowLeft,
@@ -211,6 +218,7 @@ export function PurchasesManager({
   onOrderReceived,
   embedded = false,
   onBusy,
+  active = true,
 }: {
   actorId: string;
   timeZone: string;
@@ -219,10 +227,14 @@ export function PurchasesManager({
   onOrderReceived?: () => void;
   embedded?: boolean;
   onBusy?: (busy: boolean) => void;
+  active?: boolean;
 }) {
   const [rows, setRows] = useState<ReceiptSummary[]>([]),
     [total, setTotal] = useState(0),
     [search, setSearch] = useState("");
+  const listGeneration = useRef(0);
+  const reviewRegion = useRef<HTMLDivElement>(null);
+  const [listLoading, setListLoading] = useState(true);
   const [loadError, setLoadError, loadErrorAttempt] = useErrorFeedback(),
     [detail, setDetail] = useState<ReceiptDetail | null>(null),
     [view, setView] = useState<"list" | "draft" | "review" | "detail">(
@@ -293,6 +305,12 @@ export function PurchasesManager({
     [paidOn, setPaidOn] = useState(today(timeZone)),
     [amount, setAmount] = useState(""),
     [reference, setReference] = useState("");
+  useEffect(() => {
+    if (view === "review") {
+      reviewRegion.current?.scrollIntoView({ block: "start" });
+      reviewRegion.current?.focus({ preventScroll: true });
+    }
+  }, [view]);
   const [refreshWarning, setRefreshWarning] = useState("");
   const [reviewError, setReviewError, reviewErrorAttempt] = useErrorFeedback();
   const [shipping, setShipping] = useState(blankShipping);
@@ -315,23 +333,35 @@ export function PurchasesManager({
     };
   }, [order]);
   const refreshList = useCallback(async () => {
+    const ticket = ++listGeneration.current;
+    setListLoading(true);
     try {
       const data = await getJson<{ rows: ReceiptSummary[]; total: number }>(
         `/api/purchases?q=${encodeURIComponent(search)}`,
       );
+      if (ticket !== listGeneration.current) return false;
       setRows(data.rows);
       setTotal(data.total);
       setLoadError("");
       return true;
     } catch {
-      setLoadError("No pudimos actualizar las recepciones. Probá de nuevo.");
+      if (ticket === listGeneration.current)
+        setLoadError("No pudimos actualizar las recepciones. Probá de nuevo.");
       return false;
+    } finally {
+      if (ticket === listGeneration.current) setListLoading(false);
     }
   }, [search, setLoadError]);
   useEffect(() => {
+    if (!active) return;
     const timer = setTimeout(() => void refreshList(), search ? 250 : 0);
-    return () => clearTimeout(timer);
-  }, [refreshList, search]);
+    return () => {
+      clearTimeout(timer);
+      // Request generation counter; this ref does not point to a DOM node.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      listGeneration.current++;
+    };
+  }, [refreshList, search, active]);
   const showDetail = useCallback(
     async (id: string) => {
       try {
@@ -517,9 +547,9 @@ export function PurchasesManager({
     <div className="space-y-6">
       <header className="page-heading">
         <div className="min-w-0">
-          <h1 className={embedded ? "text-lg font-semibold" : "page-title"}>
+          <h2 className={embedded ? "text-lg font-semibold" : "page-title"}>
             {order ? "Recibir pedido" : "Recepciones"}
-          </h1>
+          </h2>
           <p className="page-description">
             {order
               ? `Pedido de ${order.supplierName}. Ajustá las cantidades a lo que llegó y quitá los insumos que todavía no recibiste. El resto seguirá pendiente.`
@@ -597,6 +627,27 @@ export function PurchasesManager({
       )}
       {view === "list" && (
         <>
+          {loadError && (
+            <p
+              role="alert"
+              className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
+            >
+              {loadError}{" "}
+              <Button
+                type="button"
+                variant="outline"
+                disabled={listLoading}
+                onClick={() => void refreshList()}
+              >
+                Reintentar consulta
+              </Button>
+            </p>
+          )}
+          {listLoading && (
+            <p role="status" className="text-sm text-muted">
+              Consultando recepciones…
+            </p>
+          )}
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <label className="relative block w-full sm:max-w-md">
               <span className="sr-only">Buscar recepción</span>
@@ -735,7 +786,7 @@ export function PurchasesManager({
                   recientes
                 </div>
               </>
-            ) : (
+            ) : !listLoading && !loadError ? (
               <div className="flex flex-col items-center px-6 py-14 text-center">
                 <span className="mb-4 flex size-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
                   <PackageCheck aria-hidden="true" className="size-7" />
@@ -751,7 +802,7 @@ export function PurchasesManager({
                     : "Registrá una recepción para sumar la mercadería que llegó a tu inventario."}
                 </p>
               </div>
-            )}
+            ) : null}
           </Card>
         </>
       )}
@@ -866,8 +917,8 @@ export function PurchasesManager({
                         <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-sm font-bold text-blue-600">
                           {index + 1}
                         </span>
-                        <h3 className="truncate font-semibold text-brand">
-                          Renglón {index + 1}
+                        <h3 className="break-words font-semibold text-brand">
+                          {line.item?.name ?? `Insumo ${index + 1}`}
                         </h3>
                       </div>
                       {lines.length > 1 && (
@@ -964,31 +1015,41 @@ export function PurchasesManager({
                           }
                           placeholder="Opcional"
                         />
-                        <Field
-                          label="Descuento del renglón"
-                          inputMode="decimal"
-                          unit="ARS"
-                          value={line.discount}
-                          onChange={(discount) =>
-                            updateLine(index, { discount })
-                          }
-                          placeholder="0"
-                        />
-                        <Field
-                          label="Código de lote"
-                          value={line.lotCode}
-                          onChange={(lotCode) => updateLine(index, { lotCode })}
-                          placeholder="Opcional"
-                        />
-                        <Field
-                          label="Vencimiento"
-                          type="date"
-                          value={line.expiresOn}
-                          onChange={(expiresOn) =>
-                            updateLine(index, { expiresOn })
-                          }
-                        />
                       </div>
+                      <details className="border-t border-line pt-2">
+                        <summary className="min-h-11 cursor-pointer content-center text-sm font-semibold text-blue">
+                          Descuento, lote y vencimiento (opcional)
+                        </summary>
+                        <div className="grid gap-4 pt-3 sm:grid-cols-2">
+                          {" "}
+                          <Field
+                            label="Descuento del renglón"
+                            inputMode="decimal"
+                            unit="ARS"
+                            value={line.discount}
+                            onChange={(discount) =>
+                              updateLine(index, { discount })
+                            }
+                            placeholder="0"
+                          />
+                          <Field
+                            label="Código de lote"
+                            value={line.lotCode}
+                            onChange={(lotCode) =>
+                              updateLine(index, { lotCode })
+                            }
+                            placeholder="Opcional"
+                          />
+                          <Field
+                            label="Vencimiento"
+                            type="date"
+                            value={line.expiresOn}
+                            onChange={(expiresOn) =>
+                              updateLine(index, { expiresOn })
+                            }
+                          />
+                        </div>
+                      </details>
                       <p className="flex items-start gap-2 rounded-lg bg-blue-50/70 p-3 text-xs leading-5 text-muted">
                         <Info
                           aria-hidden="true"
@@ -1038,7 +1099,7 @@ export function PurchasesManager({
                   supplierName={supplier?.name ?? ""}
                 />
               </fieldset>
-              <aside className="space-y-4 xl:sticky xl:top-24">
+              <aside className="contents xl:block xl:space-y-4 xl:sticky xl:top-24">
                 <Card className="gap-5 p-5 sm:p-6">
                   <h2 className="text-lg font-bold text-brand">
                     Resumen de la recepción
@@ -1070,12 +1131,13 @@ export function PurchasesManager({
                       </dd>
                     </div>
                   </dl>
+                  <ReceiptCostSummary lines={lines} shipping={shipping} />
                   <p className="text-xs leading-5 text-muted">
                     Podés recibir mercadería sin precio. Si falta algún precio,
                     el total quedará pendiente.
                   </p>
                 </Card>
-                <Card className="gap-3 p-5">
+                <Card className="sticky bottom-0 z-10 gap-3 rounded-none border-x-0 border-b-0 bg-white p-4 xl:static xl:rounded-xl xl:border [@media(max-height:600px)]:static">
                   <OperationAlert
                     title="Revisá los datos de la recepción"
                     message={reviewError}
@@ -1102,7 +1164,59 @@ export function PurchasesManager({
               </aside>
             </form>
           ) : (
-            <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+            <div
+              ref={reviewRegion}
+              tabIndex={-1}
+              aria-label="Revisión de recepción"
+              className="grid scroll-mt-24 items-start gap-5 outline-none xl:grid-cols-[minmax(0,1fr)_340px]"
+            >
+              <div className="sticky top-20 z-10 border border-line bg-white p-4 sm:rounded-xl sm:p-5 xl:col-span-2 [@media(max-height:600px)]:static">
+                <ReceiptCostSummary lines={lines} shipping={shipping}>
+                  {receiptOperation.uncertain ? (
+                    <Button
+                      type="button"
+                      className="h-auto min-h-12 whitespace-normal"
+                      disabled={receiptOperation.busy}
+                      onClick={receiptOperation.retry}
+                    >
+                      Reintentar desde este formulario
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      className="min-h-12 flex-1 sm:flex-none"
+                      disabled={locked}
+                      onClick={confirmReceipt}
+                    >
+                      <Check aria-hidden="true" />{" "}
+                      {receiptOperation.busy
+                        ? "Confirmando…"
+                        : "Confirmar recepción"}
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-h-12 flex-1 sm:flex-none"
+                    disabled={locked}
+                    onClick={() => {
+                      if (receiptOperation.status === 409)
+                        setLines((old) =>
+                          old.map((item) => ({
+                            ...item,
+                            itemId: "",
+                            item: undefined,
+                            presentationId: "",
+                            presentation: undefined,
+                          })),
+                        );
+                      setView("draft");
+                    }}
+                  >
+                    <ArrowLeft aria-hidden="true" /> Volver a editar
+                  </Button>
+                </ReceiptCostSummary>
+              </div>
               <div className="min-w-0 space-y-5">
                 <Card className="gap-5 p-5 sm:p-6">
                   <div>
@@ -1237,16 +1351,7 @@ export function PurchasesManager({
                       shipping={shipping}
                     />
                   )}
-                  <div className="rounded-lg bg-surface p-4">
-                    <p className="text-xs text-muted">Costo de la recepción</p>
-                    <p className="mt-1 font-semibold text-brand">
-                      Incluye mercadería y envío
-                    </p>
-                    <p className="mt-2 text-xs leading-5 text-muted">
-                      Revisá el desglose de mercadería y envío antes de
-                      confirmar.
-                    </p>
-                  </div>
+
                   <p className="flex items-start gap-2 text-xs leading-5 text-muted">
                     <Info
                       aria-hidden="true"
@@ -1257,49 +1362,6 @@ export function PurchasesManager({
                       editar después.
                     </span>
                   </p>
-                  {receiptOperation.uncertain ? (
-                    <Button
-                      type="button"
-                      className="h-auto min-h-11 w-full whitespace-normal"
-                      disabled={receiptOperation.busy}
-                      onClick={receiptOperation.retry}
-                    >
-                      Reintentar desde este formulario
-                    </Button>
-                  ) : (
-                    <Button
-                      type="button"
-                      className="w-full"
-                      disabled={locked}
-                      onClick={confirmReceipt}
-                    >
-                      <Check aria-hidden="true" />{" "}
-                      {receiptOperation.busy
-                        ? "Confirmando…"
-                        : "Confirmar recepción"}
-                    </Button>
-                  )}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full"
-                    disabled={locked}
-                    onClick={() => {
-                      if (receiptOperation.status === 409)
-                        setLines((old) =>
-                          old.map((item) => ({
-                            ...item,
-                            itemId: "",
-                            item: undefined,
-                            presentationId: "",
-                            presentation: undefined,
-                          })),
-                        );
-                      setView("draft");
-                    }}
-                  >
-                    <ArrowLeft aria-hidden="true" /> Volver a editar
-                  </Button>
                 </Card>
               </aside>
             </div>

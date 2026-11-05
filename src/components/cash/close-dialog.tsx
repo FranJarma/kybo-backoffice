@@ -403,7 +403,7 @@ export function CashCloseDialog({
           <span className="cash-close-footer-note">
             {uploads > 0
               ? "Guardando foto…"
-              : "El borrador se conserva al volver atrás."}
+              : "El borrador se guarda en esta pestaña."}
           </span>
           {step < 2 ? (
             <Button

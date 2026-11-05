@@ -284,7 +284,13 @@ export async function getDailyOperationSnapshot(
             a.id.localeCompare(b.id),
         );
       const policies = await tx
-        .select({ id: replenishmentPolicies.id })
+        .select({
+          id: replenishmentPolicies.id,
+          itemId: replenishmentPolicies.itemId,
+          locationId: replenishmentPolicies.locationId,
+          minimumQuantity: replenishmentPolicies.minimumQuantity,
+          targetQuantity: replenishmentPolicies.targetQuantity,
+        })
         .from(replenishmentPolicies)
         .where(
           and(
@@ -293,6 +299,13 @@ export async function getDailyOperationSnapshot(
           ),
         );
       const supplyReady = ctx.role === "staff" || (await supplyAvailable(tx));
+      const policiesByLocation = new Map(
+        policies.map((policy) => [
+          `${policy.itemId}:${policy.locationId}`,
+          policy,
+        ]),
+      );
+      const stock = await readStock(tx, ctx.branchId, today);
       return {
         asOf: now.toISOString(),
         businessDate: today,
@@ -317,7 +330,21 @@ export async function getDailyOperationSnapshot(
                 "Las compras anticipadas están pendientes de activación. Las tareas actuales siguen disponibles.",
               ]),
         ],
-        stock: await readStock(tx, ctx.branchId, today),
+        stock:
+          ctx.role === "staff"
+            ? stock
+            : stock.map((row) => {
+                const policy = policiesByLocation.get(
+                  `${row.itemId}:${row.locationId}`,
+                );
+                return policy
+                  ? {
+                      ...row,
+                      minimumQuantity: policy.minimumQuantity,
+                      targetQuantity: policy.targetQuantity,
+                    }
+                  : row;
+              }),
         people,
         locations: locs,
       };

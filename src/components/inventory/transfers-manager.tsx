@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { ArrowRight, ArrowLeft, Truck } from "lucide-react";
+import { ArrowRight, ArrowLeft, Truck, RefreshCw } from "lucide-react";
+import { Tabs } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -32,6 +33,8 @@ const fieldClass =
 const selectClass =
   "min-h-12 w-full rounded-lg border bg-white px-3 text-sm font-normal";
 export function TransfersManager({ actorId }: { actorId: string }) {
+  const [tab, setTab] = useState("new");
+  const [draftPending, setDraftPending] = useState(false);
   const [offset, setOffset] = useState(0),
     [scope, setScope] = useState("active");
   const [data, setData] = useState<Directory>(),
@@ -50,7 +53,12 @@ export function TransfersManager({ actorId }: { actorId: string }) {
   );
   useEffect(() => {
     let live = true;
-    getJson<Directory>(`/api/transfers?scope=${scope}&offset=${offset}`)
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+    getJson<Directory>(
+      `/api/transfers?scope=${scope}&offset=${offset}`,
+      controller.signal,
+    )
       .then((result) => {
         if (live) {
           setData(result);
@@ -61,223 +69,295 @@ export function TransfersManager({ actorId }: { actorId: string }) {
       .catch((failure) => {
         if (live) {
           setLoading(false);
-          setError(failure.message);
+          setError(
+            failure.name === "AbortError"
+              ? "La consulta demoró demasiado. Volvé a actualizar los traslados."
+              : failure.message,
+          );
         }
-      });
+      })
+      .finally(() => clearTimeout(timeout));
     return () => {
       live = false;
+      controller.abort();
+      clearTimeout(timeout);
     };
   }, [version, scope, offset, setError]);
   return (
     <section data-transfers className="space-y-7 text-brand">
-      <header>
-        <p className="eyebrow">Inventario y compras</p>
-        <h1 className="text-3xl font-extrabold">Traslados</h1>
-        <p className="mt-2 max-w-3xl text-muted">
-          Agregá los insumos a la lista, revisá el destino de cada uno y
-          confirmá todo de una sola vez.
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-extrabold">Traslados</h1>
+          <p className="mt-2 max-w-3xl text-muted">
+            Agregá los insumos a la lista, revisá el destino de cada uno y
+            confirmá todo de una sola vez.
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-12"
+          disabled={loading || operation.locked || draftPending}
+          onClick={() => {
+            setLoading(true);
+            setVersion((value) => value + 1);
+          }}
+        >
+          <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />
+          {loading ? "Actualizando…" : "Actualizar traslados"}
+        </Button>
       </header>
       <OperationAlert
         title="No pudimos completar el traslado"
-        message={error || operation.error}
-        eventKey={error ? errorAttempt : operation.errorAttempt}
+        message={operation.error}
+        eventKey={operation.errorAttempt}
         tone="error"
       />
+      {error && (
+        <div
+          key={errorAttempt}
+          role="alert"
+          className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"
+        >
+          <p className="font-semibold">
+            Actualizá los traslados para continuar
+          </p>
+          <p className="mt-1">{error}</p>
+          <p className="mt-1">
+            La lista que estabas preparando se conserva. No se confirmará ningún
+            traslado hasta recuperar los datos.
+          </p>
+        </div>
+      )}
       {operation.uncertain && (
         <Button onClick={operation.retry} disabled={operation.busy}>
           Reintentar el mismo envío
         </Button>
       )}
-      <TransferDraftForm
-        actorId={actorId}
-        directory={data}
-        blocked={operation.locked}
-        onSuccess={onSuccess}
-      />
-      <section className="space-y-4" aria-label="Seguimiento de traslados">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-bold">Seguimiento de traslados</h2>
-            <p className="mt-1 text-sm text-muted">
-              {scope === "active"
-                ? "Reservas por completar y envíos que todavía no llegaron."
-                : "Traslados recibidos, diferencias resueltas y reservas anuladas."}
-            </p>
-          </div>
-          <label className="grid gap-2 text-sm font-medium">
-            Mostrar
-            <select
-              aria-label="Ver traslados"
-              value={scope}
-              onChange={(e) => {
-                setScope(e.target.value);
-                setOffset(0);
-                setLoading(true);
-              }}
-              className={selectClass}
-            >
-              <option value="active">Pendientes</option>
-              <option value="history">Finalizados y anulados</option>
-            </select>
-          </label>
-        </div>
-        {loading || !data || error ? (
-          <p
-            role="status"
-            className="rounded-xl border bg-white p-6 text-sm text-muted"
+      <Tabs.Root
+        value={tab}
+        onValueChange={(value) => {
+          setTab(value);
+          if (value !== "new") {
+            setScope(value);
+            setOffset(0);
+            setLoading(true);
+            setVersion((version) => version + 1);
+          }
+        }}
+        className="space-y-5"
+      >
+        <Tabs.List aria-label="Traslados">
+          <Tabs.Trigger value="new" disabled={operation.locked || draftPending}>
+            Nuevo traslado
+          </Tabs.Trigger>
+          <Tabs.Trigger
+            value="active"
+            disabled={operation.locked || draftPending}
           >
-            {error
-              ? "No pudimos consultar los traslados."
-              : "Cargando traslados…"}
-          </p>
-        ) : !data.rows.length ? (
-          <div className="rounded-xl border border-dashed bg-white p-7 text-center">
-            <Truck
-              className="mx-auto mb-3 size-7 text-muted"
-              aria-hidden="true"
-            />
-            <h3 className="font-semibold">
-              {scope === "active"
-                ? "No hay traslados pendientes"
-                : "Todavía no hay traslados finalizados"}
-            </h3>
-            <p className="mt-2 text-sm text-muted">
-              {scope === "active"
-                ? "Los envíos en tránsito y las reservas pendientes aparecen acá. Los traslados internos confirmados están en «Finalizados y anulados»."
-                : "Acá vas a encontrar los traslados completados y las reservas anuladas."}
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {data.rows.map((row) => {
-              const from = data.destinations.find(
-                  (d) => d.id === row.originLocationId,
-                ),
-                to = data.destinations.find(
-                  (d) => d.id === row.destinationLocationId,
-                ),
-                internal = row.originBranchId === row.destinationBranchId;
-              return (
-                <Card key={row.id} className="gap-4 p-5 sm:p-6">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <h3 className="flex flex-wrap items-center gap-2 font-bold">
-                        <span>{from?.name ?? "Origen"}</span>
-                        <ArrowRight
-                          className="size-4 text-muted"
-                          aria-hidden="true"
-                        />
-                        <span>{to?.name ?? "Destino"}</span>
-                      </h3>
-                      {!internal && (
-                        <p className="mt-1 text-xs text-muted">
-                          {from?.branchName} → {to?.branchName}
-                        </p>
-                      )}
-                      <p className="mt-2 break-words text-sm text-muted">
-                        {row.reason}
-                      </p>
-                    </div>
-                    <span className="rounded-md bg-secondary px-3 py-1.5 text-xs font-semibold text-brand">
-                      {labels[row.state]}
-                    </span>
-                  </div>
-                  {row.allocations.map((a) => (
-                    <AllocationForm
-                      key={`${a.id}:${row.revision}`}
-                      allocation={a}
-                      transfer={row}
-                      branchId={data.branchId}
-                      locked={operation.locked}
-                      submit={operation.submit}
-                    />
-                  ))}
-                  {row.state === "confirmed" &&
-                    row.originBranchId === data.branchId && (
-                      <div className="space-y-3 border-t pt-4">
-                        <p className="text-sm text-muted">
-                          {internal
-                            ? `Confirmá cuando los insumos estén en ${to?.name ?? "destino"}. El stock se actualiza en las dos ubicaciones.`
-                            : "Confirmá el despacho cuando los insumos salgan de origen. En destino deberán registrar la recepción."}
-                        </p>
-                        <div className="flex flex-wrap gap-3">
-                          <Button
-                            className="min-h-12"
-                            disabled={operation.locked}
-                            onClick={() =>
-                              operation.submit(
-                                `/api/transfers/${row.id}/dispatch`,
-                                {
-                                  requestId: crypto.randomUUID(),
-                                  expectedRevision: row.revision,
-                                },
-                              )
-                            }
-                          >
-                            {internal
-                              ? "Confirmar traslado realizado"
-                              : "Confirmar despacho"}
-                          </Button>
-                          <Button
-                            variant="outline"
-                            className="min-h-12"
-                            disabled={operation.locked}
-                            onClick={() =>
-                              operation.submit(
-                                `/api/transfers/${row.id}/cancel`,
-                                {
-                                  requestId: crypto.randomUUID(),
-                                  expectedRevision: row.revision,
-                                },
-                              )
-                            }
-                          >
-                            Anular reserva
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                </Card>
-              );
-            })}
-          </div>
-        )}
-        {data && (offset > 0 || data.hasMore) && (
-          <nav
-            aria-label="Páginas de traslados"
-            className="flex flex-wrap items-center justify-between gap-3 border-t pt-4"
+            Pendientes
+          </Tabs.Trigger>
+          <Tabs.Trigger
+            value="history"
+            disabled={operation.locked || draftPending}
           >
-            <p className="text-sm text-muted">Página {offset / 100 + 1}</p>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                className="min-h-12 gap-2"
-                disabled={offset === 0 || loading}
-                onClick={() => {
-                  setOffset((v) => Math.max(0, v - 100));
-                  setLoading(true);
-                }}
-              >
-                <ArrowLeft className="size-4" aria-hidden="true" />
-                Página anterior
-              </Button>
-              <Button
-                variant="outline"
-                className="min-h-12 gap-2"
-                disabled={!data.hasMore || loading}
-                onClick={() => {
-                  setOffset((v) => v + 100);
-                  setLoading(true);
-                }}
-              >
-                Página siguiente
-                <ArrowRight className="size-4" aria-hidden="true" />
-              </Button>
+            Historial
+          </Tabs.Trigger>
+        </Tabs.List>
+        <Tabs.Content value="new" forceMount hidden={tab !== "new"}>
+          <TransferDraftForm
+            actorId={actorId}
+            directory={data}
+            blocked={operation.locked || loading || !!error || !data}
+            onBusy={setDraftPending}
+            onSuccess={onSuccess}
+          />
+        </Tabs.Content>
+        <Tabs.Content value={scope} forceMount hidden={tab === "new"}>
+          <section className="space-y-4" aria-label="Seguimiento de traslados">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-bold">Seguimiento de traslados</h2>
+                <p className="mt-1 text-sm text-muted">
+                  {scope === "active"
+                    ? "Reservas por completar y envíos que todavía no llegaron."
+                    : "Traslados recibidos, diferencias resueltas y reservas anuladas."}
+                </p>
+              </div>
             </div>
-          </nav>
-        )}
-      </section>
+            {loading || !data || error ? (
+              <p
+                role="status"
+                className="rounded-xl border bg-white p-6 text-sm text-muted"
+              >
+                {error
+                  ? "No pudimos consultar los traslados."
+                  : "Cargando traslados…"}
+              </p>
+            ) : !data.rows.length ? (
+              <div className="rounded-xl border border-dashed bg-white p-7 text-center">
+                <Truck
+                  className="mx-auto mb-3 size-7 text-muted"
+                  aria-hidden="true"
+                />
+                <h3 className="font-semibold">
+                  {scope === "active"
+                    ? "No hay traslados pendientes"
+                    : "Todavía no hay traslados finalizados"}
+                </h3>
+                <p className="mt-2 text-sm text-muted">
+                  {scope === "active"
+                    ? "Los envíos en tránsito y las reservas pendientes aparecen acá. Los traslados internos confirmados están en «Finalizados y anulados»."
+                    : "Acá vas a encontrar los traslados completados y las reservas anuladas."}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {data.rows.map((row) => {
+                  const from = data.destinations.find(
+                      (d) => d.id === row.originLocationId,
+                    ),
+                    to = data.destinations.find(
+                      (d) => d.id === row.destinationLocationId,
+                    ),
+                    internal = row.originBranchId === row.destinationBranchId;
+                  return (
+                    <Card key={row.id} className="gap-4 p-5 sm:p-6">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <h3 className="flex flex-wrap items-center gap-2 font-bold">
+                            <span>{from?.name ?? "Origen"}</span>
+                            <ArrowRight
+                              className="size-4 text-muted"
+                              aria-hidden="true"
+                            />
+                            <span>{to?.name ?? "Destino"}</span>
+                          </h3>
+                          {!internal && (
+                            <p className="mt-1 text-xs text-muted">
+                              {from?.branchName} → {to?.branchName}
+                            </p>
+                          )}
+                          <p className="mt-2 break-words text-sm text-muted">
+                            {row.reason}
+                          </p>
+                        </div>
+                        <span className="rounded-md bg-secondary px-3 py-1.5 text-xs font-semibold text-brand">
+                          {labels[row.state]}
+                        </span>
+                      </div>
+                      {row.allocations.map((a) => (
+                        <AllocationForm
+                          key={`${a.id}:${row.revision}`}
+                          allocation={a}
+                          transfer={row}
+                          branchId={data.branchId}
+                          locked={
+                            operation.locked ||
+                            draftPending ||
+                            loading ||
+                            !!error
+                          }
+                          submit={operation.submit}
+                        />
+                      ))}
+                      {row.state === "confirmed" &&
+                        row.originBranchId === data.branchId && (
+                          <div className="space-y-3 border-t pt-4">
+                            <p className="text-sm text-muted">
+                              {internal
+                                ? `Confirmá cuando los insumos estén en ${to?.name ?? "destino"}. El stock se actualiza en las dos ubicaciones.`
+                                : "Confirmá el despacho cuando los insumos salgan de origen. En destino deberán registrar la recepción."}
+                            </p>
+                            <div className="flex flex-wrap gap-3">
+                              <Button
+                                className="min-h-12"
+                                disabled={
+                                  operation.locked ||
+                                  draftPending ||
+                                  loading ||
+                                  !!error
+                                }
+                                onClick={() =>
+                                  operation.submit(
+                                    `/api/transfers/${row.id}/dispatch`,
+                                    {
+                                      requestId: crypto.randomUUID(),
+                                      expectedRevision: row.revision,
+                                    },
+                                  )
+                                }
+                              >
+                                {internal
+                                  ? "Confirmar traslado realizado"
+                                  : "Confirmar despacho"}
+                              </Button>
+                              <Button
+                                variant="outline"
+                                className="min-h-12"
+                                disabled={
+                                  operation.locked ||
+                                  draftPending ||
+                                  loading ||
+                                  !!error
+                                }
+                                onClick={() =>
+                                  operation.submit(
+                                    `/api/transfers/${row.id}/cancel`,
+                                    {
+                                      requestId: crypto.randomUUID(),
+                                      expectedRevision: row.revision,
+                                    },
+                                  )
+                                }
+                              >
+                                Anular reserva
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+            {data && (offset > 0 || data.hasMore) && (
+              <nav
+                aria-label="Páginas de traslados"
+                className="flex flex-wrap items-center justify-between gap-3 border-t pt-4"
+              >
+                <p className="text-sm text-muted">Página {offset / 100 + 1}</p>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="min-h-12 gap-2"
+                    disabled={offset === 0 || loading}
+                    onClick={() => {
+                      setOffset((v) => Math.max(0, v - 100));
+                      setLoading(true);
+                    }}
+                  >
+                    <ArrowLeft className="size-4" aria-hidden="true" />
+                    Página anterior
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="min-h-12 gap-2"
+                    disabled={!data.hasMore || loading}
+                    onClick={() => {
+                      setOffset((v) => v + 100);
+                      setLoading(true);
+                    }}
+                  >
+                    Página siguiente
+                    <ArrowRight className="size-4" aria-hidden="true" />
+                  </Button>
+                </div>
+              </nav>
+            )}
+          </section>
+        </Tabs.Content>
+      </Tabs.Root>
     </section>
   );
 }
