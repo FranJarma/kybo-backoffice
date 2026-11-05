@@ -8,6 +8,7 @@ import {
 } from "@/modules/production/planning";
 import { executeCommand } from "@/modules/operations/command";
 import { reviewProductionResult } from "@/modules/production/review-result";
+import { reportProductionDifference } from "@/modules/production/difference";
 import {
   finishProduction,
   cancelUnusedProduction,
@@ -33,8 +34,20 @@ export async function POST(
         z.object({ requestId: z.uuid(), planning: z.unknown() }).strict(),
         z.object({ requestId: z.uuid(), cancelPlan: z.unknown() }).strict(),
         z.object({ requestId: z.uuid(), review: z.unknown() }).strict(),
+        z.object({ requestId: z.uuid(), report: z.unknown() }).strict(),
       ])
       .parse(raw);
+    if ("report" in input)
+      return executeCommand(
+        await getDb(),
+        actor,
+        actor.branchId!,
+        input,
+        "production-report",
+        { id, ...input },
+        (tx, ctx, op) =>
+          reportProductionDifference(tx, ctx, op, id, input.report),
+      );
     if ("review" in input)
       return executeCommand(
         await getDb(),

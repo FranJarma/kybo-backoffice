@@ -15,6 +15,7 @@ import {
   type PrepStatus,
 } from "@/modules/preparation/types";
 import { originLabels, channelLabels } from "@/modules/sales/types";
+import { PreparationModifiers } from "./modifiers";
 export function duration(seconds: number | null) {
   if (seconds === null) return "—";
   const s = Math.max(0, Math.floor(seconds));
@@ -30,6 +31,7 @@ export const tones: Record<PrepStatus, string> = {
 export function PrepCard({
   task: t,
   actorId,
+  canDeliver = false,
   locked,
   now,
   onAct,
@@ -37,6 +39,7 @@ export function PrepCard({
 }: {
   task: PrepTask;
   actorId: string;
+  canDeliver?: boolean;
   locked: boolean;
   now: number;
   onAct: (t: PrepTask, action: string) => void;
@@ -76,7 +79,7 @@ export function PrepCard({
       <div className="p-4">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-muted">
+            <p className="text-xs font-semibold text-muted">
               {t.origin === "delivery"
                 ? channelLabels[t.channel]
                 : originLabels[t.origin]}
@@ -114,7 +117,7 @@ export function PrepCard({
             {clock}
           </span>
         </div>
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
           <span className="rounded-md bg-surface px-2 py-1 font-bold text-brand">
             {t.stationName}
           </span>
@@ -137,23 +140,19 @@ export function PrepCard({
         <ul className="my-4 space-y-3 border-y border-line py-4">
           {t.lines.map((l) => (
             <li key={l.id} className="flex items-start gap-2.5">
-              <span className="flex h-6 min-w-6 shrink-0 items-center justify-center rounded-md bg-surface px-1 text-xs font-extrabold">
+              <span className="flex h-8 min-w-8 shrink-0 items-center justify-center rounded-md bg-surface px-1 text-base font-extrabold tabular-nums">
                 {l.quantity}
               </span>
               <div className="min-w-0">
-                <p className="break-words text-sm font-bold leading-6 text-brand">
+                <p className="break-words text-base font-bold leading-6 text-brand">
                   {l.name}
                 </p>
-                {l.modifiers?.map((m, i) => (
-                  <p key={i} className="mt-1 text-sm font-medium text-blue">
-                    {m.count} × {m.optionName}
-                    {m.instruction && m.instruction !== m.optionName
-                      ? ` · ${m.instruction}`
-                      : ""}
-                  </p>
-                ))}
+                <PreparationModifiers
+                  modifiers={l.modifiers ?? []}
+                  quantity={l.quantity}
+                />
                 {l.notes && (
-                  <p className="mt-0.5 whitespace-pre-wrap break-words text-xs leading-relaxed text-muted">
+                  <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-brand">
                     {l.notes}
                   </p>
                 )}
@@ -162,7 +161,8 @@ export function PrepCard({
           ))}
         </ul>
         {t.notes && (
-          <p className="mb-3 whitespace-pre-wrap break-words rounded-lg bg-amber-50/70 p-2.5 text-xs leading-relaxed text-amber-950">
+          <p className="mb-3 whitespace-pre-wrap break-words rounded-lg bg-amber-50 p-3 text-sm leading-relaxed text-amber-950">
+            <strong className="mb-1 block">Nota del pedido</strong>
             {t.notes}
           </p>
         )}
@@ -177,7 +177,7 @@ export function PrepCard({
         {t.siblings.length > 1 && (
           <p
             className={cn(
-              "mt-3 text-[11px] font-semibold",
+              "mt-3 text-xs font-semibold",
               complete ? "text-emerald-700" : "text-muted",
             )}
           >
@@ -192,7 +192,7 @@ export function PrepCard({
         <div className="mt-4 flex items-center gap-2">
           {t.status === "pending" && (
             <Button
-              className="min-h-11 flex-1"
+              className="min-h-12 flex-1"
               disabled={locked}
               onClick={() => onAct(t, "start")}
             >
@@ -202,7 +202,7 @@ export function PrepCard({
           )}
           {t.status === "preparing" && (
             <Button
-              className="min-h-11 flex-1"
+              className="min-h-12 flex-1"
               disabled={locked || !isMine}
               onClick={() => onAct(t, "ready")}
             >
@@ -210,15 +210,20 @@ export function PrepCard({
               {isMine ? "Marcar listo" : "Preparando"}
             </Button>
           )}
-          {t.status === "ready" && (
+          {t.status === "ready" && canDeliver && (
             <Button
-              className="min-h-11 flex-1 bg-brand text-white hover:bg-brand-dark"
+              className="min-h-12 flex-1 bg-brand text-white hover:bg-brand-dark"
               disabled={locked}
               onClick={() => onAct(t, "deliver")}
             >
               <ArrowUpRight size={17} />
               Entregar
             </Button>
+          )}
+          {t.status === "ready" && !canDeliver && (
+            <p className="flex-1 text-sm font-semibold text-brand">
+              La entrega se registra desde el puesto del local.
+            </p>
           )}
           {["delivered", "cancelled"].includes(t.status) && (
             <span
@@ -231,7 +236,7 @@ export function PrepCard({
             </span>
           )}
           <Button
-            className="min-h-11 shrink-0"
+            className="min-h-12 min-w-12 shrink-0"
             variant="outline"
             size="icon"
             aria-label="Ver detalle"

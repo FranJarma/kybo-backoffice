@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { CalendarClock, PackageCheck, Truck } from "lucide-react";
+import { ArrowLeft, CalendarClock, PackageCheck, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FieldCaption } from "@/components/ui/field-caption";
@@ -15,6 +15,31 @@ export const orderStates = {
   received: "Recibido",
   cancelled: "Cancelado",
 };
+export function OrderStatus({
+  state,
+  overdue = false,
+}: {
+  state: PurchaseOrder["state"];
+  overdue?: boolean;
+}) {
+  const color =
+    state === "received"
+      ? "bg-emerald-50 text-emerald-800"
+      : state === "cancelled" || state === "draft"
+        ? "bg-surface text-muted"
+        : overdue
+          ? "bg-red-50 text-red-800"
+          : state === "partially_received"
+            ? "bg-amber-50 text-amber-900"
+            : "bg-blue/5 text-blue";
+  return (
+    <span
+      className={`inline-flex w-fit rounded-md px-2.5 py-1.5 text-xs font-semibold ${color}`}
+    >
+      {orderStates[state]}
+    </span>
+  );
+}
 export function PurchaseOrderDetail({
   order: o,
   timeZone,
@@ -24,6 +49,7 @@ export function PurchaseOrderDetail({
   onCommand,
   actorId,
   onUpdated,
+  onAdvanceBusy,
 }: {
   order: PurchaseOrder;
   timeZone: string;
@@ -33,6 +59,7 @@ export function PurchaseOrderDetail({
   onCommand: (command: OrderCommand) => void;
   actorId?: string;
   onUpdated?: () => void;
+  onAdvanceBusy?: (busy: boolean) => void;
 }) {
   const [mode, setMode] = useState<"reschedule" | "cancel" | null>(null),
     [expectedOn, setExpectedOn] = useState(o.expectedOn ?? ""),
@@ -52,22 +79,18 @@ export function PurchaseOrderDetail({
   return (
     <section className="space-y-5">
       <Button variant="ghost" disabled={locked} onClick={onBack}>
-        <span aria-hidden="true">←</span> Volver a pedidos
+        <ArrowLeft className="size-4" aria-hidden="true" /> Volver a pedidos
       </Button>
-      <div className="rounded-xl border border-line bg-white">
-        <header className="space-y-4 border-b border-line p-5 sm:p-7">
+      <div className="bg-white">
+        <header className="space-y-4 border-b border-line pb-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-xs uppercase tracking-widest text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Pedido · {o.id.slice(0, 8).toUpperCase()}
               </p>
               <h2 className="mt-2 text-2xl font-bold">{o.supplierName}</h2>
             </div>
-            <span
-              className={`rounded-lg px-3 py-2 text-sm font-semibold ${closed ? "bg-slate-100 text-slate-600" : overdue ? "bg-red-50 text-red-800" : "bg-blue-50 text-blue-800"}`}
-            >
-              {orderStates[o.state]}
-            </span>
+            <OrderStatus state={o.state} overdue={overdue} />
           </div>
           <div className="flex flex-wrap gap-x-8 gap-y-3 text-sm">
             <p>
@@ -97,11 +120,60 @@ export function PurchaseOrderDetail({
             </p>
           )}
         </header>
+        {!closed && (
+          <div
+            aria-label="Acciones del pedido"
+            className="flex flex-wrap gap-3 border-b border-line py-4"
+          >
+            {o.state === "draft" ? (
+              <Button
+                className="min-h-12"
+                disabled={locked}
+                onClick={() => submit("confirm")}
+              >
+                <Truck className="size-4" />
+                Confirmar pedido realizado
+              </Button>
+            ) : (
+              <Button
+                className="min-h-12"
+                disabled={locked}
+                onClick={onReceive}
+              >
+                <PackageCheck className="size-4" />
+                Registrar llegada
+              </Button>
+            )}
+
+            <Button
+              variant="outline"
+              className="min-h-12"
+              disabled={locked}
+              onClick={() => {
+                setMode("reschedule");
+                setReason("");
+              }}
+            >
+              Actualizar fecha
+            </Button>
+            <Button
+              variant="ghost"
+              className="min-h-12 text-red-700"
+              disabled={locked}
+              onClick={() => {
+                setMode("cancel");
+                setReason("");
+              }}
+            >
+              Cancelar {o.state === "draft" ? "borrador" : "lo pendiente"}
+            </Button>
+          </div>
+        )}
         <div className="divide-y divide-line">
           {o.lines.map((l) => (
             <article
               key={l.id}
-              className="grid gap-4 p-5 sm:grid-cols-[1fr_1fr] sm:p-7"
+              className="grid min-w-0 gap-4 py-5 sm:grid-cols-[1fr_1fr]"
             >
               <div>
                 <h3 className="font-semibold">{l.itemName}</h3>
@@ -140,54 +212,9 @@ export function PurchaseOrderDetail({
             </article>
           ))}
         </div>
-        {!closed && (
-          <footer className="flex flex-wrap gap-3 border-t border-line p-5 sm:p-7">
-            {o.state === "draft" ? (
-              <Button
-                className="min-h-12"
-                disabled={locked}
-                onClick={() => submit("confirm")}
-              >
-                <Truck className="size-4" />
-                Confirmar pedido realizado
-              </Button>
-            ) : (
-              <Button
-                className="min-h-12"
-                disabled={locked}
-                onClick={onReceive}
-              >
-                <PackageCheck className="size-4" />
-                Registrar llegada
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              className="min-h-12"
-              disabled={locked}
-              onClick={() => {
-                setMode("reschedule");
-                setReason("");
-              }}
-            >
-              Actualizar fecha
-            </Button>
-            <Button
-              variant="ghost"
-              className="min-h-12 text-red-700"
-              disabled={locked}
-              onClick={() => {
-                setMode("cancel");
-                setReason("");
-              }}
-            >
-              Cancelar {o.state === "draft" ? "borrador" : "lo pendiente"}
-            </Button>
-          </footer>
-        )}
       </div>
       {o.financial && (
-        <section className="space-y-4 rounded-xl border border-line bg-white p-5 sm:p-7">
+        <section className="space-y-4 border-t border-line pt-5">
           <h3 className="font-bold">Anticipos del pedido</h3>
           <dl className="grid gap-4 text-sm sm:grid-cols-3">
             <div>
@@ -260,6 +287,7 @@ export function PurchaseOrderDetail({
           timeZone={timeZone}
           locked={locked}
           onSaved={onUpdated}
+          onBusy={onAdvanceBusy}
         />
       )}
       {mode && (

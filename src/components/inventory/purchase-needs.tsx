@@ -33,12 +33,14 @@ export function PurchaseNeeds({
   onPrepare,
   initialConfigurationId,
   onBusy,
+  active = true,
 }: {
   actorId: string;
   timeZone: string;
   onPrepare: (lines: PurchaseSeed[]) => void;
   initialConfigurationId?: string;
   onBusy?: (busy: boolean) => void;
+  active?: boolean;
 }) {
   const [data, setData] = useState<SupplySnapshot | null>(null),
     [loading, setLoading] = useState(true),
@@ -76,6 +78,7 @@ export function PurchaseNeeds({
     }
   }, []);
   useEffect(() => {
+    if (!active) return;
     const initial = setTimeout(() => void load(), 0);
     return () => {
       clearTimeout(initial);
@@ -83,7 +86,7 @@ export function PurchaseNeeds({
       // eslint-disable-next-line react-hooks/exhaustive-deps
       generation.current++;
     };
-  }, [load]);
+  }, [load, active]);
   useEffect(() => {
     onBusy?.(saving || preparing);
     return () => onBusy?.(false);
@@ -104,6 +107,7 @@ export function PurchaseNeeds({
           : (a.orderBy ?? "") > day)),
   );
   const locked = loading || !!error || !data?.available;
+  const dueToday = actionable.filter((a) => (a.orderBy ?? "") <= day).length;
   async function prepare(ids: string[]) {
     if (locked) return;
     const ticket = ++generation.current;
@@ -143,13 +147,23 @@ export function PurchaseNeeds({
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex max-w-3xl gap-3 rounded-r-lg border-l-4 border-primary bg-orange-50 px-4 py-4 text-brand">
+        <div className="flex max-w-3xl gap-3 text-brand">
           <Clock3 className="mt-1 size-5 shrink-0 text-orange-700" />
           <div>
-            <h2 className="text-sm font-semibold">
-              {actionable.length
-                ? `${actionable.filter((a) => (a.orderBy ?? "") <= day).length} insumos necesitan un pedido hoy`
-                : "Revisá las próximas compras"}
+            <h2 aria-live="polite" className="text-sm font-semibold">
+              {loading
+                ? data
+                  ? "Actualizando necesidades…"
+                  : "Consultando necesidades…"
+                : error
+                  ? "No pudimos actualizar las necesidades"
+                  : !data?.available
+                    ? "Avisos de compra pendientes de activación"
+                    : actionable.length
+                      ? dueToday
+                        ? `${dueToday} ${dueToday === 1 ? "insumo necesita" : "insumos necesitan"} un pedido hoy`
+                        : `${actionable.length} ${actionable.length === 1 ? "insumo para comprar" : "insumos para comprar"} en los próximos días`
+                      : "Revisá las próximas compras"}
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
               Se considera el stock disponible y lo que ya está pedido, según su
@@ -175,11 +189,6 @@ export function PurchaseNeeds({
           {error}
         </p>
       )}
-      {loading && (
-        <p role="status" className="text-sm text-muted-foreground">
-          Consultando necesidades…
-        </p>
-      )}
       {data && !data.available && (
         <p role="status" className="rounded-lg bg-blue-50 p-4 text-sm">
           Los avisos de compra están pendientes de activación. Podés seguir
@@ -198,7 +207,7 @@ export function PurchaseNeeds({
               type="button"
               aria-pressed={filter === id}
               onClick={() => setFilter(id)}
-              className={`min-h-11 rounded-lg border px-3 text-sm ${filter === id ? "border-line bg-white font-semibold text-brand" : "border-transparent text-muted-foreground"}`}
+              className={`min-h-11 rounded-lg border px-3 text-sm ${filter === id ? "border-blue/30 bg-blue/5 font-semibold text-blue" : "border-transparent text-muted-foreground hover:bg-surface"}`}
             >
               {label}
             </button>
@@ -215,37 +224,42 @@ export function PurchaseNeeds({
           />
         </label>
       </div>
+      <label className="flex min-h-11 w-fit items-center gap-2 text-sm font-semibold">
+        <input
+          type="checkbox"
+          className="size-4 accent-blue"
+          aria-label="Seleccionar todos"
+          disabled={locked || !rows.length}
+          checked={
+            !!rows.length && rows.every((a) => selected.includes(a.itemId))
+          }
+          onChange={(e) =>
+            setSelected(e.target.checked ? rows.map((a) => a.itemId) : [])
+          }
+        />
+        Seleccionar todos los insumos de esta vista
+      </label>
       <section
         aria-label="Insumos para comprar"
-        className="overflow-hidden rounded-xl border border-line bg-white"
+        className="@container overflow-hidden rounded-xl border border-line bg-white"
       >
-        <div className="hidden grid-cols-[24px_minmax(180px,1.7fr)_repeat(3,minmax(75px,.6fr))_130px] items-center gap-4 border-b border-line bg-slate-50/70 px-5 py-4 text-xs font-medium text-muted-foreground lg:grid">
-          <input
-            type="checkbox"
-            className="size-4 accent-primary"
-            aria-label="Seleccionar todos"
-            disabled={locked || !rows.length}
-            checked={
-              !!rows.length && rows.every((a) => selected.includes(a.itemId))
-            }
-            onChange={(e) =>
-              setSelected(e.target.checked ? rows.map((a) => a.itemId) : [])
-            }
-          />
+        <div className="hidden grid-cols-[24px_minmax(160px,1.5fr)_repeat(3,minmax(70px,.6fr))_130px_160px] items-center gap-4 border-b border-line bg-surface px-5 py-4 text-xs font-medium text-muted-foreground @[960px]:grid">
+          <span aria-hidden="true" />
           <span>Insumo</span>
           <span>Disponible</span>
           <span>Ya pedido</span>
           <span>Comprar</span>
           <span>Cuándo</span>
+          <span className="text-right">Acciones</span>
         </div>
         {rows.map((a) => (
           <article
             key={a.itemId}
-            className={`grid grid-cols-[24px_minmax(0,1fr)] items-start gap-4 border-b border-line px-4 py-5 last:border-b-0 sm:px-5 lg:grid-cols-[24px_minmax(180px,1.7fr)_repeat(3,minmax(75px,.6fr))_130px] lg:items-center ${selected.includes(a.itemId) ? "bg-orange-50/40" : ""}`}
+            className={`grid grid-cols-[24px_minmax(0,1fr)] items-start gap-4 border-b border-line px-4 py-4 last:border-b-0 sm:px-5 @[960px]:grid-cols-[24px_minmax(160px,1.5fr)_repeat(3,minmax(70px,.6fr))_130px_160px] @[960px]:items-center ${selected.includes(a.itemId) ? "bg-blue/5" : ""}`}
           >
             <input
               type="checkbox"
-              className="mt-1 size-4 accent-primary"
+              className="mt-1 size-4 accent-blue"
               aria-label={`Seleccionar ${a.itemName}`}
               checked={selected.includes(a.itemId)}
               disabled={locked}
@@ -265,14 +279,14 @@ export function PurchaseNeeds({
                   : "Falta estimar consumo"}
               </p>
             </div>
-            <div className="col-start-2 grid grid-cols-3 gap-4 lg:contents">
+            <div className="col-start-2 grid grid-cols-3 gap-3 @[960px]:contents">
               {[
                 ["Disponible", a.availableQuantity],
                 ["Ya pedido", a.incomingQuantity],
                 ["Comprar", a.suggestedQuantity],
               ].map(([label, value]) => (
                 <div key={label}>
-                  <span className="mb-1 block text-xs text-muted-foreground lg:hidden">
+                  <span className="mb-1 block text-xs text-muted-foreground @[960px]:hidden">
                     {label}
                   </span>
                   <p
@@ -286,14 +300,14 @@ export function PurchaseNeeds({
                 </div>
               ))}
             </div>
-            <div className="col-start-2 lg:col-auto">
+            <div className="col-start-2 @[960px]:col-auto">
               <span
                 className={`inline-block rounded-md px-2 py-1 text-xs font-semibold ${a.urgency === "critical" ? "bg-red-50 text-red-800" : "bg-orange-50 text-orange-900"}`}
               >
                 {purchaseTiming(a.orderBy, day)}
               </span>
             </div>
-            <div className="col-start-2 flex flex-wrap justify-between gap-2 lg:col-span-5 lg:col-start-2 lg:justify-end">
+            <div className="col-start-2 flex flex-wrap justify-between gap-2 @[960px]:col-auto @[960px]:flex-col @[960px]:items-end @[960px]:gap-0">
               <button
                 type="button"
                 className="min-h-11 text-sm font-medium text-muted-foreground hover:text-blue-700"
@@ -313,7 +327,7 @@ export function PurchaseNeeds({
             </div>
           </article>
         ))}
-        {!rows.length && !loading && (
+        {!rows.length && !loading && !error && data?.available && (
           <div className="px-5 py-10 text-center">
             <CheckCircle2 className="mx-auto size-7 text-blue-600" />
             <h3 className="mt-3 font-semibold text-brand">
@@ -397,7 +411,6 @@ export function PurchaseNeeds({
       {detail && (
         <OperationPanel
           title={detail.itemName}
-          label="Necesidad de compra"
           description="Stock y previsión de la sucursal seleccionada."
           locked={loading}
           onClose={() => setDetail(null)}
@@ -461,7 +474,6 @@ export function PurchaseNeeds({
             data?.items.find((i) => i.id === editing)?.name ??
             "Configurar insumo"
           }
-          label="Ficha del insumo"
           description="Reposición y compras · sucursal seleccionada"
           onClose={() => setEditing(null)}
           locked={saving}

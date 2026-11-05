@@ -15,6 +15,7 @@ import { stockDocuments } from "@/db/inventory-document-schema";
 import { inventoryLots } from "@/db/inventory-schema";
 import { integer, six } from "../inventory/decimal";
 import { latestProductionResult } from "./result";
+import { productionDifferences } from "./difference";
 import { AppError } from "@/lib/errors";
 import { getStoreProfile, workplaceSchemaReady } from "../workplace/access";
 import { centralPreparationLocation } from "../daily-operations/central-preparation";
@@ -122,6 +123,10 @@ export async function listProductionOrders(
     .limit(101)
     .offset(offset);
   const rows = page.slice(0, 100);
+  const differences = await productionDifferences(
+    db,
+    rows.map((row) => row.order.id),
+  );
   const compositions = rows.map(
     (r) =>
       r.order.composition as {
@@ -223,6 +228,7 @@ export async function listProductionOrders(
         baseUnit: r.baseUnit,
         location: r.location,
         assignee: r.assignee,
+        difference: differences.get(order.id) ?? null,
         preparation: r.preparation,
         result:
           actor.role === "staff"

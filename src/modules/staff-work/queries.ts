@@ -18,6 +18,7 @@ import {
 } from "@/modules/workplace/access";
 import type { StaffWorkSnapshot } from "./types";
 import { integer, six } from "@/modules/inventory/decimal";
+import { productionDifferences } from "@/modules/production/difference";
 
 export async function getStaffWork(
   db: AppDb,
@@ -143,6 +144,10 @@ export async function getStaffWork(
           .orderBy(asc(productionOrders.scheduledFor), asc(productionOrders.id))
           .limit(101);
         const page = orders.slice(0, 100);
+        const differences = await productionDifferences(
+          tx,
+          page.map((order) => order.id),
+        );
         const compositions = page.map(
           (o) =>
             (
@@ -180,6 +185,7 @@ export async function getStaffWork(
             void _composition;
             return {
               ...safe,
+              difference: differences.get(o.id) ?? null,
               state: o.state as "planned" | "confirmed",
               scheduledFor: o.scheduledFor?.toISOString() ?? null,
               components: [...totals].map(([itemId, total]) => ({

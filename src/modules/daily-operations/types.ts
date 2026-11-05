@@ -37,6 +37,8 @@ export type TaskRow = {
   purchaseAlert?: SupplyAlert | null;
 };
 export type StockRow = {
+  minimumQuantity?: string;
+  targetQuantity?: string;
   itemId: string;
   itemName: string;
   unit: string;

@@ -47,9 +47,11 @@ async function mount(
     ambiguous?: boolean;
     failOnce?: boolean;
     abortOnce?: boolean;
+    failReadOnce?: boolean;
   } = {},
 ) {
   const posted: { url: string; body: Record<string, unknown> }[] = [];
+  let directoryReads = 0;
   const catalog = [
     { id: milk, name: "Leche", baseUnit: "ml" },
     { id: ham, name: "Jamón cocido", baseUnit: "g" },
@@ -102,6 +104,15 @@ async function mount(
                 { id: kitchen, name: "Cocina", code: "COCINA" },
               ],
         },
+      });
+    if (
+      url.pathname === "/api/transfers" &&
+      ++directoryReads === 2 &&
+      options.failReadOnce
+    )
+      return r.fulfill({
+        status: 503,
+        json: { error: "No pudimos actualizar los destinos." },
       });
     if (url.pathname === "/api/transfers")
       return r.fulfill({
@@ -350,9 +361,11 @@ test("other reason requires meaningful clarification and presets do not reuse it
   await detail.fill("   ");
   await confirm(page).click();
   await expect(
-    page.getByText("Escribí la aclaración para el otro motivo.", {
-      exact: true,
-    }),
+    page
+      .getByText("Escribí la aclaración para el otro motivo.", {
+        exact: true,
+      })
+      .filter({ visible: true }),
   ).toBeVisible();
   expect(posted).toHaveLength(0);
   await detail.fill("  Reposición por rotura de un envase  ");
@@ -383,7 +396,9 @@ test("a stock rejection preserves every row for correction", async ({
   await morning(page);
   await confirm(page).click();
   await expect(
-    page.getByText("Falta stock para el traslado completo.", { exact: true }),
+    page
+      .getByText("Falta stock para el traslado completo.", { exact: true })
+      .filter({ visible: true }),
   ).toBeVisible();
   await expect(draftRow(page, "Leche").getByRole("textbox")).toHaveValue("10");
   await draftRow(page, "Leche").getByRole("textbox").fill("2");
@@ -404,6 +419,10 @@ test("a lost response retries exactly the same batch", async ({ page }) => {
     exact: true,
   });
   await expect(retry).toBeVisible();
+  await expect(
+    page.getByText("Resultado pendiente de verificar · Ver detalle", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("No se confirmó el traslado · Ver detalle", { exact: true })).toHaveCount(0);
   await expect(draftRow(page, "Leche")).toBeVisible();
   await expect(confirm(page)).toBeDisabled();
   await retry.click();
@@ -424,10 +443,12 @@ test("an unfinished editor cannot be omitted from the confirmation", async ({
     .fill("2");
   await confirm(page).click();
   await expect(
-    page.getByText(
-      "Agregá el insumo que estás cargando a la lista antes de confirmar.",
-      { exact: true },
-    ),
+    page
+      .getByText(
+        "Agregá el insumo que estás cargando a la lista antes de confirmar.",
+        { exact: true },
+      )
+      .filter({ visible: true }),
   ).toBeVisible();
   expect(posted).toHaveLength(0);
   await page
@@ -442,11 +463,13 @@ test("acting on an existing reservation does not clear the draft", async ({
 }) => {
   const posted = await mount(page, { paginated: true });
   await addMaterial(page, "Leche", "litros", "1");
+  await page.getByRole("tab", { name: "Pendientes", exact: true }).click();
   await page
     .getByRole("button", { name: "Anular reserva", exact: true })
     .click();
   await expect.poll(() => posted.length).toBe(1);
   expect(posted[0].url).toBe(`/api/transfers/${order}/cancel`);
+  await page.getByRole("tab", { name: "Nuevo traslado", exact: true }).click();
   await expect(draftRow(page, "Leche").getByRole("textbox")).toHaveValue("1");
 });
 test("a branch without a main depot requires an explicit origin", async ({
@@ -468,6 +491,7 @@ test("existing partial receipt still uses litres and validates the remaining qua
   page,
 }) => {
   const posted = await mount(page, { transit: true });
+  await page.getByRole("tab", { name: "Pendientes", exact: true }).click();
   await expect(page.getByText("8 l", { exact: true })).toBeVisible();
   const amount = page.getByRole("textbox", {
     name: "Cantidad recibida (litros)",
@@ -494,6 +518,7 @@ test("pagination identifies pages and resolved history retains received quantiti
   page,
 }) => {
   await mount(page, { paginated: true });
+  await page.getByRole("tab", { name: "Pendientes", exact: true }).click();
   await expect(page.getByText("Página 1", { exact: true })).toBeVisible();
   await page
     .getByRole("button", { name: "Página siguiente", exact: true })
@@ -507,6 +532,7 @@ test("fractional canonical remainder can be fully received in litres", async ({
   page,
 }) => {
   const posted = await mount(page, { tiny: true });
+  await page.getByRole("tab", { name: "Pendientes", exact: true }).click();
   await page
     .getByRole("textbox", { name: "Cantidad recibida (litros)", exact: true })
     .fill("0,000000001");
@@ -522,9 +548,64 @@ test("resolved history retains received quantities and resolved differences", as
   page,
 }) => {
   await mount(page, { resolved: true });
-  await page
-    .getByRole("combobox", { name: "Ver traslados" })
-    .selectOption("history");
+  await page.getByRole("tab", { name: "Historial", exact: true }).click();
   await expect(page.getByText("6 l", { exact: true })).toBeVisible();
   await expect(page.getByText("4 l", { exact: true })).toBeVisible();
+});
+
+test("focuses quantity after choosing an item and explains automatic versus manual destination", async ({
+  page,
+}) => {
+  await mount(page);
+  await page.getByRole("combobox", { name: "Artículo", exact: true }).click();
+  await page.getByRole("option", { name: "Leche", exact: true }).click();
+  await expect(
+    page.getByRole("textbox", { name: "Cantidad (litros)", exact: true }),
+  ).toBeFocused();
+  await expect(
+    page.getByText("Destino sugerido por mínimos: Barra", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByLabel("Destino del insumo", { exact: true })
+    .selectOption(kitchen);
+  await expect(
+    page.getByText("Destino elegido manualmente: Cocina", { exact: true }),
+  ).toBeVisible();
+  await page.getByLabel("Destino del insumo", { exact: true }).selectOption("");
+  await expect(page.getByText("Elegí el destino para este insumo.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Destino sugerido por mínimos: Barra", { exact: true })).toHaveCount(0);
+});
+test("switching transfer tabs preserves every unsent line and reason", async ({
+  page,
+}) => {
+  const posted = await mount(page);
+  await addMaterial(page, "Leche", "litros", "3");
+  await morning(page);
+  await page.getByRole("tab", { name: "Historial", exact: true }).click();
+  await expect(draftRow(page, "Leche")).not.toBeVisible();
+  await page.getByRole("tab", { name: "Nuevo traslado", exact: true }).click();
+  await expect(draftRow(page, "Leche").getByRole("textbox")).toHaveValue("3");
+  await expect(
+    page.getByRole("combobox", { name: "Motivo", exact: true }),
+  ).toHaveValue("Reposición para turno de la mañana");
+  expect(posted).toHaveLength(0);
+});
+test("a failed directory refresh preserves the draft and pauses confirmation until recovery", async ({
+  page,
+}) => {
+  await mount(page, { failReadOnce: true });
+  await addMaterial(page, "Leche", "litros", "3");
+  await morning(page);
+  await page
+    .getByRole("button", { name: "Actualizar traslados", exact: true })
+    .click();
+  await expect(
+    page.getByText("No pudimos actualizar los destinos.", { exact: true }),
+  ).toBeVisible();
+  await expect(confirm(page)).toBeDisabled();
+  await page
+    .getByRole("button", { name: "Actualizar traslados", exact: true })
+    .click();
+  await expect(confirm(page)).toBeEnabled();
+  await expect(draftRow(page, "Leche").getByRole("textbox")).toHaveValue("3");
 });

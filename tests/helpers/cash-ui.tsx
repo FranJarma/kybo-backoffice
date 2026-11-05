@@ -10,7 +10,7 @@ createRoot(root).render(
   view === "settings" ? (
     <CashSettingsManager branchId="branch" />
   ) : view === "status" ? (
-    <CashStatusGate branchId="branch" />
+    <CashStatusGate branchId="branch" actorId="operator" />
   ) : (
     <CashManager branchId="branch" actorId="operator" />
   ),

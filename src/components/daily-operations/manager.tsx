@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import {
   RefreshCw,
@@ -10,143 +10,125 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs } from "@/components/ui/tabs";
-import type {
-  DailySnapshot,
-  TaskRow,
-  Urgency,
-} from "@/modules/daily-operations/types";
-import { TaskList, urgencyLabels, urgencyColors } from "./task-list";
+import type { TaskRow } from "@/modules/daily-operations/types";
+import { TaskList, urgencyLabels } from "./task-list";
 import { TaskDetail } from "./task-detail";
 import { StockByLocation } from "./stock-by-location";
-const selectClass = "min-h-12 min-w-0 rounded-lg border bg-white px-3 text-sm";
+import { DayFiltersBar, type DayFilters } from "./filters";
+import { useDayFeed } from "./use-day-feed";
+
 export function DailyOperationsManager({
   role,
 }: {
   actorId: string;
   role: string;
 }) {
-  const [data, setData] = useState<DailySnapshot | null>(null),
-    [error, setError] = useState(""),
-    [busy, setBusy] = useState(false),
-    [selected, setSelected] = useState<TaskRow | null>(null),
-    [tab, setTab] = useState("tasks"),
-    [mine, setMine] = useState(role === "staff"),
-    [locationId, setLocationId] = useState(""),
-    [assignedTo, setAssignedTo] = useState(""),
-    [kind, setKind] = useState(""),
-    [urgency, setUrgency] = useState<Urgency | "">(""),
-    [offset, setOffset] = useState(0);
-  const inFlight = useRef(false),
-    generation = useRef(0),
-    reconcileKey = useRef<string | null>(null);
-  const load = useCallback(async () => {
-    const ticket = ++generation.current;
-    const q = new URLSearchParams({
-      mine: String(mine),
-      history: String(tab === "history"),
-      offset: String(offset),
-    });
-    if (locationId) q.set("locationId", locationId);
-    if (assignedTo) q.set("assignedTo", assignedTo);
-    if (kind) q.set("kind", kind);
-    if (urgency) q.set("urgency", urgency);
-    const response = await fetch(`/api/operations/day?${q}`, {
-        cache: "no-store",
-      }),
-      body = await response.json();
-    if (!response.ok)
-      throw new Error(body.error ?? "No pudimos consultar la operación.");
-    if (ticket === generation.current) setData(body);
-    return body as DailySnapshot;
-  }, [mine, tab, offset, locationId, assignedTo, kind, urgency]);
-  const refresh = useCallback(async () => {
-    if (inFlight.current) return;
-    inFlight.current = true;
-    setBusy(true);
-    let issue = "";
-    try {
-      if (role !== "staff") {
-        reconcileKey.current ??= crypto.randomUUID();
-        try {
-          const response = await fetch("/api/operations/day/reconcile", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ requestId: reconcileKey.current }),
-          });
-          const body = await response.json();
-          if (response.ok) {
-            reconcileKey.current = null;
-          } else {
-            if (response.status < 500) reconcileKey.current = null;
-            issue = body.error ?? "No se pudieron actualizar las tareas.";
-          }
-        } catch {
-          issue = "No se pudieron actualizar las tareas. Volvé a intentar.";
-        }
-      }
-      await load();
-      setError(issue);
-    } catch (e) {
-      setError(
-        e instanceof Error ? e.message : "No pudimos actualizar los datos.",
-      );
-    } finally {
-      inFlight.current = false;
-      setBusy(false);
-    }
-  }, [load, role]);
-  useEffect(() => {
-    void load().catch((e) => setError(e.message));
-  }, [load]);
-  useEffect(() => {
-    void refresh();
-    const id = setInterval(() => {
-      if (document.visibilityState === "visible") void refresh();
-    }, 60000);
-    return () => clearInterval(id);
-  }, [refresh]);
-  const change = (fn: () => void) => {
+  const [selected, setSelected] = useState<TaskRow | null>(null);
+  const [tab, setTab] = useState("tasks");
+  const [offset, setOffset] = useState(0);
+  const [filters, setFilters] = useState<DayFilters>({
+    mine: role === "staff",
+    locationId: "",
+    assignedTo: "",
+    kind: "",
+    urgency: "",
+  });
+  const query = new URLSearchParams({
+    mine: String(filters.mine),
+    history: String(tab === "history"),
+    offset: String(offset),
+  });
+  if (filters.locationId) query.set("locationId", filters.locationId);
+  if (!filters.mine && filters.assignedTo)
+    query.set("assignedTo", filters.assignedTo);
+  if (tab !== "stock" && filters.kind) query.set("kind", filters.kind);
+  if (tab === "tasks" && filters.urgency) query.set("urgency", filters.urgency);
+  const {
+    data,
+    metadata,
+    loading,
+    updating,
+    busy,
+    error,
+    disabled,
+    read,
+    refresh,
+  } = useDayFeed(query.toString(), role);
+  const canManage = metadata?.canManage ?? role !== "staff";
+  const timeZone =
+    data?.timeZone ?? metadata?.timeZone ?? "America/Argentina/Buenos_Aires";
+  const updateFilters = (patch: Partial<DayFilters>) => {
     setOffset(0);
-    fn();
+    setFilters((current) => ({ ...current, ...patch }));
   };
-  const canManage = data?.canManage ?? role !== "staff";
+  const resetFilters = () => {
+    setOffset(0);
+    setFilters({
+      mine: role === "staff",
+      locationId: "",
+      assignedTo: "",
+      kind: "",
+      urgency: "",
+    });
+  };
+  const activeFilters =
+    !!filters.locationId ||
+    (tab !== "stock" &&
+      (!!filters.kind ||
+        !!filters.assignedTo ||
+        (role !== "staff" && filters.mine) ||
+        (tab === "tasks" && !!filters.urgency)));
+  const totalPriorities = data
+    ? data.summary.critical + data.summary.high + data.summary.scheduled
+    : 0;
   return (
-    <div className="mx-auto max-w-7xl space-y-6 pb-8 text-brand">
-      <header className="flex flex-wrap items-start justify-between gap-4 border-b pb-5">
+    <div className="mx-auto max-w-7xl space-y-5 pb-8 text-brand">
+      <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-            Equipo · Reposición · Preparación
-          </p>
-          <h1 className="text-2xl font-bold sm:text-3xl">Operación del día</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {data?.businessDate
-              ? new Date(`${data.businessDate}T12:00:00`).toLocaleDateString(
-                  "es-AR",
-                  { weekday: "long", day: "numeric", month: "long" },
-                )
-              : "Organizá lo que necesita tu sucursal."}
+          <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">
+            Operación del día
+          </h1>
+          <p className="mt-2 text-sm text-muted">
+            {metadata?.businessDate
+              ? new Intl.DateTimeFormat("es-AR", {
+                  weekday: "long",
+                  day: "numeric",
+                  month: "long",
+                  timeZone: "UTC",
+                }).format(new Date(`${metadata.businessDate}T12:00:00Z`))
+              : "Organizá las tareas de tu sucursal."}
           </p>
         </div>
-        <Button
-          variant="outline"
-          className="min-h-12 gap-2"
-          disabled={busy}
-          onClick={() => void refresh()}
-        >
-          <RefreshCw className={`size-4 ${busy ? "animate-spin" : ""}`} />
-          {busy ? "Actualizando…" : "Actualizar"}
-        </Button>
+        <div className="flex flex-wrap items-center gap-3">
+          <span role="status" className="text-xs text-muted">
+            {error
+              ? "La información necesita actualizarse"
+              : updating || busy
+                ? "Consultando necesidades…"
+                : data
+                  ? `Actualizado ${new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit", timeZone }).format(new Date(data.asOf))}`
+                  : ""}
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-12"
+            disabled={busy}
+            onClick={() => void refresh()}
+          >
+            <RefreshCw className={`size-4 ${busy ? "animate-spin" : ""}`} />
+            {busy ? "Actualizando…" : "Actualizar"}
+          </Button>
+        </div>
       </header>
       {error && (
         <div
           role="alert"
-          className="flex items-start gap-3 rounded-lg border border-orange-200 bg-orange-50 p-4 text-orange-950"
+          className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-950"
         >
           <AlertCircle className="size-5 shrink-0" />
           <div>
-            <p className="font-semibold">
-              La información necesita actualizarse
-            </p>
+            <p className="font-semibold">No pudimos actualizar esta vista</p>
             <p className="mt-1 text-sm">{error}</p>
             <p className="mt-1 text-sm">
               Las acciones quedan pausadas hasta recuperar datos vigentes.
@@ -154,227 +136,236 @@ export function DailyOperationsManager({
           </div>
         </div>
       )}
-      {data?.configurationWarnings.map((w) => (
-        <p
-          key={w}
-          className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm"
-        >
-          {w}
-        </p>
-      ))}
+      {!!metadata?.configurationWarnings.length && (
+        <details className="rounded-xl border border-line bg-white px-4 py-1">
+          <summary className="min-h-12 content-center cursor-pointer text-sm font-semibold text-blue">
+            Revisar configuración de necesidades
+          </summary>
+          <ul className="space-y-2 pb-4 text-sm text-muted">
+            {metadata.configurationWarnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+        </details>
+      )}
       <Tabs.Root
         value={tab}
-        onValueChange={(id) => change(() => setTab(id))}
-        className="space-y-6"
+        onValueChange={(value) => {
+          setOffset(0);
+          setTab(value);
+        }}
+        className="space-y-5"
       >
         <Tabs.List aria-label="Operación del día">
-          {[
-            ["tasks", "Tareas", ClipboardList],
-            ["stock", "Stock por ubicación", Warehouse],
-            ["history", "Historial", History],
-          ].map(([id, label, Icon]) => (
-            <Tabs.Trigger key={String(id)} value={String(id)}>
-              {typeof Icon !== "string" && <Icon className="size-4" />}
-              {String(label)}
-            </Tabs.Trigger>
-          ))}
+          <Tabs.Trigger value="tasks">
+            <ClipboardList className="size-4" />
+            Tareas
+          </Tabs.Trigger>
+          <Tabs.Trigger value="stock">
+            <Warehouse className="size-4" />
+            Stock por ubicación
+          </Tabs.Trigger>
+          <Tabs.Trigger value="history">
+            <History className="size-4" />
+            Historial
+          </Tabs.Trigger>
         </Tabs.List>
-        <Tabs.Content value={tab} className="space-y-6">
-          <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap">
-            {canManage && tab !== "stock" && (
-              <select
-                aria-label="Vista de tareas"
-                className={selectClass}
-                value={mine ? "mine" : "team"}
-                onChange={(e) =>
-                  change(() => setMine(e.target.value === "mine"))
-                }
-              >
-                <option value="team">Todo el equipo</option>
-                <option value="mine">Mis tareas</option>
-              </select>
-            )}
-            <select
-              aria-label="Ubicación"
-              className={selectClass}
-              value={locationId}
-              onChange={(e) => change(() => setLocationId(e.target.value))}
+        <Tabs.Content value={tab} className="space-y-4">
+          {tab === "tasks" && (
+            <div
+              role="group"
+              aria-label="Prioridad de las tareas"
+              className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap"
             >
-              <option value="">Todas las ubicaciones</option>
-              {data?.locations.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name}
-                </option>
-              ))}
-            </select>
-            {tab !== "stock" && (
-              <>
-                <select
-                  aria-label="Tipo de tarea"
-                  className={selectClass}
-                  value={kind}
-                  onChange={(e) => change(() => setKind(e.target.value))}
-                >
-                  <option value="">Todas las tareas</option>
-                  <option value="transfer">Reposición</option>
-                  <option value="production">Preparación</option>
-                  <option value="purchase">Compras</option>
-                </select>
-                {canManage && !mine && (
-                  <select
-                    aria-label="Responsable"
-                    className={selectClass}
-                    value={assignedTo}
-                    onChange={(e) =>
-                      change(() => setAssignedTo(e.target.value))
-                    }
+              {(["", "critical", "high", "scheduled"] as const).map(
+                (urgency) => (
+                  <Button
+                    key={urgency}
+                    type="button"
+                    variant="outline"
+                    className={`min-h-12 gap-2 ${filters.urgency === urgency ? "border-blue bg-blue-soft text-blue" : "bg-white"}`}
+                    aria-pressed={filters.urgency === urgency}
+                    onClick={() => updateFilters({ urgency })}
                   >
-                    <option value="">Todos los responsables</option>
-                    <option value="unassigned">Sin responsable</option>
-                    {data?.people.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </>
-            )}
-          </div>
-          {!data ? (
-            <p className="py-10 text-center text-muted-foreground">
-              {error
-                ? "No hay datos disponibles para mostrar."
-                : "Cargando operación…"}
+                    {urgency && (
+                      <span
+                        aria-hidden="true"
+                        className={`size-2 rounded-full ${urgency === "critical" ? "bg-red-700" : urgency === "high" ? "bg-amber-700" : "bg-blue"}`}
+                      />
+                    )}
+                    {urgency ? urgencyLabels[urgency] : "Todas"}
+                    <span className="rounded bg-surface px-1.5 py-0.5 text-xs font-bold tabular-nums text-brand">
+                      {data
+                        ? urgency
+                          ? data.summary[urgency]
+                          : totalPriorities
+                        : "—"}
+                    </span>
+                  </Button>
+                ),
+              )}
+            </div>
+          )}
+          <DayFiltersBar
+            value={filters}
+            onChange={updateFilters}
+            onReset={resetFilters}
+            canManage={canManage}
+            stock={tab === "stock"}
+            people={metadata?.people ?? []}
+            locations={metadata?.locations ?? []}
+            active={activeFilters}
+          />
+          {loading ? (
+            <div
+              role="status"
+              className="rounded-xl border border-line bg-white p-8 text-center text-sm text-muted"
+            >
+              Actualizando la vista…
+            </div>
+          ) : !data ? (
+            <p className="py-8 text-center text-sm text-muted">
+              No hay datos confirmados para esta vista. Volvé a actualizar.
             </p>
           ) : tab === "stock" ? (
-            <StockByLocation rows={data.stock} locationId={locationId} />
+            <StockByLocation
+              rows={data.stock}
+              locationId={filters.locationId}
+              canManage={canManage}
+            />
           ) : (
             <>
-              <div className="grid grid-cols-3 gap-2 sm:gap-4">
-                {(["critical", "high", "scheduled"] as const).map((u) => (
-                  <button
-                    key={u}
-                    aria-pressed={urgency === u}
-                    onClick={() =>
-                      change(() => setUrgency(urgency === u ? "" : u))
-                    }
-                    className={`min-h-24 rounded-xl border p-3 text-left ${urgencyColors[u]} ${urgency === u ? "ring-2 ring-brand ring-offset-2" : ""}`}
-                  >
-                    <span className="block text-2xl font-bold tabular-nums">
-                      {data.summary[u]}
-                    </span>
-                    <span className="mt-1 block text-xs font-medium sm:text-sm">
-                      {urgencyLabels[u]}
-                    </span>
-                  </button>
-                ))}
-              </div>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-lg font-semibold">
-                  {tab === "history"
-                    ? "Tareas cerradas"
-                    : mine
-                      ? "Mis tareas"
-                      : "Qué hay que hacer"}
-                </h2>
-                <span className="text-sm text-muted-foreground">
-                  {data.total} tareas
-                  {urgency && (
-                    <button
-                      className="ml-3 min-h-12 underline"
-                      onClick={() => change(() => setUrgency(""))}
-                    >
-                      Quitar prioridad
-                    </button>
-                  )}
+              <div className="flex flex-wrap items-end justify-between gap-2 pt-1">
+                <div>
+                  <h2 className="text-lg font-bold">
+                    {tab === "history"
+                      ? "Tareas cerradas"
+                      : filters.mine
+                        ? "Mis tareas"
+                        : "Qué hay que hacer"}
+                  </h2>
+                  <p className="mt-1 text-xs text-muted">
+                    {tab === "history"
+                      ? "Resultados de las tareas terminadas o cerradas."
+                      : "Ordenadas por urgencia y fecha. Abrí una tarea para asignarla o continuar."}
+                  </p>
+                </div>
+                <span className="text-sm tabular-nums text-muted">
+                  {data.total} {data.total === 1 ? "tarea" : "tareas"}
                 </span>
               </div>
               {data.tasks.length ? (
                 <TaskList
                   tasks={data.tasks}
                   onSelect={setSelected}
-                  timeZone={data.timeZone}
+                  timeZone={timeZone}
+                  canManage={canManage}
+                  disabled={disabled}
                 />
               ) : (
-                <div className="rounded-xl border border-dashed p-8 text-center">
-                  <ClipboardList className="mx-auto mb-3 size-8 text-muted-foreground" />
-                  <p className="font-semibold">No hay tareas en esta vista</p>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    {data.configurationWarnings.length
-                      ? "Configurá los mínimos para generar sugerencias de reposición."
-                      : "Podés cambiar los filtros o actualizar para consultar nuevas necesidades."}
+                <div className="rounded-xl border border-line bg-white p-8 text-center">
+                  <ClipboardList className="mx-auto mb-3 size-7 text-muted" />
+                  <h3 className="font-bold">
+                    {activeFilters
+                      ? "No hay tareas con estos filtros"
+                      : tab === "history"
+                        ? "Todavía no hay tareas cerradas"
+                        : "No hay tareas pendientes"}
+                  </h3>
+                  <p className="mx-auto mt-2 max-w-lg text-sm text-muted">
+                    {activeFilters
+                      ? "Probá otra ubicación, prioridad o responsable."
+                      : data.configurationWarnings.length
+                        ? "Revisá la configuración para detectar nuevas necesidades."
+                        : "Las necesidades nuevas aparecerán al actualizar la operación."}
                   </p>
+                  {activeFilters && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="mt-4 min-h-12"
+                      onClick={resetFilters}
+                    >
+                      Ver todas las tareas
+                    </Button>
+                  )}
                 </div>
               )}
-              <div className="flex justify-end gap-2">
-                <Button
-                  className="min-h-12"
-                  variant="outline"
-                  disabled={offset === 0}
-                  onClick={() => setOffset(Math.max(0, offset - 50))}
+              {(offset > 0 || offset + 50 < data.total) && (
+                <nav
+                  aria-label="Páginas de tareas"
+                  className="flex flex-wrap items-center justify-between gap-3"
                 >
-                  Anterior
-                </Button>
-                <Button
-                  className="min-h-12"
-                  variant="outline"
-                  disabled={offset + 50 >= data.total}
-                  onClick={() => setOffset(offset + 50)}
-                >
-                  Siguiente
-                </Button>
-              </div>
+                  <span className="text-sm tabular-nums text-muted">
+                    Mostrando {offset + 1}–{Math.min(offset + 50, data.total)}{" "}
+                    de {data.total}
+                  </span>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="min-h-12"
+                      disabled={offset === 0}
+                      onClick={() =>
+                        setOffset((value) => Math.max(0, value - 50))
+                      }
+                    >
+                      Página anterior
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="min-h-12"
+                      disabled={offset + 50 >= data.total}
+                      onClick={() => setOffset((value) => value + 50)}
+                    >
+                      Página siguiente
+                    </Button>
+                  </div>
+                </nav>
+              )}
             </>
           )}
         </Tabs.Content>
       </Tabs.Root>
-      <footer className="flex flex-wrap justify-between gap-2 border-t pt-4 text-xs text-muted-foreground">
-        <span>
-          {data
-            ? `Última consulta: ${new Date(data.asOf).toLocaleTimeString("es-AR")}`
-            : ""}{" "}
-          · Actualización cada minuto
-        </span>
+      <footer className="flex flex-wrap items-center justify-between gap-x-5 gap-y-2 border-t border-line pt-3 text-xs text-muted">
+        <span>Actualización automática cada minuto</span>
         {canManage && (
           <div className="flex flex-wrap gap-4">
             <Link
               href="/inventory/purchases"
               prefetch={false}
-              className="flex min-h-12 items-center underline"
+              className="flex min-h-12 items-center font-semibold text-blue underline underline-offset-4"
             >
               Ir a Compras
             </Link>
             <Link
               href="/inventory/replenishment"
               prefetch={false}
-              className="flex min-h-12 items-center underline"
+              className="flex min-h-12 items-center font-semibold text-blue underline underline-offset-4"
             >
               Configurar mínimos en Inventario
             </Link>
           </div>
         )}
       </footer>
-      {selected && data && (
+      {selected && metadata && (
         <TaskDetail
           key={selected.id}
           task={selected}
-          people={data.people}
+          latestTask={data?.tasks.find((task) => task.id === selected.id)}
+          unavailable={
+            !!data && !data.tasks.some((task) => task.id === selected.id)
+          }
+          people={metadata.people}
           canManage={canManage}
-          disabled={!!error}
-          timeZone={data.timeZone}
+          disabled={disabled}
+          timeZone={timeZone}
           onClose={() => setSelected(null)}
           onRefresh={async (reconcile = false) => {
-            try {
-              if (reconcile) await refresh();
-              const fresh = await load();
-              return fresh.tasks.find((t) => t.id === selected.id);
-            } catch (e) {
-              setError(
-                "No pudimos actualizar la vista. Si la operación se confirmó, no hace falta volver a enviarla.",
-              );
-              throw e;
-            }
+            if (reconcile) await refresh();
+            const fresh = await read();
+            return fresh.tasks.find((task) => task.id === selected.id);
           }}
         />
       )}

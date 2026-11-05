@@ -186,15 +186,17 @@ export function PurchaseOrderEditor({
             contará esta mercadería para cubrir faltantes.
           </p>
         )}
-        <div className="space-y-4">
+        <div className="divide-y divide-line border-y border-line">
           {lines.map((l, index) => (
             <section
               key={l.key}
               aria-label={`Insumo ${index + 1}`}
-              className="rounded-lg border border-line p-4"
+              className="min-w-0 py-5"
             >
               <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-sm font-bold">Insumo {index + 1}</h3>
+                <h3 className="min-w-0 break-words text-sm font-bold">
+                  {l.item?.name ?? `Insumo ${index + 1}`}
+                </h3>
                 {lines.length > 1 && (
                   <Button
                     type="button"
@@ -208,7 +210,7 @@ export function PurchaseOrderEditor({
                   </Button>
                 )}
               </div>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid items-end gap-4 sm:grid-cols-2 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(130px,.6fr)]">
                 <SearchSelect
                   entity="items"
                   initial={l.item}
@@ -244,24 +246,26 @@ export function PurchaseOrderEditor({
                     })
                   }
                 />
+                <label className="block min-w-0 space-y-2 text-sm font-semibold sm:col-span-2 md:col-span-1">
+                  <FieldCaption required>
+                    Cantidad a pedir{" "}
+                    {l.presentation
+                      ? `· ${l.presentation.name}`
+                      : l.item
+                        ? `· ${l.item.baseUnit === "unit" ? "unidades" : l.item.baseUnit}`
+                        : ""}
+                  </FieldCaption>
+                  <Input
+                    required
+                    inputMode="decimal"
+                    placeholder="0"
+                    value={l.quantity}
+                    onChange={(e) =>
+                      change(l.key, { quantity: e.target.value })
+                    }
+                  />
+                </label>
               </div>
-              <label className="mt-4 block space-y-2 text-sm font-semibold">
-                <FieldCaption required>
-                  Cantidad a pedir{" "}
-                  {l.presentation
-                    ? `· ${l.presentation.name}`
-                    : l.item
-                      ? `· ${l.item.baseUnit === "unit" ? "unidades" : l.item.baseUnit}`
-                      : ""}
-                </FieldCaption>
-                <Input
-                  required
-                  inputMode="decimal"
-                  placeholder="0"
-                  value={l.quantity}
-                  onChange={(e) => change(l.key, { quantity: e.target.value })}
-                />
-              </label>
               <p className="mt-2 text-xs text-muted-foreground">
                 {l.presentation
                   ? `Cada ${l.presentation.name} equivale a ${quantity(String(l.presentation.baseQuantity), String(l.item?.baseUnit ?? ""))}. Ingresá presentaciones enteras.`

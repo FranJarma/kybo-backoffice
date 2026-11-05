@@ -23,6 +23,7 @@ import {
   cancelUnusedProduction,
 } from "@/modules/production/orders";
 import { listProductionOrders } from "@/modules/production/queries";
+import { reportProductionDifference } from "@/modules/production/difference";
 import { archiveLocation } from "@/modules/branches/archive-location";
 import type { Actor } from "@/lib/access";
 import type { RecipeDetail } from "@/modules/recipes/types";
@@ -443,4 +444,181 @@ it("rechaza planificar como empleado o asignar cuentas deshabilitadas", async ()
     .set({ disabled: true })
     .where(eq(operationalUsers.userId, employee.id));
   await expect(plan()).rejects.toThrow("habilitada");
+});
+
+it("informa diferencias sin mover stock, bloquea la finalización prevista y conserva permisos e idempotencia", async () => {
+  await ctx.db
+    .update(operationalUsers)
+    .set({ disabled: false })
+    .where(eq(operationalUsers.userId, employee.id));
+  await createInventoryService(ctx.db).adjust(manager, {
+    requestId: uid(),
+    kind: "opening",
+    itemId: tea,
+    locationId: ctx.mapping.initialLocation.id,
+    quantity: "1000",
+    unitCost: "1",
+    reason: "Stock descartable para diferencia",
+    receivedOn: "2026-11-01",
+  });
+  const order = await plan();
+  await executeCommand(
+    ctx.db,
+    employee,
+    employee.branchId!,
+    { requestId: uid() },
+    "production-start",
+    { id: order.id },
+    (tx, context, op) =>
+      startProduction(tx, context, op, order.id, { expectedRevision: 1 }),
+  );
+  const movements = await ctx.db.select().from(stockMovements);
+  const report = {
+    expectedRevision: 2,
+    actualQuantity: "850.000000",
+    reason: "Se derramó parte del preparado",
+  };
+  const payload = { id: order.id, report };
+  const requestId = uid();
+  const send = (who: Actor, key = requestId) =>
+    executeCommand(
+      ctx.db,
+      who,
+      who.branchId!,
+      { requestId: key },
+      "production-report",
+      payload,
+      (tx, context, op) =>
+        reportProductionDifference(tx, context, op, order.id, report),
+    );
+  await expect(send(other)).rejects.toThrow("asignadas");
+  await send(employee);
+  expect((await send(employee)).replayed).toBe(true);
+  expect(await ctx.db.select().from(stockMovements)).toEqual(movements);
+  const row = (
+    await listProductionOrders(ctx.db, manager, "active", 0, false)
+  ).rows.find((row) => row.id === order.id)!;
+  expect(row).toMatchObject({
+    state: "confirmed",
+    revision: 3,
+    actualQuantity: null,
+    difference: { actualQuantity: "850.000000", reason: report.reason },
+  });
+  await expect(
+    executeCommand(
+      ctx.db,
+      employee,
+      employee.branchId!,
+      { requestId: uid() },
+      "production-finish",
+      { id: order.id },
+      (tx, context, op) =>
+        finishProduction(tx, context, op, order.id, { expectedRevision: 3 }),
+    ),
+  ).rejects.toThrow("encargado");
+  await expect(send(other)).rejects.toThrow("asignadas");
+  await executeCommand(
+    ctx.db,
+    manager,
+    manager.branchId!,
+    { requestId: uid() },
+    "production-finish",
+    { id: order.id, reviewed: true },
+    (tx, context, op) =>
+      finishProduction(tx, context, op, order.id, {
+        expectedRevision: 3,
+        actualQuantity: "850.000000",
+        outcome: "completed",
+        expiresOn: null,
+        lotCode: null,
+        reason: report.reason,
+        consumption: row.components.map((component) => ({
+          itemId: component.itemId,
+          quantity: component.reserved,
+        })),
+      }),
+  );
+  expect(
+    (
+      await listProductionOrders(ctx.db, manager, "history", 0, false)
+    ).rows.find((row) => row.id === order.id),
+  ).toMatchObject({ state: "completed", actualQuantity: "850.000000" });
+});
+
+it("permite informar una pérdida total con motivo y sólo el encargado registra su consumo", async () => {
+  await ctx.db
+    .update(operationalUsers)
+    .set({ disabled: false })
+    .where(eq(operationalUsers.userId, employee.id));
+  await createInventoryService(ctx.db).adjust(manager, {
+    requestId: uid(),
+    kind: "opening",
+    itemId: tea,
+    locationId: ctx.mapping.initialLocation.id,
+    quantity: "1000",
+    unitCost: "1",
+    receivedOn: "2026-11-01",
+    reason: "Stock descartable para pérdida",
+  });
+  const order = await plan();
+  await executeCommand(
+    ctx.db,
+    employee,
+    employee.branchId!,
+    { requestId: uid() },
+    "production-start",
+    { id: order.id },
+    (tx, context, op) =>
+      startProduction(tx, context, op, order.id, { expectedRevision: 1 }),
+  );
+  const report = (actualQuantity: string, reason: string) =>
+    executeCommand(
+      ctx.db,
+      employee,
+      employee.branchId!,
+      { requestId: uid() },
+      "production-report",
+      { id: order.id, actualQuantity, reason },
+      (tx, context, op) =>
+        reportProductionDifference(tx, context, op, order.id, {
+          expectedRevision: 2,
+          actualQuantity,
+          reason,
+        }),
+    );
+  await expect(report("0.000000", " ")).rejects.toThrow();
+  await expect(report("-1.000000", "Cantidad inválida")).rejects.toThrow();
+  const before = await ctx.db.select().from(stockMovements);
+  await report("0.000000", "Se quemó la preparación");
+  expect(await ctx.db.select().from(stockMovements)).toEqual(before);
+  const row = (
+    await listProductionOrders(ctx.db, manager, "active", 0, false)
+  ).rows.find((row) => row.id === order.id)!;
+  expect(row.difference?.actualQuantity).toBe("0.000000");
+  await executeCommand(
+    ctx.db,
+    manager,
+    manager.branchId!,
+    { requestId: uid() },
+    "production-finish",
+    { id: order.id },
+    (tx, context, op) =>
+      finishProduction(tx, context, op, order.id, {
+        expectedRevision: 3,
+        outcome: "cancelled",
+        actualQuantity: null,
+        lotCode: null,
+        expiresOn: null,
+        reason: "Pérdida total revisada",
+        consumption: row.components.map((component) => ({
+          itemId: component.itemId,
+          quantity: component.reserved,
+        })),
+      }),
+  );
+  expect(
+    (
+      await listProductionOrders(ctx.db, manager, "history", 0, false)
+    ).rows.find((row) => row.id === order.id),
+  ).toMatchObject({ state: "cancelled", actualQuantity: null });
 });

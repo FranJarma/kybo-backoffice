@@ -108,7 +108,7 @@ export function ProductPicker({
   );
   return (
     <section className="surface-panel flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="shrink-0 space-y-3 border-b border-line p-3 sm:p-4">
+      <div className="shrink-0 space-y-2 border-b border-line p-3">
         <div className="flex items-center gap-3">
           <div className="relative min-w-0 flex-1">
             <Search
@@ -130,7 +130,7 @@ export function ProductPicker({
         <div
           role="group"
           aria-label="Categorías de productos"
-          className="flex gap-2 overflow-x-auto pb-1"
+          className="flex gap-2 overflow-x-auto"
         >
           {[
             { id: "", name: "Todas" },
@@ -200,10 +200,10 @@ export function ProductPicker({
                 }
                 aria-label={`Agregar ${row.name}`}
                 onClick={() => onAdd(row)}
-                className="flex min-h-36 min-w-0 touch-manipulation flex-col items-start rounded-xl border border-line bg-white p-3 text-left transition-colors active:border-orange-500 active:bg-orange-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue disabled:opacity-50"
+                className="flex min-h-36 min-w-0 touch-manipulation flex-col items-start rounded-xl border border-line bg-white p-3 text-left transition-colors active:border-orange-500 active:bg-orange-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue disabled:opacity-50 lg:min-h-32"
               >
-                <span className="mb-2 flex w-full items-start justify-between gap-2">
-                  <span className="block w-20 shrink-0 lg:w-14">
+                <span className="mb-2 flex w-full items-start justify-between gap-2 lg:mb-1">
+                  <span className="block w-20 shrink-0 lg:w-12">
                     <ProductPhoto id={row.imageAssetId} name={row.name} />
                   </span>
                   <Plus size={20} className="mt-1 shrink-0 text-orange-600" />
@@ -225,7 +225,7 @@ export function ProductPicker({
                   </span>
                 ) : null}
                 <span
-                  className={`mt-auto pt-2 text-base font-extrabold tabular-nums lg:text-sm ${row.price == null ? "text-amber-700" : "text-brand"}`}
+                  className={`mt-auto pt-2 text-base font-extrabold tabular-nums lg:pt-1 lg:text-sm ${row.price == null ? "text-amber-700" : "text-brand"}`}
                 >
                   {row.vatPending
                     ? "IVA pendiente"

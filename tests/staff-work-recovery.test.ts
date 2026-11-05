@@ -22,13 +22,18 @@ function storedRequest() {
     },
   };
 }
-it("keeps the exact pending request after a lost response until a received permission rejection permits explicit discard", () => {
+it("only allows explicit discard when the first attempt was definitively rejected", () => {
   const saved = storedRequest();
   const lost = { pending: true, busy: false, status: null };
   expect(canDiscardRejectedOperation(lost)).toBe(false);
   expect(discardRejectedOperation(saved.adapter, saved.key, lost)).toBe(false);
   expect(saved.storage.get(saved.key)).toBe(saved.body);
-  const rejected = { pending: true, busy: false, status: 403 };
+  const rejected = {
+    pending: true,
+    busy: false,
+    status: 403,
+    outcomeUncertain: false,
+  };
   expect(canDiscardRejectedOperation(rejected)).toBe(true);
   // Merely receiving a rejection must not silently create a new operation.
   expect(saved.storage.get(saved.key)).toBe(saved.body);
@@ -37,6 +42,21 @@ it("keeps the exact pending request after a lost response until a received permi
   );
   expect(saved.storage.has(saved.key)).toBe(false);
 });
+it.each([true, undefined])(
+  "never discards an unknown outcome after a rejected replay (%s)",
+  (outcomeUncertain) => {
+    const saved = storedRequest();
+    expect(
+      discardRejectedOperation(saved.adapter, saved.key, {
+        pending: true,
+        busy: false,
+        status: 403,
+        outcomeUncertain,
+      }),
+    ).toBe(false);
+    expect(saved.storage.get(saved.key)).toBe(saved.body);
+  },
+);
 it.each([null, 409, 429, 500])(
   "does not allow discarding a response that does not establish lost access (%s)",
   (status) => {
@@ -71,7 +91,7 @@ it("does not report a successful discard when browser storage cannot remove the 
         },
       },
       "key",
-      { pending: true, busy: false, status: 403 },
+      { pending: true, busy: false, status: 403, outcomeUncertain: false },
     ),
   ).toThrow("storage unavailable");
 });
