@@ -9,6 +9,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import type { ReactNode } from "react";
 import { AttendanceLocationStatus } from "./location-status";
 import {
   Badge,
@@ -23,9 +24,13 @@ export function PersonalAttendance({
   data,
   busy,
   onPunch,
+  canPunch = true,
+  qrStatus,
 }: {
   data: Snapshot;
   busy: boolean;
+  canPunch?: boolean;
+  qrStatus?: ReactNode;
   onPunch: (
     kind: "entry" | "pause" | "resume" | "exit",
     assignmentId?: string,
@@ -48,17 +53,18 @@ export function PersonalAttendance({
   const requests = data.corrections.filter((r) => r.userId === data.actor.id);
   const disabled =
     busy ||
+    !canPunch ||
     !data.settings?.enabled ||
     !own?.enabled ||
     (state !== "out" && data.current.branchId !== data.branch.id);
   return (
     <div className="att-personal">
       <section className="att-clock-card">
-        <div className="att-eyebrow">
+        <div className="att-context">
           {dateLabel(data.today)} · {data.branch.name}
         </div>
         <div className="att-clock-heading">
-          <h2>Hola, {data.actor.name.split(" ")[0]}</h2>
+          <h2>{data.actor.name}</h2>
           <Badge
             tone={
               state === "working"
@@ -75,24 +81,6 @@ export function PersonalAttendance({
                 : "Fuera de jornada"}
           </Badge>
         </div>
-        <p>
-          {state === "out"
-            ? data.settings?.requireLocation === false
-              ? "Registrá tu entrada para comenzar la jornada."
-              : "Comprobá tu ubicación y registrá tu entrada."
-            : state === "pause"
-              ? "Tu pausa sigue abierta. Marcá su fin al volver."
-              : "Tu entrada quedó registrada. Marcá las pausas y la salida desde acá."}
-        </p>
-        {data.settings?.enabled &&
-          own?.enabled &&
-          (state === "out" || data.current.branchId === data.branch.id) && (
-            <AttendanceLocationStatus
-              scope={`${data.branch.id}:${data.actor.id}:${data.settings.revision}`}
-              policy={data.settings}
-              busy={busy}
-            />
-          )}
         <div className="att-today-shift">
           <span>
             {state === "out" && shifts.length > 1
@@ -114,6 +102,19 @@ export function PersonalAttendance({
             <strong>Sin horario asignado</strong>
           )}
         </div>
+        {qrStatus}
+        {data.settings?.enabled &&
+          own?.enabled &&
+          (state === "out" || data.current.branchId === data.branch.id) && (
+            <AttendanceLocationStatus
+              scope={`${data.branch.id}:${data.actor.id}:${data.settings.revision}`}
+              policy={data.settings}
+              busy={busy}
+            />
+          )}
+        {state === "pause" && (
+          <p>Tu pausa sigue abierta. Marcá su fin al volver.</p>
+        )}
         {state === "out" && shifts.length > 1 ? (
           <div className="att-stack">
             {shifts.map((a) => (
@@ -190,16 +191,16 @@ export function PersonalAttendance({
             para continuar.
           </p>
         )}
-        <div className="att-verification-note">
-          <Fingerprint size={20} />
-          <span>
-            <strong>Verificación del celular</strong>
-            <small>
-              Podés usar Face ID o huella; tu celular también puede ofrecer su
-              código de desbloqueo.
-            </small>
-          </span>
-        </div>
+        <details className="att-verification-help">
+          <summary>
+            <Fingerprint size={18} aria-hidden="true" /> Cómo se verifica tu
+            fichaje
+          </summary>
+          <p>
+            Podés usar Face ID o huella; tu celular también puede ofrecer su
+            código de desbloqueo.
+          </p>
+        </details>
       </section>
       <section className="att-panel">
         <div className="att-panel-title">

@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-03T18:40:00Z",
+  "title": "Design System: Kybo Operations",
+  "extensions": {
+    "shadows": [
+      {
+        "name": "dialog",
+        "value": "0 24px 80px #071b4229",
+        "purpose": "Separar un diálogo del contexto de trabajo."
+      }
+    ],
+    "motion": [
+      {
+        "name": "control",
+        "value": "150ms",
+        "purpose": "Transición discreta de color y foco de controles."
+      }
+    ],
+    "breakpoints": [
+      { "name": "mobile", "value": "640px" },
+      { "name": "tablet", "value": "1024px" }
+    ]
+  },
+  "narrative": {
+    "northStar": "Operación clara",
+    "overview": "Conservar la identidad Kybo y consolidar controles para atender con rapidez en PC, tablet y celular.",
+    "keyCharacteristics": [
+      "Controles en línea",
+      "Acciones y selección diferenciadas",
+      "Contraste medido",
+      "Densidad según la tarea"
+    ],
+    "dos": [
+      "Conservar Manrope, logo y fotos reales",
+      "Naranja para confirmar y azul para selección/foco",
+      "44px auxiliares y 48px operativos"
+    ],
+    "donts": [
+      "No separar búsqueda y select",
+      "No anular variantes con reglas globales",
+      "No sacrificar borradores por cambios visuales"
+    ]
+  }
+}

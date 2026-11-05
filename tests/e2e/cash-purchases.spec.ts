@@ -162,7 +162,7 @@ for (const width of [390, 1024])
     });
     await page.goto("http://127.0.0.1:3000/__cash-purchases-fixture");
     await page.addScriptTag({ path: ".next-e2e/cash-purchases-ui.js" });
-    await page.getByRole("button", { name: "Pedidos", exact: true }).click();
+    await page.getByRole("tab", { name: "Pedidos", exact: true }).click();
     await page.getByRole("button", { name: "Ver pedido", exact: true }).click();
     await page
       .getByRole("button", { name: "Registrar anticipo al proveedor" })

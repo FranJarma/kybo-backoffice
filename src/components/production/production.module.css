@@ -40,34 +40,10 @@
   min-height: 44px;
 }
 .tabs {
-  display: flex;
-  gap: 28px;
-  border-bottom: 1px solid #d5e0ee;
-  margin-bottom: 28px;
+  margin-bottom: 24px;
 }
 .tab {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 52px;
-  padding: 10px 2px 16px;
-  border-bottom: 3px solid transparent;
-  color: var(--muted);
-  font-size: 14px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-.tab[data-state="active"] {
-  color: var(--brand);
-  border-color: var(--accent);
-  font-weight: 800;
-}
-.tab[data-state="active"] svg {
-  color: var(--blue);
-}
-.tab:disabled {
-  opacity: 0.5;
+  flex-shrink: 0;
 }
 .panel[data-state="inactive"] {
   display: none;

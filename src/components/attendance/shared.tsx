@@ -1,7 +1,18 @@
 "use client";
 
-import { createContext, useContext, useId, type ReactNode } from "react";
-import { Dialog as Primitive } from "radix-ui";
+import {
+  createContext,
+  useContext,
+  useId,
+  useRef,
+  type ReactNode,
+} from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { X } from "lucide-react";
 import { SearchCombobox } from "@/components/ui/search-combobox";
 import { FieldCaption } from "@/components/ui/field-caption";
@@ -9,6 +20,8 @@ import type { AttendanceSnapshot } from "@/modules/attendance/queries";
 import type { AttendanceCommand } from "@/modules/attendance/validation";
 export type Snapshot = AttendanceSnapshot;
 export const AttendanceErrorContext = createContext("");
+export const AttendanceReadOnlyContext = createContext(false);
+const AttendanceBusyContext = createContext(false);
 export type Command = (
   command: AttendanceCommand,
 ) => Promise<{ id: string; [key: string]: unknown }>;
@@ -70,6 +83,7 @@ export function Drawer({
   onClose,
   busy = false,
   className,
+  footer,
 }: {
   title: string;
   description: string;
@@ -77,50 +91,89 @@ export function Drawer({
   onClose: () => void;
   busy?: boolean;
   className?: string;
+  footer?: ReactNode;
 }) {
   const error = useContext(AttendanceErrorContext);
+  const readOnly = useContext(AttendanceReadOnlyContext);
+  const content = useRef<HTMLDivElement>(null);
   return (
-    <Primitive.Root
+    <Dialog
       open
       onOpenChange={(open) => {
         if (!open && !busy) onClose();
       }}
     >
-      <Primitive.Portal>
-        <Primitive.Overlay className="att-overlay" />
-        <Primitive.Content
-          className={`att-drawer${className ? ` ${className}` : ""}`}
-          onEscapeKeyDown={(e) => {
-            if (busy) e.preventDefault();
-          }}
-          onPointerDownOutside={(e) => {
-            if (busy) e.preventDefault();
-          }}
-        >
-          <header>
-            <div>
-              <Primitive.Title>{title}</Primitive.Title>
-              <Primitive.Description>{description}</Primitive.Description>
-            </div>
-            <Primitive.Close
-              disabled={busy}
-              aria-label="Cerrar detalle"
-              className="att-icon-button"
-            >
-              <X size={20} />
-            </Primitive.Close>
-          </header>
-          <div className="att-drawer-body">
-            {error && (
-              <p role="alert" className="att-error">
-                {error}
+      <DialogContent
+        ref={content}
+        showCloseButton={false}
+        style={{ borderRadius: 0 }}
+        className={`att-drawer inset-y-0 right-0 left-auto h-dvh max-h-dvh max-w-full sm:max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none border-0 p-0 data-[state=open]:animate-none data-[state=closed]:animate-none${className ? ` ${className}` : ""}`}
+        onOpenAutoFocus={(event) => {
+          const first = content.current?.querySelector<HTMLElement>(
+            '.att-drawer-body input:not([type="hidden"]):not([type="checkbox"]):not(:disabled), .att-drawer-body select:not(:disabled), .att-drawer-body textarea:not(:disabled)',
+          );
+          if (first) {
+            event.preventDefault();
+            first.focus();
+          }
+        }}
+        onCloseAutoFocus={(event) => {
+          if (!readOnly) return;
+          const retry = document.querySelector<HTMLButtonElement>(
+            ".att-read-feedback button:not(:disabled)",
+          );
+          if (retry) {
+            event.preventDefault();
+            retry.focus({ preventScroll: true });
+          }
+        }}
+        onEscapeKeyDown={(e) => {
+          if (
+            busy ||
+            (e.target instanceof HTMLElement &&
+              e.target.matches('[role="combobox"][aria-expanded="true"]'))
+          )
+            e.preventDefault();
+        }}
+        onPointerDownOutside={(e) => {
+          if (busy) e.preventDefault();
+        }}
+      >
+        <header>
+          <div>
+            <DialogTitle>{title}</DialogTitle>
+            <DialogDescription>{description}</DialogDescription>
+            {busy && (
+              <p role="status" className="att-drawer-progress">
+                Guardando cambios…
               </p>
             )}
-            {children}
           </div>
-        </Primitive.Content>
-      </Primitive.Portal>
-    </Primitive.Root>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={busy}
+            aria-label="Cerrar detalle"
+            className="att-icon-button"
+          >
+            <X size={20} />
+          </button>
+        </header>
+        <fieldset className="att-drawer-body" disabled={busy || readOnly}>
+          {error && (
+            <p role="alert" className="att-error">
+              {error}
+            </p>
+          )}
+          <AttendanceBusyContext value={busy}>{children}</AttendanceBusyContext>
+        </fieldset>
+        {footer && (
+          <fieldset disabled={busy} className="att-drawer-footer">
+            {footer}
+          </fieldset>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 export function Relation({
@@ -139,6 +192,8 @@ export function Relation({
   disabled?: boolean;
 }) {
   const id = useId();
+  const busy = useContext(AttendanceBusyContext);
+  const readOnly = useContext(AttendanceReadOnlyContext);
   return (
     <div className="att-field">
       <label htmlFor={id}>
@@ -155,7 +210,7 @@ export function Relation({
         onChange={onChange}
         onSearch={() => {}}
         required={required}
-        disabled={disabled}
+        disabled={disabled || busy || readOnly}
         inputClassName="min-h-11"
       />
     </div>

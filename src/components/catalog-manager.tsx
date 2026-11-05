@@ -1,5 +1,7 @@
 "use client";
 import { money, quantity } from "@/lib/number-format";
+import { stockUnitCost } from "@/components/inventory/stock-format";
+import { decimal } from "@/modules/inventory/decimal";
 import {
   ProductCostSummary,
   useProductCosts,
@@ -28,6 +30,8 @@ import {
 import { ProductDirectCost } from "@/components/products/direct-cost";
 import { ProductPricePreview } from "@/components/products/price-preview";
 import { ProductPrices } from "@/components/catalog/product-price";
+import { ProductListRow } from "@/components/catalog/product-list-row";
+import { IngredientActions } from "@/components/catalog/ingredient-actions";
 import { ProductCostDetails } from "@/components/products/cost-details";
 import {
   ProductProfitability,
@@ -36,12 +40,9 @@ import {
 import { PhotoEditor, ProductPhoto } from "@/components/products/photo";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import {
-  Archive,
   ArrowRight,
-  ArchiveRestore,
   Box,
   CreditCard,
-  Copy,
   CupSoda,
   Package,
   Pencil,
@@ -50,6 +51,7 @@ import {
   Search,
   Truck,
   Users,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -73,8 +75,16 @@ import type {
 } from "@/modules/catalog/types";
 
 type Draft = Record<string, string>;
-const formTabClassName =
-  "min-h-11 shrink-0 border-b-2 border-transparent bg-transparent px-1 py-3 text-sm font-medium whitespace-nowrap text-muted transition-colors hover:text-blue aria-selected:border-blue aria-selected:font-semibold aria-selected:text-blue focus-visible:rounded-sm disabled:cursor-not-allowed disabled:text-slate-400 disabled:hover:text-slate-400";
+function priceIssue(value = "") {
+  if (!value.trim()) return "";
+  try {
+    decimal(value, 2);
+    return "";
+  } catch (error) {
+    return error instanceof Error ? error.message : "Revisá este precio.";
+  }
+}
+const formTabClassName = "section-tab";
 const ItemSuppliersTab = dynamic(() =>
   import("@/components/items/suppliers-tab").then((m) => m.ItemSuppliersTab),
 );
@@ -174,7 +184,7 @@ const columnNames: Record<string, string> = {
   phone: "Teléfono",
   kind: "Tipo",
   baseUnit: "Unidad base",
-  unitCost: "Costo / unidad",
+  unitCost: "Costo de referencia",
   priceCounter: "Mostrador",
   prices: "Precios",
   pricePedidosYa: "PedidosYa",
@@ -209,12 +219,21 @@ function RecordStatus({ row }: { row: CatalogRow }) {
   );
 }
 
-function RecordValue({ row, column }: { row: CatalogRow; column: string }) {
+function RecordValue({
+  row,
+  column,
+  compact = false,
+}: {
+  row: CatalogRow;
+  column: string;
+  compact?: boolean;
+}) {
   if (column === "prices") {
     const price = (key: string) =>
       row[key] == null || row[key] === "" ? null : String(row[key]);
     return (
       <ProductPrices
+        compact={compact}
         counter={price("priceCounter")}
         pedidosya={price("pricePedidosYa")}
         ubereats={price("priceUberEats")}
@@ -225,6 +244,12 @@ function RecordValue({ row, column }: { row: CatalogRow; column: string }) {
     return (
       <span className="rounded-lg bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
         Pendiente
+      </span>
+    );
+  if (column === "unitCost" && row[column] != null)
+    return (
+      <span className="font-medium text-brand">
+        {stockUnitCost(String(row[column]), row.baseUnit)}
       </span>
     );
   return displayValue(row, column);
@@ -249,6 +274,7 @@ export function CatalogManager({
     [total, setTotal] = useState(0),
     [loading, setLoading] = useState(true),
     [loadError, setLoadError, loadErrorAttempt] = useErrorFeedback();
+  const [listReadError, setListReadError] = useState("");
   const [search, setSearch] = useState(""),
     [copiedFrom, setCopiedFrom] = useState(""),
     [itemClass, setItemClass] = useState(""),
@@ -257,6 +283,8 @@ export function CatalogManager({
   const [dropTarget, setDropTarget] = useState<DropPosition | null>(null);
   const [orderNotice, setOrderNotice] = useState("");
   const reorderFocus = useRef<string | null>(null);
+  const formOpener = useRef<HTMLElement | null>(null);
+  const searchInput = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (loading || !reorderFocus.current) return;
     const handle = Array.from(
@@ -311,11 +339,12 @@ export function CatalogManager({
     entity === "products" && productTab === "cost" && editing !== undefined,
     `${costRevision}:${editing?.revision ?? 0}`,
   );
-  function costSummary(row: CatalogRow) {
+  function costSummary(row: CatalogRow, compact = false) {
     return (
       <ProductCostSummary
         model={costs?.products[row.id]}
         error={costs?.error}
+        compact={compact}
       />
     );
   }
@@ -338,15 +367,19 @@ export function CatalogManager({
           });
           if (!response.ok) throw new Error(await readError(response));
           const result = (await response.json()) as ListResult;
+          if (controller.signal.aborted) return;
           setRows(result.rows);
           setTotal(result.total);
+          setListReadError("");
         } catch (error) {
-          if (!controller.signal.aborted)
-            setLoadError(
+          if (!controller.signal.aborted) {
+            const message =
               error instanceof Error
                 ? error.message
-                : "No pudimos cargar los registros.",
-            );
+                : "No pudimos cargar los registros.";
+            setListReadError(message);
+            setLoadError(message);
+          }
         } finally {
           if (!controller.signal.aborted) setLoading(false);
         }
@@ -435,7 +468,16 @@ export function CatalogManager({
       clearTimeout(timer);
     };
   }, [definition, referenceSearch]);
-  function openForm(row: CatalogRow | null, duplicate = false) {
+  function openForm(
+    row: CatalogRow | null,
+    duplicate = false,
+    opener?: HTMLElement | null,
+  ) {
+    formOpener.current =
+      opener ??
+      (document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null);
     setProductSetup(null);
     setSetupGeneration((n) => n + 1);
     setManualCode(Boolean(row && !duplicate));
@@ -504,6 +546,17 @@ export function CatalogManager({
         "data-next-tab",
       ) === "recipe";
     if (editing === undefined || uploading || saving) return;
+    if (entity === "products") {
+      const invalid = definition.fields.find(
+        (field) =>
+          field.key.startsWith("price") && priceIssue(draft[field.key]),
+      );
+      if (invalid) {
+        setFormError(`${invalid.label}: ${priceIssue(draft[invalid.key])}`);
+        document.getElementById(`${formId}-${invalid.key}`)?.focus();
+        return;
+      }
+    }
     if (entity === "products" && !productSetup) {
       setFormError("Esperá a que cargue la configuración de la sucursal.");
       return;
@@ -576,6 +629,7 @@ export function CatalogManager({
     }
   }
   async function toggleArchive(row: CatalogRow) {
+    if (actionId || loading || listReadError) return;
     setActionId(row.id);
     setLoadError("");
     try {
@@ -591,6 +645,13 @@ export function CatalogManager({
         setLoadError(await readError(response));
         return;
       }
+      if (
+        document.activeElement
+          ?.closest("[data-catalog-row]")
+          ?.getAttribute("data-catalog-row") === row.id
+      ) {
+        searchInput.current?.focus({ preventScroll: true });
+      }
       setRefresh((n) => n + 1);
     } catch {
       setLoadError(
@@ -604,7 +665,8 @@ export function CatalogManager({
     row: CatalogRow,
     destination: "up" | "down" | DropPosition,
   ) {
-    if (actionId || loading || search.trim() || archived) return;
+    if (actionId || loading || listReadError || search.trim() || archived)
+      return;
     setActionId(row.id);
     setLoadError("");
     setOrderNotice("Guardando orden…");
@@ -688,6 +750,16 @@ export function CatalogManager({
       name: field.key,
       value,
       required: field.required,
+      "aria-invalid":
+        entity === "products" && field.key.startsWith("price")
+          ? !!priceIssue(value)
+          : undefined,
+      "aria-describedby":
+        entity === "products" &&
+        field.key.startsWith("price") &&
+        priceIssue(value)
+          ? `${id}-error`
+          : undefined,
       onChange: (
         event: React.ChangeEvent<
           HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
@@ -787,6 +859,16 @@ export function CatalogManager({
           {field.label}
         </Label>
         {fieldControl(field)}
+        {entity === "products" &&
+          field.key.startsWith("price") &&
+          priceIssue(draft[field.key]) && (
+            <p
+              id={`${formId}-${field.key}-error`}
+              className="text-xs text-destructive"
+            >
+              {priceIssue(draft[field.key])}
+            </p>
+          )}
         {entity === "items" &&
           field.key === "code" &&
           !editing &&
@@ -851,44 +933,33 @@ export function CatalogManager({
       : undefined;
   }
   function rowActions(row: CatalogRow) {
-    const ArchiveIcon = row.archivedAt ? ArchiveRestore : Archive;
+    const pending = !!actionId || loading || !!listReadError;
     return (
-      <div className="flex flex-wrap items-center gap-1 md:justify-end">
+      <div className="flex flex-nowrap items-center gap-1 md:justify-end">
         <Button
           size="sm"
           variant="ghost"
+          disabled={pending}
           onClick={() => openForm(row)}
           className="text-brand hover:bg-blue-50 hover:text-blue"
         >
           <Pencil size={15} aria-hidden="true" />
           Editar
         </Button>
-        {ingredientsOnly && !row.archivedAt && (
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => openForm(row, true)}
-            aria-label={`Duplicar ingrediente ${row.name}`}
-            className="text-muted hover:bg-blue-50 hover:text-blue"
-          >
-            <Copy size={15} aria-hidden="true" />
-            Duplicar
-          </Button>
-        )}
-        <Button
-          size="sm"
-          variant="ghost"
-          disabled={actionId === row.id}
-          onClick={() => toggleArchive(row)}
-          className="text-muted hover:bg-slate-100 hover:text-brand"
-        >
-          <ArchiveIcon size={15} aria-hidden="true" />
-          {actionId === row.id
-            ? "Guardando…"
-            : row.archivedAt
-              ? "Restaurar"
-              : "Archivar"}
-        </Button>
+        <IngredientActions
+          name={row.name}
+          archived={!!row.archivedAt}
+          pending={pending}
+          onDuplicate={
+            ingredientsOnly
+              ? (opener) => openForm(row, true, opener)
+              : undefined
+          }
+          onArchive={() => void toggleArchive(row)}
+          onFocusFallback={() =>
+            searchInput.current?.focus({ preventScroll: true })
+          }
+        />
       </div>
     );
   }
@@ -919,9 +990,16 @@ export function CatalogManager({
             {definition.description}
           </p>
         </div>
-        <Button onClick={() => openForm(null)} className="w-fit" size="lg">
+        <Button
+          onClick={() => openForm(null)}
+          disabled={!!actionId}
+          className="w-fit"
+          size="lg"
+        >
           <Plus size={20} aria-hidden="true" />
-          Nuevo {definition.singular}
+          {entity === "categories"
+            ? "Crear categoría"
+            : `Nuevo ${definition.singular}`}
         </Button>
       </div>
 
@@ -933,10 +1011,14 @@ export function CatalogManager({
             className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted"
           />
           <Input
+            ref={searchInput}
             aria-label={`Buscar ${definition.title.toLowerCase()}`}
             placeholder={`Buscar ${definition.singular}…`}
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setLoading(true);
+              setSearch(e.target.value);
+            }}
             className="h-12 bg-white pl-11"
           />
         </div>
@@ -946,7 +1028,10 @@ export function CatalogManager({
             <select
               className="form-control mt-1"
               value={itemClass}
-              onChange={(event) => setItemClass(event.target.value)}
+              onChange={(event) => {
+                setLoading(true);
+                setItemClass(event.target.value);
+              }}
             >
               <option value="">Todas las clases</option>
               {itemClasses.map((option) => (
@@ -968,7 +1053,12 @@ export function CatalogManager({
               size="sm"
               variant="ghost"
               aria-pressed={!archived}
-              onClick={() => setArchived(false)}
+              onClick={() => {
+                if (archived) {
+                  setLoading(true);
+                  setArchived(false);
+                }
+              }}
               className={
                 !archived
                   ? "bg-blue-50 font-semibold text-blue hover:bg-blue-50 hover:text-blue"
@@ -981,7 +1071,12 @@ export function CatalogManager({
               size="sm"
               variant="ghost"
               aria-pressed={archived}
-              onClick={() => setArchived(true)}
+              onClick={() => {
+                if (!archived) {
+                  setLoading(true);
+                  setArchived(true);
+                }
+              }}
               className={
                 archived
                   ? "bg-blue-50 font-semibold text-blue hover:bg-blue-50 hover:text-blue"
@@ -998,6 +1093,7 @@ export function CatalogManager({
             title="Actualizar lista"
             disabled={loading}
             onClick={() => {
+              setLoading(true);
               setCostRevision((n) => n + 1);
               setRefresh((n) => n + 1);
             }}
@@ -1023,11 +1119,24 @@ export function CatalogManager({
         eventKey={loadErrorAttempt}
         tone="error"
       />
+      {listReadError && (
+        <p
+          role="alert"
+          className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
+        >
+          {listReadError} Actualizá la lista para volver a consultar.{" "}
+          {rows.length > 0 && "Se conservan los últimos resultados."}
+        </p>
+      )}
       <Card
-        className="surface-panel gap-0 overflow-hidden py-0 shadow-none"
+        className="@container surface-panel gap-0 overflow-hidden py-0 shadow-none"
         aria-busy={loading}
       >
-        {loading && rows.length === 0 ? (
+        {listReadError && rows.length === 0 ? (
+          <p className="p-8 text-center text-sm text-muted">
+            Reintentá la consulta para ver los registros.
+          </p>
+        ) : loading && rows.length === 0 ? (
           <div className="flex min-h-64 items-center justify-center gap-3 text-sm text-muted">
             <RefreshCw
               size={18}
@@ -1058,8 +1167,12 @@ export function CatalogManager({
           </div>
         ) : (
           <>
-            <div className="hidden md:block">
-              <Table>
+            <div
+              className={
+                ingredientsOnly ? "hidden md:block" : "hidden @[960px]:block"
+              }
+            >
+              <Table data-density={ingredientsOnly ? "compact" : undefined}>
                 <thead>
                   <tr className="border-b border-line bg-slate-50/80">
                     {definition.columns.map((column) => (
@@ -1144,70 +1257,74 @@ export function CatalogManager({
                 </tbody>
               </Table>
             </div>
-            <div className="divide-y divide-line md:hidden">
-              {rows.map((row) => (
-                <article
-                  key={row.id}
-                  data-catalog-row={row.id}
-                  style={dropStyle(row.id)}
-                  className="p-4"
-                >
-                  <div className="flex items-start gap-3">
-                    {reorderHandle(row)}
-                    <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue">
-                      <EntityIcon size={21} aria-hidden="true" />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <h2 className="break-words font-semibold text-brand">
-                        <span className="mb-2 block w-16">
-                          {entity === "products" && (
-                            <ProductPhoto
-                              id={String(row.imageAssetId ?? "") || null}
-                              name={row.name}
-                            />
-                          )}
-                        </span>
-                        {row.name}
-                      </h2>
-                      <div className="mt-1.5">
-                        <RecordStatus row={row} />
+            <div
+              className={
+                ingredientsOnly
+                  ? "divide-y divide-line md:hidden"
+                  : "divide-y divide-line @[960px]:hidden"
+              }
+            >
+              {rows.map((row) =>
+                entity === "products" ? (
+                  <ProductListRow
+                    key={row.id}
+                    row={row}
+                    style={dropStyle(row.id)}
+                    reorderHandle={reorderHandle(row)}
+                    cost={costSummary(row, true)}
+                    status={<RecordStatus row={row} />}
+                    actions={rowActions(row)}
+                  />
+                ) : (
+                  <article
+                    key={row.id}
+                    data-catalog-row={row.id}
+                    style={dropStyle(row.id)}
+                    className="p-4"
+                  >
+                    <div className="flex items-start gap-3">
+                      {reorderHandle(row)}
+                      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue">
+                        <EntityIcon size={21} aria-hidden="true" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <h2 className="break-words font-semibold text-brand">
+                          {row.name}
+                        </h2>
+                        <div className="mt-1.5">
+                          <RecordStatus row={row} />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <dl className="mt-4 space-y-2.5">
-                    {definition.columns
-                      .filter((column) => column !== "name")
-                      .map((column) => (
-                        <div
-                          key={column}
-                          className={
-                            column === "prices"
-                              ? "space-y-2.5 text-sm"
-                              : "flex justify-between gap-4 text-sm"
-                          }
-                        >
-                          <dt className="shrink-0 text-muted">
-                            {columnNames[column] ?? column}
-                          </dt>
-                          <dd
-                            className={`min-w-0 break-words text-brand tabular-nums ${column === "prices" ? "text-left" : "text-right"}`}
+                    <dl className="mt-4 space-y-2.5">
+                      {definition.columns
+                        .filter((column) => column !== "name")
+                        .map((column) => (
+                          <div
+                            key={column}
+                            className={
+                              column === "prices"
+                                ? "space-y-2.5 text-sm"
+                                : "flex justify-between gap-4 text-sm"
+                            }
                           >
-                            <RecordValue row={row} column={column} />
-                          </dd>
-                        </div>
-                      ))}
-                  </dl>
-                  {entity === "products" && (
+                            <dt className="shrink-0 text-muted">
+                              {columnNames[column] ?? column}
+                            </dt>
+                            <dd
+                              className={`min-w-0 break-words text-brand tabular-nums ${column === "prices" ? "text-left" : "text-right"}`}
+                            >
+                              <RecordValue row={row} column={column} compact />
+                            </dd>
+                          </div>
+                        ))}
+                    </dl>
                     <div className="mt-4 border-t border-line pt-3">
-                      <p className="text-xs text-muted">Costo estimado</p>
-                      {costSummary(row)}
+                      {rowActions(row)}
                     </div>
-                  )}
-                  <div className="mt-4 border-t border-line pt-3">
-                    {rowActions(row)}
-                  </div>
-                </article>
-              ))}
+                  </article>
+                ),
+              )}
             </div>
           </>
         )}
@@ -1231,7 +1348,15 @@ export function CatalogManager({
       >
         {editing !== undefined && (
           <DialogContent
-            className={`gap-0 bg-white p-5 sm:p-8 ${entity === "items" ? "catalog-dialog flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] flex-col overflow-hidden sm:max-w-6xl lg:px-10" : entity === "products" ? "max-h-[96dvh] w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-7xl lg:p-10" : "max-h-[94dvh] overflow-y-auto sm:max-w-5xl lg:p-10"}`}
+            className={`gap-0 bg-white p-5 sm:p-8 ${entity === "items" || entity === "products" ? `catalog-dialog flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] flex-col overflow-hidden ${entity === "products" ? "sm:max-w-7xl" : "sm:max-w-6xl"} lg:px-10` : "max-h-[94dvh] overflow-y-auto sm:max-w-2xl"}`}
+            showCloseButton={false}
+            aria-busy={saving || uploading || recipeBusy || suppliersBusy}
+            onCloseAutoFocus={(event) => {
+              if (formOpener.current?.isConnected) {
+                event.preventDefault();
+                formOpener.current.focus({ preventScroll: true });
+              }
+            }}
             onEscapeKeyDown={(event) => {
               if (
                 event.target instanceof HTMLElement &&
@@ -1241,13 +1366,21 @@ export function CatalogManager({
             }}
           >
             <div className="mb-4 shrink-0 border-b border-line pb-5 pr-5">
-              <p className="eyebrow mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
-                {definition.title}
-              </p>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                aria-label="Cerrar formulario"
+                className="absolute right-4 top-4"
+                disabled={saving || uploading || recipeBusy || suppliersBusy}
+                onClick={closeForm}
+              >
+                <X aria-hidden="true" />
+              </Button>
               <DialogTitle className="text-2xl font-bold tracking-tight text-brand">
                 {editing
                   ? `Editar ${definition.singular}`
-                  : `Nuevo ${definition.singular}`}
+                  : `Crear ${definition.singular}`}
               </DialogTitle>
               <DialogDescription className="mt-2 text-sm leading-relaxed text-muted">
                 {copiedFrom
@@ -1476,6 +1609,7 @@ export function CatalogManager({
                 )}
                 {editing && recipeOpened && (
                   <div
+                    className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
                     hidden={productTab === "product"}
                     role="tabpanel"
                     id={`${formId}-panel-recipe`}
@@ -1574,14 +1708,14 @@ export function CatalogManager({
               }
               onSubmit={submit}
               className={
-                entity === "items"
+                entity === "items" || entity === "products"
                   ? "flex min-h-0 flex-1 flex-col"
                   : "space-y-8"
               }
             >
               <div
                 className={
-                  entity === "items"
+                  entity === "items" || entity === "products"
                     ? "catalog-scroll-region min-h-0 space-y-7 overflow-y-auto overscroll-contain px-2 pt-2 pb-6 [scrollbar-gutter:stable]"
                     : "space-y-8"
                 }
@@ -1751,7 +1885,12 @@ export function CatalogManager({
                     <div className="mb-6 mt-3 max-w-md">
                       {definition.fields
                         .filter((field) => field.key === "vatRate")
-                        .map(renderField)}
+                        .map((field) =>
+                          renderField({
+                            ...field,
+                            hint: "Confirmá la alícuota antes de vender.",
+                          }),
+                        )}
                     </div>
                     <p className="mb-4 text-xs leading-5 text-muted">
                       Cargá el precio final que paga el cliente. El IVA se
@@ -1764,25 +1903,42 @@ export function CatalogManager({
                     <div className="grid gap-7 pt-3 lg:grid-cols-3">
                       {(["Counter", "PedidosYa", "UberEats"] as const).map(
                         (channel) => (
-                          <div key={channel} className="min-w-0 space-y-6">
+                          <div
+                            key={channel}
+                            className="min-w-0 space-y-4 rounded-lg border border-line bg-white p-4"
+                          >
                             {priceFields
                               .filter(
                                 (field) =>
                                   field.key === `enabled${channel}` ||
-                                  field.key === `price${channel}`,
+                                  (field.key === `price${channel}` &&
+                                    (channel === "Counter" ||
+                                      draft[`enabled${channel}`] === "true" ||
+                                      !!priceIssue(draft[`price${channel}`]))),
                               )
-                              .map(renderField)}
-                            <ProductPricePreview
-                              price={draft[`price${channel}`] ?? ""}
-                              rate={draft.vatRate ?? ""}
-                              label={
-                                channel === "Counter"
-                                  ? "Mostrador"
-                                  : channel === "PedidosYa"
-                                    ? "PedidosYa"
-                                    : "Uber Eats"
-                              }
-                            />
+                              .map((field) =>
+                                renderField(
+                                  field.key === "priceCounter"
+                                    ? { ...field, hint: undefined }
+                                    : field,
+                                ),
+                              )}
+                            {(channel === "Counter" ||
+                              draft[`enabled${channel}`] === "true") &&
+                              !priceIssue(draft[`price${channel}`]) &&
+                              draft[`price${channel}`]?.trim() && (
+                                <ProductPricePreview
+                                  price={draft[`price${channel}`] ?? ""}
+                                  rate={draft.vatRate ?? ""}
+                                  label={
+                                    channel === "Counter"
+                                      ? "Mostrador"
+                                      : channel === "PedidosYa"
+                                        ? "PedidosYa"
+                                        : "Uber Eats"
+                                  }
+                                />
+                              )}
                           </div>
                         ),
                       )}

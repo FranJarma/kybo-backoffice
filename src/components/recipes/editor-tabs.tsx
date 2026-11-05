@@ -44,7 +44,7 @@ export function RecipeEditorTabs({
           aria-selected={value === tab}
           tabIndex={value === tab ? 0 : -1}
           onClick={() => onChange(tab)}
-          className="min-h-11 border-b-2 border-transparent px-1 py-3 text-sm font-medium text-muted aria-selected:border-blue aria-selected:text-blue"
+          className="section-tab"
         >
           {tab === "recipe"
             ? "Receta"

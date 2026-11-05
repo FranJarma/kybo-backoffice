@@ -10,7 +10,7 @@ import { PreparationPicker } from "./preparation-picker";
 import { SearchCombobox } from "@/components/ui/search-combobox";
 import { LocationSelect } from "@/components/branches/location-select";
 import { useCallback, useEffect, useId, useState, type FormEvent } from "react";
-import { Tabs } from "radix-ui";
+import { Tabs } from "@/components/ui/tabs";
 import Link from "next/link";
 import {
   CircleCheck,

@@ -9,6 +9,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tabs } from "@/components/ui/tabs";
 import type {
   DailySnapshot,
   TaskRow,
@@ -19,7 +20,6 @@ import { TaskDetail } from "./task-detail";
 import { StockByLocation } from "./stock-by-location";
 const selectClass = "min-h-12 min-w-0 rounded-lg border bg-white px-3 text-sm";
 export function DailyOperationsManager({
-  actorId,
   role,
 }: {
   actorId: string;
@@ -162,164 +162,173 @@ export function DailyOperationsManager({
           {w}
         </p>
       ))}
-      <div className="flex flex-wrap gap-2 border-b pb-3">
-        {[
-          ["tasks", "Tareas", ClipboardList],
-          ["stock", "Stock por ubicación", Warehouse],
-          ["history", "Historial", History],
-        ].map(([id, label, Icon]) => (
-          <Button
-            key={String(id)}
-            variant={tab === id ? "secondary" : "ghost"}
-            className="min-h-12 gap-2"
-            onClick={() => change(() => setTab(String(id)))}
-          >
-            {typeof Icon !== "string" && <Icon className="size-4" />}
-            {String(label)}
-          </Button>
-        ))}
-      </div>
-      <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap">
-        {canManage && tab !== "stock" && (
-          <select
-            aria-label="Vista de tareas"
-            className={selectClass}
-            value={mine ? "mine" : "team"}
-            onChange={(e) => change(() => setMine(e.target.value === "mine"))}
-          >
-            <option value="team">Todo el equipo</option>
-            <option value="mine">Mis tareas</option>
-          </select>
-        )}
-        <select
-          aria-label="Ubicación"
-          className={selectClass}
-          value={locationId}
-          onChange={(e) => change(() => setLocationId(e.target.value))}
-        >
-          <option value="">Todas las ubicaciones</option>
-          {data?.locations.map((l) => (
-            <option key={l.id} value={l.id}>
-              {l.name}
-            </option>
+      <Tabs.Root
+        value={tab}
+        onValueChange={(id) => change(() => setTab(id))}
+        className="space-y-6"
+      >
+        <Tabs.List aria-label="Operación del día">
+          {[
+            ["tasks", "Tareas", ClipboardList],
+            ["stock", "Stock por ubicación", Warehouse],
+            ["history", "Historial", History],
+          ].map(([id, label, Icon]) => (
+            <Tabs.Trigger key={String(id)} value={String(id)}>
+              {typeof Icon !== "string" && <Icon className="size-4" />}
+              {String(label)}
+            </Tabs.Trigger>
           ))}
-        </select>
-        {tab !== "stock" && (
-          <>
-            <select
-              aria-label="Tipo de tarea"
-              className={selectClass}
-              value={kind}
-              onChange={(e) => change(() => setKind(e.target.value))}
-            >
-              <option value="">Todas las tareas</option>
-              <option value="transfer">Reposición</option>
-              <option value="production">Preparación</option>
-              <option value="purchase">Compras</option>
-            </select>
-            {canManage && !mine && (
+        </Tabs.List>
+        <Tabs.Content value={tab} className="space-y-6">
+          <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap">
+            {canManage && tab !== "stock" && (
               <select
-                aria-label="Responsable"
+                aria-label="Vista de tareas"
                 className={selectClass}
-                value={assignedTo}
-                onChange={(e) => change(() => setAssignedTo(e.target.value))}
+                value={mine ? "mine" : "team"}
+                onChange={(e) =>
+                  change(() => setMine(e.target.value === "mine"))
+                }
               >
-                <option value="">Todos los responsables</option>
-                <option value="unassigned">Sin responsable</option>
-                {data?.people.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
+                <option value="team">Todo el equipo</option>
+                <option value="mine">Mis tareas</option>
               </select>
             )}
-          </>
-        )}
-      </div>
-      {!data ? (
-        <p className="py-10 text-center text-muted-foreground">
-          {error
-            ? "No hay datos disponibles para mostrar."
-            : "Cargando operación…"}
-        </p>
-      ) : tab === "stock" ? (
-        <StockByLocation rows={data.stock} locationId={locationId} />
-      ) : (
-        <>
-          <div className="grid grid-cols-3 gap-2 sm:gap-4">
-            {(["critical", "high", "scheduled"] as const).map((u) => (
-              <button
-                key={u}
-                aria-pressed={urgency === u}
-                onClick={() => change(() => setUrgency(urgency === u ? "" : u))}
-                className={`min-h-24 rounded-xl border p-3 text-left ${urgencyColors[u]} ${urgency === u ? "ring-2 ring-brand ring-offset-2" : ""}`}
-              >
-                <span className="block text-2xl font-bold tabular-nums">
-                  {data.summary[u]}
-                </span>
-                <span className="mt-1 block text-xs font-medium sm:text-sm">
-                  {urgencyLabels[u]}
-                </span>
-              </button>
-            ))}
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-lg font-semibold">
-              {tab === "history"
-                ? "Tareas cerradas"
-                : mine
-                  ? "Mis tareas"
-                  : "Qué hay que hacer"}
-            </h2>
-            <span className="text-sm text-muted-foreground">
-              {data.total} tareas
-              {urgency && (
-                <button
-                  className="ml-3 min-h-12 underline"
-                  onClick={() => change(() => setUrgency(""))}
+            <select
+              aria-label="Ubicación"
+              className={selectClass}
+              value={locationId}
+              onChange={(e) => change(() => setLocationId(e.target.value))}
+            >
+              <option value="">Todas las ubicaciones</option>
+              {data?.locations.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+            </select>
+            {tab !== "stock" && (
+              <>
+                <select
+                  aria-label="Tipo de tarea"
+                  className={selectClass}
+                  value={kind}
+                  onChange={(e) => change(() => setKind(e.target.value))}
                 >
-                  Quitar prioridad
-                </button>
-              )}
-            </span>
+                  <option value="">Todas las tareas</option>
+                  <option value="transfer">Reposición</option>
+                  <option value="production">Preparación</option>
+                  <option value="purchase">Compras</option>
+                </select>
+                {canManage && !mine && (
+                  <select
+                    aria-label="Responsable"
+                    className={selectClass}
+                    value={assignedTo}
+                    onChange={(e) =>
+                      change(() => setAssignedTo(e.target.value))
+                    }
+                  >
+                    <option value="">Todos los responsables</option>
+                    <option value="unassigned">Sin responsable</option>
+                    {data?.people.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </>
+            )}
           </div>
-          {data.tasks.length ? (
-            <TaskList
-              tasks={data.tasks}
-              onSelect={setSelected}
-              timeZone={data.timeZone}
-            />
+          {!data ? (
+            <p className="py-10 text-center text-muted-foreground">
+              {error
+                ? "No hay datos disponibles para mostrar."
+                : "Cargando operación…"}
+            </p>
+          ) : tab === "stock" ? (
+            <StockByLocation rows={data.stock} locationId={locationId} />
           ) : (
-            <div className="rounded-xl border border-dashed p-8 text-center">
-              <ClipboardList className="mx-auto mb-3 size-8 text-muted-foreground" />
-              <p className="font-semibold">No hay tareas en esta vista</p>
-              <p className="mt-2 text-sm text-muted-foreground">
-                {data.configurationWarnings.length
-                  ? "Configurá los mínimos para generar sugerencias de reposición."
-                  : "Podés cambiar los filtros o actualizar para consultar nuevas necesidades."}
-              </p>
-            </div>
+            <>
+              <div className="grid grid-cols-3 gap-2 sm:gap-4">
+                {(["critical", "high", "scheduled"] as const).map((u) => (
+                  <button
+                    key={u}
+                    aria-pressed={urgency === u}
+                    onClick={() =>
+                      change(() => setUrgency(urgency === u ? "" : u))
+                    }
+                    className={`min-h-24 rounded-xl border p-3 text-left ${urgencyColors[u]} ${urgency === u ? "ring-2 ring-brand ring-offset-2" : ""}`}
+                  >
+                    <span className="block text-2xl font-bold tabular-nums">
+                      {data.summary[u]}
+                    </span>
+                    <span className="mt-1 block text-xs font-medium sm:text-sm">
+                      {urgencyLabels[u]}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-lg font-semibold">
+                  {tab === "history"
+                    ? "Tareas cerradas"
+                    : mine
+                      ? "Mis tareas"
+                      : "Qué hay que hacer"}
+                </h2>
+                <span className="text-sm text-muted-foreground">
+                  {data.total} tareas
+                  {urgency && (
+                    <button
+                      className="ml-3 min-h-12 underline"
+                      onClick={() => change(() => setUrgency(""))}
+                    >
+                      Quitar prioridad
+                    </button>
+                  )}
+                </span>
+              </div>
+              {data.tasks.length ? (
+                <TaskList
+                  tasks={data.tasks}
+                  onSelect={setSelected}
+                  timeZone={data.timeZone}
+                />
+              ) : (
+                <div className="rounded-xl border border-dashed p-8 text-center">
+                  <ClipboardList className="mx-auto mb-3 size-8 text-muted-foreground" />
+                  <p className="font-semibold">No hay tareas en esta vista</p>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {data.configurationWarnings.length
+                      ? "Configurá los mínimos para generar sugerencias de reposición."
+                      : "Podés cambiar los filtros o actualizar para consultar nuevas necesidades."}
+                  </p>
+                </div>
+              )}
+              <div className="flex justify-end gap-2">
+                <Button
+                  className="min-h-12"
+                  variant="outline"
+                  disabled={offset === 0}
+                  onClick={() => setOffset(Math.max(0, offset - 50))}
+                >
+                  Anterior
+                </Button>
+                <Button
+                  className="min-h-12"
+                  variant="outline"
+                  disabled={offset + 50 >= data.total}
+                  onClick={() => setOffset(offset + 50)}
+                >
+                  Siguiente
+                </Button>
+              </div>
+            </>
           )}
-          <div className="flex justify-end gap-2">
-            <Button
-              className="min-h-12"
-              variant="outline"
-              disabled={offset === 0}
-              onClick={() => setOffset(Math.max(0, offset - 50))}
-            >
-              Anterior
-            </Button>
-            <Button
-              className="min-h-12"
-              variant="outline"
-              disabled={offset + 50 >= data.total}
-              onClick={() => setOffset(offset + 50)}
-            >
-              Siguiente
-            </Button>
-          </div>
-        </>
-      )}
+        </Tabs.Content>
+      </Tabs.Root>
       <footer className="flex flex-wrap justify-between gap-2 border-t pt-4 text-xs text-muted-foreground">
         <span>
           {data
@@ -369,7 +378,6 @@ export function DailyOperationsManager({
           }}
         />
       )}
-      <span className="sr-only">Sesión de {actorId}</span>
     </div>
   );
 }

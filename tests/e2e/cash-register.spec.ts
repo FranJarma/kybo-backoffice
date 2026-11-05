@@ -777,11 +777,13 @@ test("concurrent collection preserves the whole draft and requires reviewing upd
   await page
     .getByRole("button", { name: "Confirmar cierre", exact: true })
     .click();
-  expect(
-    posted.map((row) =>
-      row.command.action === "close" ? row.command.expectedRevision : null,
-    ),
-  ).toEqual([7, 8]);
+  await expect
+    .poll(() =>
+      posted.map((row) =>
+        row.command.action === "close" ? row.command.expectedRevision : null,
+      ),
+    )
+    .toEqual([7, 8]);
   expect(posted[1].requestId).not.toBe(posted[0].requestId);
 });
 test("authorized staff can close with pending posnet but cannot withdraw or manage grants", async ({
@@ -818,6 +820,7 @@ test("authorized staff can close with pending posnet but cannot withdraw or mana
   await page
     .getByRole("button", { name: "Confirmar cierre", exact: true })
     .click();
+  await expect.poll(() => posted.length).toBe(1);
   expect(posted[0].command).toMatchObject({
     withdrawal: "0.00",
     posnet: {
@@ -1435,6 +1438,7 @@ test("a physical posnet batch can be declared when the app recorded zero cards",
   await page
     .getByRole("button", { name: "Confirmar cierre", exact: true })
     .click();
+  await expect.poll(() => posted.length).toBe(1);
   expect(posted[0].command).toMatchObject({
     action: "close",
     posnet: {

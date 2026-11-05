@@ -469,7 +469,6 @@ function ManualDetail({
             )}
             <Field required label="Código de autorización">
               <input
-                autoFocus
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 pattern="[0-9]{6}"

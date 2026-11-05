@@ -12,6 +12,7 @@ import {
   ScanLine,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tabs } from "@/components/ui/tabs";
 import {
   privateRequest,
   RequestFailure,
@@ -26,8 +27,10 @@ import { AttendancePlanning } from "./planning";
 import { AttendanceSettings } from "./settings";
 import {
   Field,
+  clock,
   dateLabel,
   AttendanceErrorContext,
+  AttendanceReadOnlyContext,
   type Snapshot,
 } from "./shared";
 import type { AttendanceCommand } from "@/modules/attendance/validation";
@@ -66,6 +69,8 @@ export function AttendanceManager({
     mode === "attendance" && verificationReady ? qrCode : undefined,
   );
   const [response, setResponse] = useState<Response | null>(null),
+    [loading, setLoading] = useState(true),
+    [readError, setReadError] = useState(""),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false),
@@ -104,53 +109,90 @@ export function AttendanceManager({
   }, [branchId, mode, qrCode, router]);
   const query = filters ? `?${new URLSearchParams(filters)}` : "";
   const load = useCallback(
-    async (signal?: AbortSignal) => {
+    async (signal?: AbortSignal, background = false) => {
       const current = ++revision.current;
-      const result = await privateRequest<Response>(
-        `/api/attendance${query}`,
-        branchId,
-        undefined,
-        signal,
-      );
-      if (current !== revision.current || signal?.aborted) return;
-      if (mode === "planning" && result.ready && !filters) {
-        const from = monday(result.today);
-        setFilters({ from, to: addDays(from, 6) });
+      if (!background) {
+        setLoading(true);
+        setReadError("");
       }
-      setResponse(result);
+      try {
+        const result = await privateRequest<Response>(
+          `/api/attendance${query}`,
+          branchId,
+          undefined,
+          signal,
+        );
+        if (current !== revision.current || signal?.aborted) return;
+        if (mode === "planning" && result.ready && !filters) {
+          const from = monday(result.today);
+          setFilters({ from, to: addDays(from, 6) });
+        }
+        setResponse(result);
+        setReadError("");
+      } catch (cause) {
+        if (current === revision.current && !signal?.aborted)
+          setReadError(
+            cause instanceof Error
+              ? cause.message
+              : "No pudimos consultar la asistencia.",
+          );
+        throw cause;
+      } finally {
+        if (current === revision.current && !signal?.aborted) setLoading(false);
+      }
     },
     [branchId, query, mode, filters],
   );
   useEffect(() => {
     const abort = new AbortController();
     let refreshing = false;
-    const refresh = async () => {
+    const refresh = async (background = false) => {
       if (refreshing || active.current || document.visibilityState === "hidden")
         return;
       refreshing = true;
       try {
-        await load(abort.signal);
-      } catch (e) {
-        if (!abort.signal.aborted) setError((e as Error).message);
+        await load(abort.signal, background);
+      } catch {
+        // Read feedback belongs to the query, separate from command errors.
       } finally {
         refreshing = false;
       }
     };
     void refresh();
-    const interval = setInterval(() => void refresh(), 25000);
-    window.addEventListener("focus", refresh);
+    const onFocus = () => void refresh(true);
+    const interval = setInterval(() => void refresh(true), 25000);
+    window.addEventListener("focus", onFocus);
     return () => {
       abort.abort();
       clearInterval(interval);
-      window.removeEventListener("focus", refresh);
+      window.removeEventListener("focus", onFocus);
     };
   }, [load]);
+  const rangeMismatch = !!(
+    response?.ready &&
+    filters &&
+    (response.from !== filters.from || response.to !== filters.to)
+  );
+  const reading = loading || rangeMismatch;
+  const readLocked = reading || !!readError;
+  function changeFilters(value: { from: string; to: string }) {
+    if (active.current) return;
+    ++revision.current;
+    setLoading(true);
+    setReadError("");
+    setFilters(value);
+  }
   async function execute(
     command: AttendanceCommand,
     prepare?: (requestId: string) => Promise<AttendanceCommand>,
   ): Promise<Result> {
     if (active.current)
       throw new Error("Esperá a que termine la operación actual.");
+    if (readLocked) {
+      const message = "Actualizá los datos antes de guardar una operación.";
+      setError(message);
+      throw new Error(message);
+    }
     active.current = true;
     ++revision.current;
     setBusy(true);
@@ -274,279 +316,318 @@ export function AttendanceManager({
       : mode === "planning"
         ? "Horarios del equipo"
         : "Asistencia";
+  const weekFrom = filters?.from ?? data?.from ?? "";
+  const weekTo = filters?.to ?? data?.to ?? "";
   return (
-    <AttendanceErrorContext value={error}>
-      <div className={`att-page${personal ? " att-personal-mode" : ""}`}>
-        <div className="att-page-heading">
-          <div>
-            <span className="att-eyebrow">PERSONAL</span>
-            <h1>{title}</h1>
-            <p>
-              {mode === "settings"
-                ? "Zona de fichaje, participantes y autorizaciones por sucursal."
-                : mode === "planning"
-                  ? "Organizá turnos y pausas por persona y día."
-                  : "Fichajes y seguimiento de la jornada del equipo."}
-            </p>
-          </div>
-          <div className="att-toolbar">
-            {mode === "attendance" && (
-              <Button
-                variant="outline"
-                className="min-h-11"
-                onClick={() => setDevices(true)}
-                disabled={!data || busy}
-              >
-                <Fingerprint />
-                Verificación del celular
-              </Button>
-            )}
-            <Button
-              variant="ghost"
-              aria-label="Actualizar asistencia"
-              disabled={busy}
-              onClick={() => {
-                setError("");
-                void load().catch((e) => setError(e.message));
-              }}
-            >
-              <RefreshCw />
-            </Button>
-            {data?.actor.role === "admin" && mode !== "settings" && (
+    <AttendanceErrorContext value={readError || error}>
+      <AttendanceReadOnlyContext value={readLocked}>
+        <div
+          className={`att-page att-mode-${mode}${personal ? " att-personal-mode" : ""}`}
+        >
+          <div className="att-page-heading">
+            <div>
+              <h1>{title}</h1>
+              <p>
+                {mode === "settings"
+                  ? "Zona de fichaje, participantes y autorizaciones por sucursal."
+                  : mode === "planning"
+                    ? "Organizá turnos y pausas por persona y día."
+                    : "Fichajes y seguimiento de la jornada del equipo."}
+              </p>
+            </div>
+            <div className="att-toolbar">
+              {mode === "attendance" && (
+                <Button
+                  variant="outline"
+                  className="min-h-11"
+                  onClick={() => setDevices(true)}
+                  disabled={!data || busy}
+                >
+                  <Fingerprint />
+                  Verificación del celular
+                </Button>
+              )}
               <Button
                 variant="ghost"
-                asChild
-                aria-label="Configurar asistencia"
+                aria-label="Actualizar asistencia"
+                disabled={busy || loading}
+                onClick={() => {
+                  setError("");
+                  void load().catch(() => {});
+                }}
               >
-                <Link href="/settings/attendance">
-                  <Settings2 />
-                </Link>
+                <RefreshCw />
               </Button>
-            )}
-          </div>
-        </div>
-        {error && (
-          <div role="alert" className="att-error">
-            {error}
-          </div>
-        )}
-        {notice && (
-          <div role="status" className="att-success">
-            {notice}
-          </div>
-        )}
-        {busy && (
-          <p role="status" className="att-progress">
-            Verificando y guardando la operación…
-          </p>
-        )}
-        {!response && (
-          <div className="att-panel" aria-busy="true">
-            Cargando asistencia…
-          </div>
-        )}
-        {response && !response.ready && (
-          <div className="att-panel">
-            <h2>Asistencia lista para activar</h2>
-            <p>{response.message}</p>
-          </div>
-        )}
-        {data && (
-          <>
-            {mode === "attendance" && (
-              <>
-                <div
-                  className="att-tabs"
-                  role="tablist"
-                  aria-label="Vistas de asistencia"
+              {data?.actor.role === "admin" && mode !== "settings" && (
+                <Button
+                  variant="ghost"
+                  asChild
+                  aria-label="Configurar asistencia"
                 >
-                  {[
-                    ["personal", "Mi jornada"],
-                    ...(manager
-                      ? [
-                          ["register", "Registro del equipo"],
-                          ["manual", "Autorizaciones"],
-                        ]
-                      : []),
-                  ].map(([id, label]) => (
-                    <button
-                      key={id}
-                      role="tab"
-                      aria-selected={tab === id}
-                      onClick={() => setTab(id)}
-                    >
-                      {label}
-                      {id === "manual" &&
-                      data.manualRequests.some(
-                        (r) => r.status === "pending",
-                      ) ? (
-                        <span className="att-count">
-                          {
-                            data.manualRequests.filter(
-                              (r) => r.status === "pending",
-                            ).length
-                          }
-                        </span>
-                      ) : null}
-                    </button>
-                  ))}
-                </div>
-                {tab === "register" && (
-                  <DateFilter data={data} onApply={setFilters} busy={busy} />
-                )}
-                {tab === "personal" && (
-                  <>
-                    <div
-                      className={`att-qr-access ${qr.error ? "att-error" : "att-panel"}`}
-                      role={qr.error ? "alert" : "status"}
-                    >
-                      <div className="att-verification-note">
-                        <ScanLine size={24} />
-                        <span>
-                          <strong>
-                            {qr.opening
-                              ? "Validando el QR del local…"
-                              : qr.attempt
-                                ? "QR del local recibido"
-                                : "Escaneá el QR del local"}
-                          </strong>
-                          <small>
-                            {qr.error ||
-                              (qr.attempt
-                                ? data.settings?.requireLocation === false
-                                  ? "Podés registrar una marca verificando el desbloqueo del celular. Esta sucursal no exige ubicación."
-                                  : "Podés registrar una marca. La ubicación y el desbloqueo se verifican al confirmar."
-                                : "Lo encontrás en la PC o tablet. Se necesita un código vigente para cada entrada, pausa o salida.")}
-                          </small>
-                        </span>
-                      </div>
-                      <p className="att-subtle">
-                        Vas a fichar como <strong>{data.actor.name}</strong>
-                      </p>
-                    </div>
-                    <PersonalAttendance
-                      data={data}
-                      busy={busy}
-                      onPunch={punch}
-                    />
-                    <div className="att-personal-footer">
-                      <Button
-                        variant="ghost"
-                        onClick={() => setCorrection(true)}
-                      >
-                        Solicitar corrección de mis fichajes
-                      </Button>
-                      <InstallInstructions />
-                    </div>
-                    <section className="att-panel">
-                      <h2>Mis próximos horarios</h2>
-                      {data.assignments.filter((a) => a.userId === actorId)
-                        .length ? (
-                        data.assignments
-                          .filter((a) => a.userId === actorId)
-                          .map((a) => (
-                            <div className="att-device" key={a.id}>
-                              <strong>
-                                {dateLabel(a.businessDate)} · {a.name}
-                              </strong>
-                              <span>
-                                {a.startsAt
-                                  ? `${new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit", timeZone: data.branch.timeZone }).format(new Date(a.startsAt))} – ${new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit", timeZone: data.branch.timeZone }).format(new Date(a.endsAt!))}`
-                                  : "Franco"}
-                              </span>
-                            </div>
-                          ))
-                      ) : (
-                        <p className="att-subtle">
-                          No tenés horarios en el período consultado.
-                        </p>
-                      )}
+                  <Link href="/settings/attendance">
+                    <Settings2 />
+                  </Link>
+                </Button>
+              )}
+            </div>
+          </div>
+          {error && (
+            <div role="alert" className="att-error">
+              {error}
+            </div>
+          )}
+          {readError && (
+            <div role="alert" className="att-error att-read-feedback">
+              <span>
+                {readError}
+                {data
+                  ? " Los datos anteriores quedan visibles; actualizá antes de editar."
+                  : ""}
+              </span>
+              <Button
+                variant="outline"
+                disabled={busy || loading}
+                onClick={() => void load().catch(() => {})}
+              >
+                Reintentar consulta
+              </Button>
+            </div>
+          )}
+          {data && reading && !readError && (
+            <p role="status" className="att-read-progress">
+              {mode === "planning"
+                ? "Cargando horarios…"
+                : "Actualizando asistencia…"}
+            </p>
+          )}
+          {notice && (
+            <div role="status" className="att-success">
+              {notice}
+            </div>
+          )}
+          {busy && (
+            <p role="status" className="att-progress">
+              Verificando y guardando la operación…
+            </p>
+          )}
+          {!response && loading && (
+            <div className="att-panel" aria-busy="true">
+              Cargando asistencia…
+            </div>
+          )}
+          {response && !response.ready && (
+            <div className="att-panel">
+              <h2>Asistencia lista para activar</h2>
+              <p>{response.message}</p>
+            </div>
+          )}
+          {data && (
+            <fieldset
+              className="att-ready-content"
+              disabled={readLocked}
+              aria-busy={reading && !readError}
+            >
+              {mode === "attendance" && (
+                <Tabs.Root value={tab} onValueChange={setTab}>
+                  <Tabs.List
+                    className="att-tabs"
+                    aria-label="Vistas de asistencia"
+                  >
+                    {[
+                      ["personal", "Mi jornada"],
+                      ...(manager
+                        ? [
+                            ["register", "Registro del equipo"],
+                            ["manual", "Autorizaciones"],
+                          ]
+                        : []),
+                    ].map(([id, label]) => (
+                      <Tabs.Trigger key={id} value={id} disabled={busy}>
+                        {label}
+                        {id === "manual" &&
+                        data.manualRequests.some(
+                          (r) => r.status === "pending",
+                        ) ? (
+                          <span className="att-count">
+                            {
+                              data.manualRequests.filter(
+                                (r) => r.status === "pending",
+                              ).length
+                            }
+                          </span>
+                        ) : null}
+                      </Tabs.Trigger>
+                    ))}
+                  </Tabs.List>
+                  <Tabs.Content value={tab}>
+                    {tab === "register" && (
                       <DateFilter
                         data={data}
-                        onApply={setFilters}
-                        busy={busy}
+                        onApply={changeFilters}
+                        busy={busy || reading}
                       />
-                    </section>
-                  </>
-                )}
-                {tab === "register" && manager && (
-                  <AttendanceRegister
-                    data={data}
-                    busy={busy}
-                    command={execute}
-                  />
-                )}
-                {tab === "manual" && manager && (
-                  <ManualRequests data={data} busy={busy} command={execute} />
-                )}
-              </>
-            )}
-            {mode === "planning" && manager && (
-              <>
-                <div className="att-week-bar">
-                  <Button
-                    variant="outline"
-                    aria-label="Semana anterior"
-                    disabled={busy}
-                    onClick={() =>
-                      setFilters({
-                        from: addDays(data.from, -7),
-                        to: addDays(data.from, -1),
-                      })
-                    }
-                  >
-                    <ChevronLeft />
-                  </Button>
-                  <strong>
-                    {dateLabel(data.from)} – {dateLabel(data.to)}
-                  </strong>
-                  <Button
-                    variant="outline"
-                    aria-label="Semana siguiente"
-                    disabled={busy}
-                    onClick={() =>
-                      setFilters({
-                        from: addDays(data.from, 7),
-                        to: addDays(data.from, 13),
-                      })
-                    }
-                  >
-                    <ChevronRight />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    onClick={() => {
-                      const from = monday(data.today);
-                      setFilters({ from, to: addDays(from, 6) });
-                    }}
-                  >
-                    Esta semana
-                  </Button>
-                </div>
-                <AttendancePlanning data={data} busy={busy} command={execute} />
-              </>
-            )}
-            {mode === "settings" && (
-              <AttendanceSettings data={data} busy={busy} command={execute} />
-            )}
-            {correction && (
-              <CorrectionForm
-                data={data}
-                userId={actorId}
-                busy={busy}
-                command={execute}
-                onClose={() => setCorrection(false)}
-              />
-            )}
-          </>
-        )}
-        {devices && (
-          <IdentityDevices
-            branchId={branchId}
-            onClose={() => setDevices(false)}
-          />
-        )}
-      </div>
+                    )}
+                    {tab === "personal" && (
+                      <>
+                        <PersonalAttendance
+                          data={data}
+                          busy={busy}
+                          canPunch={!readLocked && !!qr.attempt && !qr.opening}
+                          qrStatus={
+                            <div
+                              className={`att-qr-access ${qr.error ? "att-error" : ""}`}
+                              role={qr.error ? "alert" : "status"}
+                            >
+                              <ScanLine size={20} aria-hidden="true" />
+                              <div>
+                                <strong>
+                                  {qr.opening
+                                    ? "Validando el QR del local…"
+                                    : qr.attempt
+                                      ? "QR del local recibido"
+                                      : "Escaneá el QR del local"}
+                                </strong>
+                                {(!qr.attempt || qr.error) && (
+                                  <p>
+                                    {qr.error ||
+                                      "Lo encontrás en la PC o tablet. Necesitás un QR vigente para cada entrada, pausa o salida."}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          }
+                          onPunch={punch}
+                        />
+                        <div className="att-personal-footer">
+                          <Button
+                            variant="ghost"
+                            disabled={busy || readLocked}
+                            onClick={() => setCorrection(true)}
+                          >
+                            Solicitar corrección de mis fichajes
+                          </Button>
+                          <InstallInstructions />
+                        </div>
+                        <section className="att-panel">
+                          <h2>Mis próximos horarios</h2>
+                          {data.assignments.filter((a) => a.userId === actorId)
+                            .length ? (
+                            data.assignments
+                              .filter((a) => a.userId === actorId)
+                              .map((a) => (
+                                <div className="att-device" key={a.id}>
+                                  <strong>
+                                    {dateLabel(a.businessDate)} · {a.name}
+                                  </strong>
+                                  <span>
+                                    {a.startsAt
+                                      ? `${clock(a.startsAt, data.branch.timeZone)} – ${clock(a.endsAt, data.branch.timeZone)}`
+                                      : "Franco"}
+                                  </span>
+                                </div>
+                              ))
+                          ) : (
+                            <p className="att-subtle">
+                              No tenés horarios en el período consultado.
+                            </p>
+                          )}
+                          <DateFilter
+                            data={data}
+                            onApply={changeFilters}
+                            busy={busy || reading}
+                          />
+                        </section>
+                      </>
+                    )}
+                    {tab === "register" && manager && (
+                      <AttendanceRegister
+                        data={data}
+                        busy={busy}
+                        command={execute}
+                      />
+                    )}
+                    {tab === "manual" && manager && (
+                      <ManualRequests
+                        data={data}
+                        busy={busy}
+                        command={execute}
+                      />
+                    )}
+                  </Tabs.Content>
+                </Tabs.Root>
+              )}
+              {mode === "planning" && manager && (
+                <AttendancePlanning
+                  data={data}
+                  busy={busy}
+                  command={execute}
+                  navigation={
+                    <div className="att-week-bar">
+                      <Button
+                        variant="outline"
+                        aria-label="Semana anterior"
+                        disabled={busy || loading}
+                        onClick={() =>
+                          changeFilters({
+                            from: addDays(weekFrom, -7),
+                            to: addDays(weekFrom, -1),
+                          })
+                        }
+                      >
+                        <ChevronLeft />
+                      </Button>
+                      <strong>
+                        {dateLabel(weekFrom)} – {dateLabel(weekTo)}
+                      </strong>
+                      <Button
+                        variant="outline"
+                        aria-label="Semana siguiente"
+                        disabled={busy || loading}
+                        onClick={() =>
+                          changeFilters({
+                            from: addDays(weekFrom, 7),
+                            to: addDays(weekFrom, 13),
+                          })
+                        }
+                      >
+                        <ChevronRight />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        disabled={busy || loading}
+                        onClick={() => {
+                          const from = monday(data.today);
+                          changeFilters({ from, to: addDays(from, 6) });
+                        }}
+                      >
+                        Esta semana
+                      </Button>
+                    </div>
+                  }
+                />
+              )}
+              {mode === "settings" && (
+                <AttendanceSettings data={data} busy={busy} command={execute} />
+              )}
+              {correction && (
+                <CorrectionForm
+                  data={data}
+                  userId={actorId}
+                  busy={busy}
+                  command={execute}
+                  onClose={() => setCorrection(false)}
+                />
+              )}
+            </fieldset>
+          )}
+          {devices && (
+            <IdentityDevices
+              branchId={branchId}
+              onClose={() => setDevices(false)}
+            />
+          )}
+        </div>
+      </AttendanceReadOnlyContext>
     </AttendanceErrorContext>
   );
 }

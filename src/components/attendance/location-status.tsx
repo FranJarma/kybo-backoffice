@@ -105,7 +105,9 @@ export function AttendanceLocationStatus({
             {meters(policy.maxAccuracyMeters)}
           </p>
         )}
-        <p className="att-location-detail">{detail}</p>
+        <p className="att-location-detail">
+          {state === "inside" ? "Se valida de nuevo al confirmar." : detail}
+        </p>
       </div>
       {state !== "not-required" && state !== "unconfigured" && (
         <Button
@@ -116,7 +118,9 @@ export function AttendanceLocationStatus({
           onClick={feedback.refresh}
         >
           <RefreshCw size={16} aria-hidden="true" />
-          {feedback.pending ? "Actualizando…" : "Actualizar ubicación"}
+          <span className={state === "inside" ? "sr-only" : undefined}>
+            {feedback.pending ? "Actualizando…" : "Actualizar ubicación"}
+          </span>
         </Button>
       )}
     </section>
