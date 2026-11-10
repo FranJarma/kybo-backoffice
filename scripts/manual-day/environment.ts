@@ -80,10 +80,10 @@ export function readRun(root: string): ManualRun {
 
 export function childEnvironment(
   root: string,
-  inherited: NodeJS.ProcessEnv = process.env,
+  inherited: Partial<NodeJS.ProcessEnv> = process.env,
 ) {
   const run = readRun(root);
-  const env: NodeJS.ProcessEnv = {};
+  const env: Partial<NodeJS.ProcessEnv> = {};
   for (const key of [
     "PATH",
     "Path",
