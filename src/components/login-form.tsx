@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import {
   useState,
   useSyncExternalStore,
@@ -9,6 +10,8 @@ import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   CircleCheck,
+  Eye,
+  EyeOff,
   LoaderCircle,
   LockKeyhole,
   Mail,
@@ -27,6 +30,7 @@ export function LoginForm({
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [error, setError] = useState("");
   const [phase, setPhase] = useState<"idle" | "verifying" | "opening">("idle");
   const [navigating, startNavigation] = useTransition();
@@ -76,6 +80,7 @@ export function LoginForm({
         return;
       }
       setPassword("");
+      setPasswordVisible(false);
       setPhase("opening");
       const destination = safeLoginReturn(returnTo);
       const nextPage = result.passwordPolicy?.required
@@ -136,15 +141,41 @@ export function LoginForm({
             <Input
               id="password"
               autoComplete="current-password"
-              type="password"
+              type={passwordVisible ? "text" : "password"}
               placeholder="Ingresá tu contraseña"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="h-12 pl-11"
+              className="h-12 pl-11 pr-14"
             />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={
+                passwordVisible ? "Ocultar contraseña" : "Mostrar contraseña"
+              }
+              aria-pressed={passwordVisible}
+              aria-controls="password"
+              onClick={() => setPasswordVisible((visible) => !visible)}
+              className="absolute right-0.5 top-1/2 -translate-y-1/2 text-muted"
+            >
+              {passwordVisible ? (
+                <EyeOff size={18} aria-hidden="true" />
+              ) : (
+                <Eye size={18} aria-hidden="true" />
+              )}
+            </Button>
           </div>
         </div>
+        <Link
+          href={`/recover-password?returnTo=${encodeURIComponent(safeLoginReturn(returnTo))}`}
+          className="inline-flex min-h-11 items-center rounded text-sm font-semibold text-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring aria-disabled:pointer-events-none aria-disabled:opacity-50"
+          aria-disabled={busy}
+          tabIndex={busy ? -1 : undefined}
+        >
+          Olvidé mi contraseña
+        </Link>
         <OperationAlert
           title="No pudimos iniciar sesión"
           message={error}
