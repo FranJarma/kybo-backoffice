@@ -82,6 +82,7 @@ async function readUsers(db: AppDb | Tx, id?: string): Promise<ManagedUser[]> {
         name: user.name,
         username: user.username,
         email: user.email,
+        emailVerified: user.emailVerified,
         role: operationalUsers.role,
         disabled: operationalUsers.disabled,
         catalogManager: operationalUsers.catalogManager,
@@ -126,11 +127,14 @@ async function readUsers(db: AppDb | Tx, id?: string): Promise<ManagedUser[]> {
       profileUpdatedAt,
       accessUpdatedAt,
       credentialUpdatedAt,
+      emailVerified,
       ...profile
     } = row;
     const safe = {
       ...profile,
       email: row.email.endsWith("@users.invalid") ? null : row.email,
+      emailRecoveryEnabled:
+        emailVerified && !row.email.endsWith("@users.invalid"),
       role: row.role as UserRole,
       memberships: memberships
         .filter((m) => m.userId === row.id)
@@ -245,6 +249,12 @@ export async function saveUser(
         throw new AppError("NOT_FOUND", "La cuenta no está disponible.", 404);
       if (before && before.version !== input.version) throw conflict();
       const store = input.id ? await getStoreProfile(tx, input.id) : null;
+      if (store && input.emailRecoveryEnabled)
+        throw new AppError(
+          "FORBIDDEN",
+          "La cuenta del local se recupera desde Administración.",
+          403,
+        );
       if (
         store &&
         (input.role !== "staff" ||
@@ -324,8 +334,13 @@ export async function saveUser(
               (before?.email
                 ? `${crypto.randomUUID()}@users.invalid`
                 : undefined),
-            emailVerified: input.email === before?.email ? undefined : false,
-            updatedAt: new Date(),
+            emailVerified:
+              input.emailRecoveryEnabled !== undefined
+                ? input.emailRecoveryEnabled
+                : input.email === before?.email
+                  ? undefined
+                  : false,
+            updatedAt: sql`greatest(clock_timestamp(), ${user.updatedAt} + interval '1 millisecond')`,
           })
           .where(eq(user.id, id));
         if (passwordHash)
@@ -343,6 +358,11 @@ export async function saveUser(
               set: { password: passwordHash, updatedAt: new Date() },
             });
       }
+      if (!input.id)
+        await tx
+          .update(user)
+          .set({ emailVerified: input.emailRecoveryEnabled === true })
+          .where(eq(user.id, id));
       await tx
         .update(operationalUsers)
         .set({

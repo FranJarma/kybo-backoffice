@@ -16,6 +16,7 @@ export const userCommandSchema = z
       .pipe(z.union([z.literal(""), z.email("Ingresá un correo válido.")])),
     password: z.string().max(128).default(""),
     temporaryPassword: z.boolean().default(false),
+    emailRecoveryEnabled: z.boolean().optional(),
     role: z.enum(["admin", "manager", "staff"]),
     disabled: z.boolean(),
     catalogManager: z.boolean(),
@@ -33,6 +34,14 @@ export const userCommandSchema = z
       ctx.addIssue({ code: "custom", path: [path], message });
     if (!input.username && (!input.id || !input.email))
       issue("username", "Completá el usuario para ingresar.");
+    if (
+      input.emailRecoveryEnabled &&
+      (!input.email || input.email.endsWith("@users.invalid"))
+    )
+      issue(
+        "emailRecoveryEnabled",
+        "Ingresá y confirmá un correo personal válido para habilitar la recuperación.",
+      );
     if (input.username && !/^[a-z0-9_.]{3,30}$/.test(input.username))
       issue(
         "username",

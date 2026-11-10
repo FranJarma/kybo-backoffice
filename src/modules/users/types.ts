@@ -10,6 +10,7 @@ export type ManagedUser = {
   name: string;
   username: string | null;
   email: string | null;
+  emailRecoveryEnabled?: boolean;
   role: UserRole;
   disabled: boolean;
   catalogManager: boolean;
