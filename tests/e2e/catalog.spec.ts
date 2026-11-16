@@ -1,10 +1,10 @@
 import { test, expect, type Page, type BrowserContext } from "@playwright/test";
 
-const email = process.env.E2E_EMAIL;
+const username = process.env.E2E_USERNAME;
 const password = process.env.E2E_PASSWORD;
 test.skip(
-  !email || !password,
-  "Set E2E_EMAIL and E2E_PASSWORD to a temporary admin account",
+  !username || !password,
+  "Set E2E_USERNAME and E2E_PASSWORD to a temporary admin account",
 );
 
 let sharedCookies: Awaited<ReturnType<BrowserContext["cookies"]>> | undefined;
@@ -16,7 +16,7 @@ async function signIn(page: Page) {
     return;
   }
   await page.goto("/login");
-  await page.getByLabel("Usuario o correo").fill(email!);
+  await page.getByLabel("Usuario", { exact: true }).fill(username!);
   await page.getByLabel("Contraseña").fill(password!);
   await page.getByRole("button", { name: "Ingresar" }).click();
   await expect(page).toHaveURL("/", { timeout: 20_000 });
@@ -212,7 +212,7 @@ test("login controls stay disabled before hydration", async ({ browser }) => {
   const context = await browser.newContext({ javaScriptEnabled: false });
   const page = await context.newPage();
   await page.goto("/login");
-  await expect(page.getByLabel("Usuario o correo")).toBeDisabled();
+  await expect(page.getByLabel("Usuario", { exact: true })).toBeDisabled();
   await expect(page.getByLabel("Contraseña")).toBeDisabled();
   await expect(page.getByRole("button", { name: "Ingresar" })).toBeDisabled();
   await context.close();

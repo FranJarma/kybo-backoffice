@@ -2,9 +2,9 @@ import { test, expect, type Page } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import { saveAdminSession } from "../helpers/browser-session";
 
-const email = process.env.E2E_EMAIL;
+const username = process.env.E2E_USERNAME;
 const password = process.env.E2E_PASSWORD;
-test.skip(!email || !password, "Requires an isolated E2E account");
+test.skip(!username || !password, "Requires an isolated E2E account");
 const businessDay = (delta = 0) =>
   new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Argentina/Salta",
@@ -44,7 +44,7 @@ test("prototype layout aligns headers, shows actual records, and works on mobile
   test.slow();
   await mkdir("docs/previews", { recursive: true });
   await page.goto("/login");
-  await page.getByLabel("Usuario o correo").fill(email!);
+  await page.getByLabel("Usuario", { exact: true }).fill(username!);
   await page.getByLabel("Contraseña").fill(password!);
   await page.getByRole("button", { name: "Ingresar", exact: true }).click();
   await expect(page).toHaveURL("/", { timeout: 20_000 });

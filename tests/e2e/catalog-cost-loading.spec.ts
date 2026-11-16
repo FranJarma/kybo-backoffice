@@ -7,7 +7,9 @@ test("shows completed cost batches, keeps failures visible and reuses costs thro
   test.setTimeout(180000);
   test.skip(process.env.E2E_MANAGED !== "1", "Disposable database required");
   await page.goto("/login");
-  await page.getByLabel("Usuario o correo").fill(process.env.E2E_EMAIL!);
+  await page
+    .getByLabel("Usuario", { exact: true })
+    .fill(process.env.E2E_USERNAME!);
   await page.getByLabel("Contraseña").fill(process.env.E2E_PASSWORD!);
   await page.getByRole("button", { name: "Ingresar", exact: true }).click();
   await expect(page).toHaveURL(/\/(?:settings\/branches)?$/, {

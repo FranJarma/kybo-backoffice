@@ -19,8 +19,8 @@ const env: NodeJS.ProcessEnv = {
   KYBO_LOCAL_DB: join(directory, "db"),
   BETTER_AUTH_URL: baseURL,
   BETTER_AUTH_SECRET: randomBytes(32).toString("hex"),
-  E2E_EMAIL: "owner@kybo.example",
-  E2E_STAFF_EMAIL: "staff@kybo.example",
+  E2E_USERNAME: "owner_test",
+  E2E_STAFF_USERNAME: "staff_test",
   E2E_SESSION_FILE: join(directory, "admin-session.json"),
   E2E_PASSWORD: password,
   KYBO_NEW_USER_PASSWORD: password,
@@ -45,7 +45,7 @@ try {
     "tsx",
     "scripts/create-user.ts",
     "Kybo Test",
-    "owner@kybo.example",
+    "owner_test",
     "admin",
   ]);
   await run([
@@ -53,7 +53,7 @@ try {
     "tsx",
     "scripts/create-user.ts",
     "Personal Test",
-    "staff@kybo.example",
+    "staff_test",
     "staff",
   ]);
   await run([

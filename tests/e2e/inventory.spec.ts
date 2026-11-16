@@ -1,8 +1,8 @@
 import { test, expect, type Page, type BrowserContext } from "@playwright/test";
 
-const email = process.env.E2E_EMAIL;
+const username = process.env.E2E_USERNAME;
 const password = process.env.E2E_PASSWORD;
-test.skip(!email || !password, "Set E2E_EMAIL and E2E_PASSWORD");
+test.skip(!username || !password, "Set E2E_USERNAME and E2E_PASSWORD");
 
 let sharedCookies: Awaited<ReturnType<BrowserContext["cookies"]>> | undefined;
 async function signIn(page: Page) {
@@ -13,7 +13,7 @@ async function signIn(page: Page) {
     return;
   }
   await page.goto("/login");
-  await page.getByLabel("Usuario o correo").fill(email!);
+  await page.getByLabel("Usuario", { exact: true }).fill(username!);
   await page.getByLabel("Contraseña").fill(password!);
   await page.getByRole("button", { name: "Ingresar" }).click();
   await expect(page).toHaveURL("/", { timeout: 20_000 });
@@ -308,9 +308,7 @@ test("opening another receipt clears the previous receipt payment draft", async 
     .getByRole("combobox", { name: "Artículo", exact: true })
     .selectOption(item.id);
   await page.getByRole("textbox", { name: "Cantidad recibida" }).fill("1");
-  await page
-    .getByRole("textbox", { name: /^Precio por / })
-    .fill("100");
+  await page.getByRole("textbox", { name: /^Precio por / }).fill("100");
   await page.getByRole("button", { name: "Revisar recepción" }).click();
   await page.getByRole("button", { name: "Confirmar recepción" }).click();
   await page.getByRole("button", { name: "Registrar pago" }).click();

@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import {
   useState,
   useSyncExternalStore,
@@ -9,9 +10,11 @@ import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   CircleCheck,
+  Eye,
+  EyeOff,
   LoaderCircle,
   LockKeyhole,
-  Mail,
+  UserRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,8 +28,9 @@ export function LoginForm({
   invitationToken,
 }: { returnTo?: string; invitationToken?: string } = {}) {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [error, setError] = useState("");
   const [phase, setPhase] = useState<"idle" | "verifying" | "opening">("idle");
   const [navigating, startNavigation] = useTransition();
@@ -40,26 +44,23 @@ export function LoginForm({
     event.preventDefault();
     if (busy) return;
     setError("");
+    if (username.includes("@")) {
+      setError("Ingresá tu nombre de usuario, no tu correo electrónico.");
+      return;
+    }
     setPhase("verifying");
     try {
-      const identifier = email.trim().toLowerCase();
-      const isEmail = identifier.includes("@");
-      const response = await fetch(
-        `/api/auth/sign-in/${isEmail ? "email" : "username"}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(invitationToken
-              ? { "X-Kybo-Invitation": invitationToken }
-              : {}),
-          },
-          body: JSON.stringify({
-            [isEmail ? "email" : "username"]: identifier,
-            password,
-          }),
+      const response = await fetch("/api/auth/sign-in/username", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(invitationToken ? { "X-Kybo-Invitation": invitationToken } : {}),
         },
-      );
+        body: JSON.stringify({
+          username: username.trim().toLowerCase(),
+          password,
+        }),
+      });
       const result = await response.json();
       if (!response.ok) {
         setPhase("idle");
@@ -71,11 +72,12 @@ export function LoginForm({
               ? result.error
               : result.code === "INVITATION_INVALID"
                 ? "La invitación no está vigente o la cuenta no está habilitada. Pedí una nueva invitación a Administración."
-                : "No pudimos iniciar sesión. Revisá el usuario o correo y la contraseña.",
+                : "No pudimos iniciar sesión. Revisá el usuario y la contraseña.",
         );
         return;
       }
       setPassword("");
+      setPasswordVisible(false);
       setPhase("opening");
       const destination = safeLoginReturn(returnTo);
       const nextPage = result.passwordPolicy?.required
@@ -100,25 +102,26 @@ export function LoginForm({
     <form onSubmit={submit} aria-busy={busy} aria-describedby="login-progress">
       <fieldset disabled={!hydrated || busy} className="space-y-6">
         <div>
-          <Label htmlFor="email" required>
-            Usuario o correo
+          <Label htmlFor="username" required>
+            Usuario
           </Label>
           <div className="relative">
-            <Mail
+            <UserRound
               size={18}
               aria-hidden="true"
               className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted"
             />
             <Input
-              id="email"
+              id="username"
+              name="username"
               autoComplete="username"
               type="text"
               autoCapitalize="none"
               spellCheck={false}
-              placeholder="Tu usuario o correo"
+              placeholder="Tu nombre de usuario"
               required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               className="h-12 pl-11"
             />
           </div>
@@ -136,15 +139,41 @@ export function LoginForm({
             <Input
               id="password"
               autoComplete="current-password"
-              type="password"
+              type={passwordVisible ? "text" : "password"}
               placeholder="Ingresá tu contraseña"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="h-12 pl-11"
+              className="h-12 pl-11 pr-14"
             />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={
+                passwordVisible ? "Ocultar contraseña" : "Mostrar contraseña"
+              }
+              aria-pressed={passwordVisible}
+              aria-controls="password"
+              onClick={() => setPasswordVisible((visible) => !visible)}
+              className="absolute right-0.5 top-1/2 -translate-y-1/2 text-muted"
+            >
+              {passwordVisible ? (
+                <EyeOff size={18} aria-hidden="true" />
+              ) : (
+                <Eye size={18} aria-hidden="true" />
+              )}
+            </Button>
           </div>
         </div>
+        <Link
+          href={`/recover-password?returnTo=${encodeURIComponent(safeLoginReturn(returnTo))}`}
+          className="inline-flex min-h-11 items-center rounded text-sm font-semibold text-blue focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring aria-disabled:pointer-events-none aria-disabled:opacity-50"
+          aria-disabled={busy}
+          tabIndex={busy ? -1 : undefined}
+        >
+          Olvidé mi contraseña
+        </Link>
         <OperationAlert
           title="No pudimos iniciar sesión"
           message={error}

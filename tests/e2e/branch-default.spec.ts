@@ -13,13 +13,13 @@ test("assigned managers enter their branch automatically and cannot configure lo
     password: string,
   ) => {
     await target.goto(new URL("/login", page.url()).href);
-    await target.getByLabel("Usuario o correo").fill(identifier);
+    await target.getByLabel("Usuario", { exact: true }).fill(identifier);
     await target.getByLabel("Contraseña").fill(password);
     await target.getByRole("button", { name: "Ingresar", exact: true }).click();
     await expect(target).toHaveURL(/\/$/, { timeout: 45000 });
   };
   await page.goto("/login");
-  await login(page, process.env.E2E_EMAIL!, process.env.E2E_PASSWORD!);
+  await login(page, process.env.E2E_USERNAME!, process.env.E2E_PASSWORD!);
   const origin = new URL(page.url()).origin;
   const headers = { Origin: origin };
   const initial = await (
