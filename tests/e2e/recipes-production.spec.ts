@@ -1,9 +1,9 @@
 import { test, expect, type Page, type BrowserContext } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
-const email = process.env.E2E_EMAIL,
+const username = process.env.E2E_USERNAME,
   password = process.env.E2E_PASSWORD;
-test.skip(!email || !password, "Set E2E_EMAIL and E2E_PASSWORD");
+test.skip(!username || !password, "Set E2E_USERNAME and E2E_PASSWORD");
 let cookies: Awaited<ReturnType<BrowserContext["cookies"]>> | undefined;
 async function signIn(page: Page) {
   if (cookies) {
@@ -12,7 +12,7 @@ async function signIn(page: Page) {
     return;
   }
   await page.goto("/login");
-  await page.getByLabel("Usuario o correo").fill(email!);
+  await page.getByLabel("Usuario", { exact: true }).fill(username!);
   await page.getByLabel("Contraseña").fill(password!);
   await page.getByRole("button", { name: "Ingresar" }).click();
   await expect(page).toHaveURL("/", { timeout: 25_000 });

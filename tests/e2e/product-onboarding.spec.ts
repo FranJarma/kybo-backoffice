@@ -9,7 +9,9 @@ test("creates and edits resale products with inventory and branch setup entirely
   );
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/login");
-  await page.getByLabel("Usuario o correo").fill(process.env.E2E_EMAIL!);
+  await page
+    .getByLabel("Usuario", { exact: true })
+    .fill(process.env.E2E_USERNAME!);
   await page.getByLabel("Contraseña").fill(process.env.E2E_PASSWORD!);
   await page.getByRole("button", { name: "Ingresar", exact: true }).click();
   await expect(page).toHaveURL("/", { timeout: 45000 });

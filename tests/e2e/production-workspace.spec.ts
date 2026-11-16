@@ -3,7 +3,7 @@ import { expect, test, type Page, type BrowserContext } from "@playwright/test";
 test.setTimeout(90_000);
 test.use({ storageState: process.env.KYBO_PRODUCTION_UX_AUTHSTATE });
 test.skip(
-  !process.env.E2E_EMAIL ||
+  !process.env.E2E_USERNAME ||
     !process.env.E2E_PASSWORD ||
     process.env.KYBO_PRODUCTION_UX_FIXTURE !== "disposable-only",
   "Usar una cuenta de pruebas y una base descartable.",
@@ -20,13 +20,16 @@ async function openProduction(page: Page) {
     await page.goto("/kitchen/production");
     return;
   }
-  const login = await page.request.post("/api/auth/sign-in/email", {
+  const login = await page.request.post("/api/auth/sign-in/username", {
     headers: {
       Origin: new URL(
         process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000",
       ).origin,
     },
-    data: { email: process.env.E2E_EMAIL, password: process.env.E2E_PASSWORD },
+    data: {
+      username: process.env.E2E_USERNAME,
+      password: process.env.E2E_PASSWORD,
+    },
   });
   expect(login.status()).toBe(200);
   await page.goto("/kitchen/production");

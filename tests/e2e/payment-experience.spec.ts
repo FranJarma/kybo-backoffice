@@ -60,7 +60,9 @@ test("payment dialog distinguishes empty methods, retries, cash and split paymen
     }),
   );
   await page.goto("/login");
-  await page.getByLabel("Usuario o correo").fill(process.env.E2E_EMAIL!);
+  await page
+    .getByLabel("Usuario", { exact: true })
+    .fill(process.env.E2E_USERNAME!);
   await page.getByLabel("Contraseña").fill(process.env.E2E_PASSWORD!);
   await page.getByRole("button", { name: "Ingresar", exact: true }).tap();
   await expect(page).toHaveURL(/\/(?:settings\/branches)?$/, {

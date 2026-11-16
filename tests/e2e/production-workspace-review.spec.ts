@@ -4,7 +4,7 @@ import type { RecipeDetail } from "@/modules/recipes/types";
 test.setTimeout(90_000);
 test.use({ storageState: process.env.KYBO_PRODUCTION_UX_AUTHSTATE });
 test.skip(
-  !process.env.E2E_EMAIL ||
+  !process.env.E2E_USERNAME ||
     !process.env.E2E_PASSWORD ||
     process.env.KYBO_PRODUCTION_UX_FIXTURE !== "disposable-only",
   "Solo base descartable de UX de producción.",
@@ -17,10 +17,10 @@ async function openProduction(page: Page) {
   }
   if (cookies) await page.context().addCookies(cookies);
   else {
-    const result = await page.request.post("/api/auth/sign-in/email", {
+    const result = await page.request.post("/api/auth/sign-in/username", {
       headers: { Origin: new URL(process.env.PLAYWRIGHT_BASE_URL!).origin },
       data: {
-        email: process.env.E2E_EMAIL,
+        username: process.env.E2E_USERNAME,
         password: process.env.E2E_PASSWORD,
       },
     });

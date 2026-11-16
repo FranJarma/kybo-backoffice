@@ -9,7 +9,9 @@ test("administers employees, branches and permissions and preserves private acco
   test.skip(process.env.E2E_MANAGED !== "1", "Disposable database required");
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/login");
-  await page.getByLabel("Usuario o correo").fill(process.env.E2E_EMAIL!);
+  await page
+    .getByLabel("Usuario", { exact: true })
+    .fill(process.env.E2E_USERNAME!);
   await page.getByLabel("Contraseña").fill(process.env.E2E_PASSWORD!);
   await page.getByRole("button", { name: "Ingresar", exact: true }).click();
   await expect(page).toHaveURL(/\/(?:settings\/branches)?$/, {
@@ -104,7 +106,9 @@ test("administers employees, branches and permissions and preserves private acco
   const employee = await employeeContext.newPage();
   try {
     await employee.goto(new URL("/login", page.url()).href);
-    await employee.getByLabel("Usuario o correo").fill("empleado_panel");
+    await employee
+      .getByLabel("Usuario", { exact: true })
+      .fill("empleado_panel");
     await employee.getByLabel("Contraseña").fill("PanelPassword-123!");
     await employee
       .getByRole("button", { name: "Ingresar", exact: true })

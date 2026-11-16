@@ -9,7 +9,7 @@ import {
 } from "../helpers/browser-session";
 import type { PrepList, PrepDetail } from "@/modules/preparation/types";
 test.skip(
-  !process.env.E2E_EMAIL || !process.env.E2E_PASSWORD,
+  !process.env.E2E_USERNAME || !process.env.E2E_PASSWORD,
   "Temporary credentials required",
 );
 async function login(page: Page, staff = false) {
@@ -19,8 +19,10 @@ async function login(page: Page, staff = false) {
   if (!restored) {
     await page.goto("/login");
     await page
-      .getByLabel("Usuario o correo")
-      .fill((staff ? process.env.E2E_STAFF_EMAIL : process.env.E2E_EMAIL)!);
+      .getByLabel("Usuario", { exact: true })
+      .fill(
+        (staff ? process.env.E2E_STAFF_USERNAME : process.env.E2E_USERNAME)!,
+      );
     await page.getByLabel("Contraseña").fill(process.env.E2E_PASSWORD!);
     await page.getByRole("button", { name: "Ingresar" }).click();
     await expect(page).toHaveURL(staff ? "/sales" : "/", { timeout: 25000 });
