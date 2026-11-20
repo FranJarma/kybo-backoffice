@@ -61,6 +61,7 @@ import { SaleDetailDialog } from "./sale-detail-dialog";
 import { SaleHistory } from "./history";
 import { LocatorPicker } from "@/components/pickup/locator-picker";
 import { useLocators } from "@/components/pickup/use-locators";
+import { LocatorFleetProvider } from "@/components/pickup/locator-fleet-context";
 import {
   locatorSelection,
   nextAvailableLocator,
@@ -738,7 +739,7 @@ export function SalesManager({
       />
     </>
   );
-  return (
+  const workspace = (
     <div
       data-pos
       className="flex h-full min-h-0 flex-col gap-2 [&>div:not([data-pos-workspace])]:shrink-0"
@@ -1590,5 +1591,10 @@ export function SalesManager({
         </Dialog>
       )}
     </div>
+  );
+  return (
+    <LocatorFleetProvider value={{ fleet: locatorFleet, error: locatorError }}>
+      {workspace}
+    </LocatorFleetProvider>
   );
 }

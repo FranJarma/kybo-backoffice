@@ -1,0 +1,202 @@
+{
+  "observedAt": "2026-11-20T13:43:41.310Z",
+  "baselineCommit": "2b283401c7b9ce515c9a278ed5fb795010d8a0e8",
+  "environment": "Windows x64; Node24.21.0; Next16.3.6; Drizzle0.45.3; PGlite0.5.8; Vitest5.0.1; threads/one worker; installed Chrome; no remote DB",
+  "productionMutation": false,
+  "focused": {
+    "files": 4,
+    "total": 35,
+    "passed": 35,
+    "failed": 0,
+    "skipped": 0,
+    "durationSeconds": 25.19
+  },
+  "full": {
+    "files": {
+      "total": 198,
+      "passed": 188,
+      "failed": 9,
+      "skipped": 1
+    },
+    "tests": {
+      "total": 1079,
+      "passed": 994,
+      "failed": 0,
+      "skipped": 85
+    },
+    "durationSeconds": 1021.45,
+    "failures": [
+      {
+        "file": "catalog.test.ts",
+        "assertionsFailed": [],
+        "omitted": [
+          "authorized and durable master records rejects staff on reads and writes",
+          "authorized and durable master records persists data and audit together and protects stale edits",
+          "authorized and durable master records archives without deleting and restores by revision",
+          "authorized and durable master records creates clients without marketing consent or a phone",
+          "authorized and durable master records rolls back business write if audit insert fails",
+          "costs, prices and purchase units preserves unknown costs and independent prices through edits",
+          "costs, prices and purchase units keeps historical references and disallows new archived references",
+          "costs, prices and purchase units database rejects invalid numeric and orphan rows"
+        ],
+        "cause": "Legacy fixture cannot bypass explicit data-model transition mapping"
+      },
+      {
+        "file": "data-model.concurrency.test.ts",
+        "assertionsFailed": [],
+        "omitted": [
+          "traslada 12 y recibe 5 más 7 conservando identidad y saldos",
+          "dos conexiones compiten por la última unidad y sólo una reserva"
+        ],
+        "cause": "Dedicated PostgreSQL test URL intentionally unset"
+      },
+      {
+        "file": "inventory.test.ts",
+        "assertionsFailed": [],
+        "omitted": [
+          "inventory ledger receives exact base units once despite retry, with durable audit",
+          "inventory ledger separates payment from stock and rejects duplicate documents, changed keys and overpayment",
+          "inventory ledger preserves catalog snapshots, rejects inactive entries and locks used base units",
+          "inventory ledger records weighted average waste and protects stale lot revision",
+          "inventory ledger keeps unknown and explicit zero value distinct; expiry and blocking affect only usable stock",
+          "transaction boundaries and exact costs rounds each priced line before discounts and preserves pending versus zero",
+          "transaction boundaries and exact costs restarts value after exhaustion and leaves positive count on exhausted unknown lot pending",
+          "transaction boundaries and exact costs rolls back a multi-line receipt when a later line is invalid",
+          "transaction boundaries and exact costs rejects key reuse by another actor, even with identical payload",
+          "transaction boundaries and exact costs serializes simultaneous payments against one known total",
+          "concurrent retries and business dates returns one receipt for simultaneous identical request keys",
+          "concurrent retries and business dates returns one adjusted lot for simultaneous identical request keys",
+          "concurrent retries and business dates returns one payment for simultaneous identical request keys",
+          "concurrent retries and business dates rejects a future business date while allowing already expired merchandise",
+          "inventory history and pagination locks an item base unit after all of its stock was consumed",
+          "inventory history and pagination keeps more than 100 lots accessible, with positive quantities ahead of exhausted ones",
+          "inventory history and pagination rejects fractional presentation conversions that exceed six base decimals",
+          "reviving exhausted lots does not assign a newer item average to an originally unknown lot",
+          "catalog review revisions rejects a changed presentation factor instead of silently receiving a different amount",
+          "catalog review revisions rejects a changed base unit under a previously reviewed item",
+          "archived item exits rejects positive counts while allowing count-down and waste of existing stock",
+          "numeric persistence bounds rejects an opening whose computed stock value exceeds numeric precision",
+          "numeric persistence bounds rejects a receipt whose total exceeds monetary precision"
+        ],
+        "cause": "Legacy fixture cannot bypass explicit data-model transition mapping"
+      },
+      {
+        "file": "modifiers-schema.test.ts",
+        "assertionsFailed": [],
+        "omitted": [
+          "stores reusable groups and restricts duplicate version numbers",
+          "marks old composition explicitly instead of inventing items",
+          "upgrades a populated 0005 database without rewriting historical sales"
+        ],
+        "cause": "Legacy fixture cannot bypass explicit data-model transition mapping"
+      },
+      {
+        "file": "modifiers.test.ts",
+        "assertionsFailed": [],
+        "omitted": [
+          "publishes immutable versions and rejects stale edits and staff",
+          "rejects duplicate items and instruction composition without partial writes",
+          "binds modifier composition to recipe versions and costs chosen items once",
+          "snapshots modifiers in sale and retries safely after group changes",
+          "costs configurable delivery-only recipes without requiring a counter price",
+          "proposes conversion preserving first alternative and removing variable fixed copies",
+          "lists the configurable default cost rather than an empty fixed recipe cost",
+          "keeps archived item cost pending while preventing a new sale",
+          "exposes only public options to staff and enforces cross-group option ownership",
+          "normalizes legacy conversion quantities to one sold unit",
+          "blocks changing the unit of an item used only by a modifier",
+          "locks inherited items when publishing a configurable recipe",
+          "publishes reviewed new groups atomically with recipe and rolls back failed publication"
+        ],
+        "cause": "Legacy fixture cannot bypass explicit data-model transition mapping"
+      },
+      {
+        "file": "preparation.test.ts",
+        "assertionsFailed": [],
+        "omitted": [
+          "publishes station tasks once, groups lines and rolls back unpaid counter orders",
+          "keeps unrouted products visible in General",
+          "allows one start and preserves progress on replay after later events",
+          "reassigns with a reason, preserving the original preparation clock",
+          "cancels only undelivered tasks atomically with the sale",
+          "does not rewrite routes or station names on already published tasks",
+          "restricts configuration and metrics, and rejects invalid state jumps",
+          "finds and clears an archived product route without reactivating the product",
+          "calculates elapsed order time without adding parallel station durations",
+          "summarizes completed orders once with sample size and channel counts"
+        ],
+        "cause": "Legacy fixture cannot bypass explicit data-model transition mapping"
+      },
+      {
+        "file": "production.test.ts",
+        "assertionsFailed": [],
+        "omitted": [
+          "production ledger consumes FEFO usable lots, aggregates repeated items, transfers exact cost to actual yield",
+          "production ledger refuses shortages atomically and leaves the request key retryable",
+          "production ledger invalidates a preview after stock changes and replays committed requests even after a recipe edit or date change",
+          "production ledger propagates unknown cost, honors zero, and does not consume raw materials a second time for a prepared input",
+          "production ledger rejects obsolete/invalid selections, unit overflow, expiry extension and non-current dates",
+          "production ledger preserves the last rounding remainder and concurrent retries create one output lot"
+        ],
+        "cause": "Legacy fixture cannot bypass explicit data-model transition mapping"
+      },
+      {
+        "file": "recipes.test.ts",
+        "assertionsFailed": [],
+        "omitted": [
+          "versioned recipes persists immutable versions and safely retries an old save",
+          "versioned recipes compares alternatives and omission, preserving unknown costs versus explicit zero",
+          "versioned recipes costs preparations recursively without inventing an item price",
+          "versioned recipes rejects cycles through alternatives and direct output consumption",
+          "versioned recipes protects referenced units and immutable targets, rejects archived items and staff"
+        ],
+        "cause": "Legacy fixture cannot bypass explicit data-model transition mapping"
+      },
+      {
+        "file": "sales.test.ts",
+        "assertionsFailed": [],
+        "omitted": [
+          "sales ledger requires payment before confirming counter sales and rolls back failed writes",
+          "sales ledger locks replayed accounts before assembling a multi-query detail",
+          "sales ledger retries with stable ids and refuses reuse for a different payload",
+          "sales ledger aggregates table orders without duplicate visits and serializes partial payments",
+          "sales ledger separates platform collection, prices and external duplication",
+          "sales ledger rejects stale or absent prices without fallback and bounds exact totals",
+          "sales ledger preserves historical values after catalog edits, including retry",
+          "sales ledger records explicit refund reversal on cancellation and never deletes the collection",
+          "sales ledger supports exact split tender and optional external receipt reference",
+          "sales ledger keeps lookups lean and enforces active records and valid channel combinations",
+          "sales ledger prevents overlapping tables and archiving an occupied table",
+          "sales ledger lists visits separately from orders and paginates"
+        ],
+        "cause": "Legacy fixture cannot bypass explicit data-model transition mapping"
+      }
+    ],
+    "omissions": [
+      {
+        "file": "modifiers-concurrency.test.ts",
+        "tests": [
+          "independent PostgreSQL connections (requires KYBO_TEST_DATABASE_URL) replays simultaneous identical requests into one sale",
+          "independent PostgreSQL connections (requires KYBO_TEST_DATABASE_URL) serializes publication and sale without mixing recipe versions",
+          "independent PostgreSQL connections (requires KYBO_TEST_DATABASE_URL) serializes item archive against accepting a composition"
+        ]
+      }
+    ],
+    "command": "node node_modules/vitest/vitest.mjs run --pool=threads --maxWorkers=1",
+    "exitCode": 1
+  },
+  "typecheck": "passed after renaming scratch config backup to .txt",
+  "lint": "passed",
+  "format": "passed",
+  "review": {
+    "critical": 0,
+    "important": 0,
+    "minorDeferred": "Browser fixture does not hold an active request during URL change or exercise offline-online before previous rejection finishes"
+  },
+  "productionBuild": {
+    "status": "failed_environment",
+    "error": "EPERM mkdir .next-e2e/speed-20261120/server/app/api/cash",
+    "diagnostic": "webpackBuildWorker false did not resolve it",
+    "configurationRestoredByteForByte": true
+  }
+}

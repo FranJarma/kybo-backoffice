@@ -1,33 +1,17 @@
 "use client";
-import { useEffect, useState } from "react";
-import { getJson } from "@/components/inventory/shared";
+import { useContext, useEffect, useState } from "react";
 import type { LocatorFleet } from "@/modules/pickup/types";
+import { startLocatorPolling } from "./locator-polling";
+import { LocatorFleetContext } from "./locator-fleet-context";
 
 export function useLocators(refresh: number) {
+  const provided = useContext(LocatorFleetContext);
+  const shared = provided !== null;
   const [fleet, setFleet] = useState<LocatorFleet>();
   const [error, setError] = useState("");
   useEffect(() => {
-    let live = true;
-    let timer: ReturnType<typeof setTimeout>;
-    async function load() {
-      try {
-        const result = await getJson<LocatorFleet>("/api/pickup");
-        if (live) {
-          setFleet(result);
-          setError("");
-        }
-      } catch {
-        if (live)
-          setError("No se pudo actualizar la disponibilidad de localizadores.");
-      } finally {
-        if (live) timer = setTimeout(load, 5000);
-      }
-    }
-    void load();
-    return () => {
-      live = false;
-      clearTimeout(timer);
-    };
-  }, [refresh]);
-  return { fleet, error };
+    if (shared) return;
+    return startLocatorPolling({ onFleet: setFleet, onError: setError });
+  }, [refresh, shared]);
+  return provided ?? { fleet, error };
 }

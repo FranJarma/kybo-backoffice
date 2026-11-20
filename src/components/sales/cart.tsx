@@ -1,5 +1,4 @@
 "use client";
-import { useErrorFeedback } from "@/components/ui/use-error-feedback";
 import { OperationAlert } from "@/components/ui/operation-alert";
 import { ProductPhoto } from "@/components/products/photo";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -8,7 +7,8 @@ export { appendCartLine } from "./touch-selection";
 import { Coffee, Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { getJson, money } from "@/components/inventory/shared";
+import { money } from "@/components/inventory/shared";
+import { createCatalogueLoader, emptyCatalogue } from "./catalogue-loader";
 import { inputDecimal } from "@/components/recipes/shared";
 import { cents, decimal, integer } from "@/modules/inventory/decimal";
 import type { SaleChannel, SaleLookup } from "@/modules/sales/types";
@@ -57,51 +57,28 @@ export function ProductPicker({
 }) {
   const [category, setCategory] = useState("");
   const [q, setQ] = useState("");
-  const [retry, setRetry] = useState(0);
-  const [data, setData] = useState<SaleLookup>({ rows: [], total: 0 });
-  const [loading, setLoading] = useState(true);
-  const [error, setError, errorAttempt] = useErrorFeedback();
+  const [catalogue, setCatalogue] = useState(emptyCatalogue);
+  const { data, loading, error, errorAttempt, complete } = catalogue;
+  const resource = useRef<ReturnType<typeof createCatalogueLoader> | null>(
+    null,
+  );
   const loaded = useRef(onCatalogueLoaded);
   useEffect(() => {
     loaded.current = onCatalogueLoaded;
   }, [onCatalogueLoaded]);
   useEffect(() => {
-    let live = true;
-    async function load() {
-      if (!live) return;
-      setLoading(true);
-      setError("");
-      setData({ rows: [], total: 0 });
-      const first = await getJson<SaleLookup>(
-        `/api/sales/lookup?kind=products&channel=${channel}&offset=0`,
-      );
-      const rows = [...first.rows];
-      let offset = first.rows.length;
-      while (live && offset < first.total) {
-        const page = await getJson<SaleLookup>(
-          `/api/sales/lookup?kind=products&channel=${channel}&offset=${offset}`,
-        );
-        if (!page.rows.length) break;
-        rows.push(...page.rows);
-        offset += page.rows.length;
-      }
-      if (!live) return;
-      const unique = [...new Map(rows.map((row) => [row.id, row])).values()];
-      setData({ ...first, rows: unique, total: unique.length });
-      loaded.current?.(unique);
-    }
-    Promise.resolve()
-      .then(load)
-      .catch((e) => {
-        if (live) setError(e.message);
-      })
-      .finally(() => {
-        if (live) setLoading(false);
-      });
+    const loader = createCatalogueLoader({
+      channel,
+      onChange: setCatalogue,
+      onComplete: (rows) => loaded.current?.(rows),
+    });
+    resource.current = loader;
+    void Promise.resolve().then(() => loader.load());
     return () => {
-      live = false;
+      loader.dispose();
+      if (resource.current === loader) resource.current = null;
     };
-  }, [channel, refresh, retry, setError]);
+  }, [channel, refresh]);
   const rows = useMemo(
     () => filterCatalogue(data.rows, q, category),
     [data.rows, q, category],
@@ -151,39 +128,54 @@ export function ProductPicker({
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4">
-        {error ? (
-          <div className="space-y-3 py-8 text-sm">
+        {error && (
+          <div className="space-y-3 pb-4 text-sm">
             <OperationAlert
               eventKey={errorAttempt}
               tone="error"
-              title="No pudimos cargar la carta"
+              title={
+                data.rows.length
+                  ? "Falta completar la carta"
+                  : "No pudimos cargar la carta"
+              }
               message={error}
             />
             <Button
               type="button"
               variant="outline"
               className="min-h-12"
-              onClick={() => setRetry((n) => n + 1)}
+              onClick={() => void resource.current?.load()}
             >
               Reintentar carta
             </Button>
           </div>
-        ) : loading ? (
+        )}
+        {loading && data.rows.length > 0 && (
+          <p className="pb-3 text-sm text-muted" role="status">
+            Completando la carta: {data.rows.length} de {data.total} productos.
+            La búsqueda se actualizará al terminar.
+          </p>
+        )}
+        {loading && data.rows.length === 0 ? (
           <p className="py-12 text-center text-sm text-muted" role="status">
             Cargando carta…
           </p>
-        ) : rows.length === 0 ? (
+        ) : error && data.rows.length === 0 ? null : rows.length === 0 ? (
           <div className="py-12 text-center">
             <Coffee size={30} className="mx-auto mb-3 text-muted" />
             <p className="text-sm font-semibold text-brand">
-              {q || category
-                ? "No hay productos con estos filtros"
-                : "Tu carta todavía está vacía"}
+              {!complete
+                ? "Todavía no hay coincidencias entre los productos cargados"
+                : q || category
+                  ? "No hay productos con estos filtros"
+                  : "Tu carta todavía está vacía"}
             </p>
             <p className="mt-2 text-xs text-muted">
-              {q || category
-                ? "Probá otra categoría o buscá por otro nombre."
-                : "Cargá los productos y sus precios para empezar."}
+              {!complete
+                ? "Falta completar la carta para buscar en todos los productos."
+                : q || category
+                  ? "Probá otra categoría o buscá por otro nombre."
+                  : "Cargá los productos y sus precios para empezar."}
             </p>
           </div>
         ) : (
