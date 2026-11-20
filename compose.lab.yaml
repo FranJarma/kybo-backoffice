@@ -1,0 +1,57 @@
+# Disposable laboratory only. An empty database cannot run this release of Kybo.
+# Restore a reviewed, sanitized, release-compatible fixture before functional tests.
+name: kybo-lab
+services:
+  postgres:
+    image: postgres:18-bookworm
+    environment:
+      POSTGRES_DB: kybo_lab
+      POSTGRES_USER: kybo_lab
+      POSTGRES_PASSWORD: ${KYBO_DOCKER_DB_PASSWORD:?Set a laboratory password in docker.env.local}
+    volumes:
+      # PostgreSQL 18 changed the official image's volume layout.
+      - postgres:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kybo_lab -d kybo_lab"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks: [database]
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  app:
+    build:
+      context: .
+      target: runner
+    image: kybo-operations:lab
+    init: true
+    environment:
+      # Generate a URL-safe hexadecimal password; no production .env values are used.
+      DATABASE_URL: postgresql://kybo_lab:${KYBO_DOCKER_DB_PASSWORD:?Set a laboratory password in docker.env.local}@postgres:5432/kybo_lab
+      BETTER_AUTH_SECRET: ${KYBO_DOCKER_AUTH_SECRET:?Set a laboratory authentication secret in docker.env.local}
+      BETTER_AUTH_URL: ${KYBO_DOCKER_AUTH_URL:-http://localhost:3000}
+      BLOB_READ_WRITE_TOKEN: ${KYBO_DOCKER_BLOB_TOKEN:-}
+    ports: ["127.0.0.1:3000:3000"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [application, database]
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  application: {}
+  database:
+    internal: true
+
+volumes:
+  postgres: {}
