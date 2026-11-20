@@ -39,6 +39,7 @@ type Draft = {
   name: string;
   username: string;
   email: string;
+  emailRecoveryEnabled: boolean;
   password: string;
   temporaryPassword: boolean;
   role: UserRole;
@@ -50,6 +51,7 @@ const empty = (): Draft => ({
   name: "",
   username: "",
   email: "",
+  emailRecoveryEnabled: false,
   password: "",
   temporaryPassword: true,
   role: "staff",
@@ -97,6 +99,7 @@ export function UsersManager({ initial }: { initial: UsersSnapshot }) {
             name: row.name,
             username: row.username ?? "",
             email: row.email ?? "",
+            emailRecoveryEnabled: row.emailRecoveryEnabled === true,
             password: "",
             temporaryPassword: true,
             role: row.role,
@@ -511,10 +514,36 @@ export function UsersManager({ initial }: { initial: UsersSnapshot }) {
                         required={!!editing && !draft.username}
                         autoComplete="off"
                         value={draft.email}
-                        onChange={(e) => update({ email: e.target.value })}
+                        onChange={(e) =>
+                          update({
+                            email: e.target.value,
+                            emailRecoveryEnabled: false,
+                          })
+                        }
                         aria-invalid={!!fields.email}
                       />
                       {fieldError("email")}
+                      <p className="mt-2 text-xs leading-relaxed text-muted">
+                        Se usará para recuperar la contraseña cuando se habilite
+                        el envío de correos.
+                      </p>
+                      <label className="mt-3 flex min-h-11 items-start gap-3 text-sm leading-5">
+                        <input
+                          type="checkbox"
+                          data-user-field="emailRecoveryEnabled"
+                          className="mt-1 size-4"
+                          disabled={!draft.email.trim()}
+                          checked={draft.emailRecoveryEnabled}
+                          onChange={(e) =>
+                            update({ emailRecoveryEnabled: e.target.checked })
+                          }
+                        />
+                        <span>
+                          Confirmé que este correo pertenece a esta persona.
+                          Habilitar recuperación por correo.
+                        </span>
+                      </label>
+                      {fieldError("emailRecoveryEnabled")}
                     </div>
                     <div className="sm:col-span-2">
                       <Label

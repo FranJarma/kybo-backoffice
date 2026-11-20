@@ -2,11 +2,13 @@ export type RejectedOperationState = {
   pending: boolean;
   busy: boolean;
   status: number | null;
+  outcomeUncertain?: boolean;
 };
 export function canDiscardRejectedOperation(state: RejectedOperationState) {
   return (
     state.pending &&
     !state.busy &&
+    state.outcomeUncertain === false &&
     (state.status === 401 || state.status === 403)
   );
 }

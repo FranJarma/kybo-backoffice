@@ -49,7 +49,7 @@ export function createCatalogueLoader({
         try {
           page = await getJson<SaleLookup>(
             `/api/sales/lookup?kind=products&channel=${channel}&offset=${offset}`,
-            { signal: request.signal },
+            request.signal,
           );
         } finally {
           clearTimeout(requestTimeout);

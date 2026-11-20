@@ -59,7 +59,7 @@ it("uses the shared administration locks before changing branch access", async (
   });
   expect(mocks.lock).toHaveBeenCalledBefore(mocks.insert);
   expect(mocks.remove).toHaveBeenCalledOnce();
-  expect(mocks.revoke).toHaveBeenCalledOnce();
+  expect(mocks.revoke).toHaveBeenCalledTimes(2);
 });
 it("does not change memberships after administrator revocation", async () => {
   mocks.lock.mockRejectedValue(

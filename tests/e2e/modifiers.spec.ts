@@ -5,17 +5,22 @@ import {
 } from "../helpers/browser-session";
 test("manages reusable modifier groups from recipes", async ({ page }) => {
   test.setTimeout(90000);
-  test.skip(!process.env.E2E_EMAIL, "Temporary credentials required");
+  test.skip(!process.env.E2E_USERNAME, "Temporary credentials required");
   if (!(await restoreAdminSession(page))) {
     await page.goto("/login");
-    await page.getByLabel("Usuario o correo").fill(process.env.E2E_EMAIL!);
+    await page
+      .getByLabel("Usuario", { exact: true })
+      .fill(process.env.E2E_USERNAME!);
     await page.getByLabel("Contraseña").fill(process.env.E2E_PASSWORD!);
     await page.getByRole("button", { name: "Ingresar" }).click();
     await expect(page).toHaveURL("/", { timeout: 25000 });
     await saveAdminSession(page);
   }
   await page.goto("/products/recipes");
-  await page.getByRole("main").getByRole("link", { name: "Modificadores" }).click();
+  await page
+    .getByRole("main")
+    .getByRole("link", { name: "Modificadores" })
+    .click();
   await page.getByRole("button", { name: "Nuevo grupo" }).click();
   await page.getByLabel("Nombre del grupo").fill("Cocción de prueba");
   await page.getByLabel("Nombre de opción 1").fill("Bien cocido");
@@ -32,10 +37,12 @@ test("costs configurations, sells separate rows and retains kitchen history", as
   page,
 }) => {
   test.setTimeout(120000);
-  test.skip(!process.env.E2E_EMAIL, "Temporary credentials required");
+  test.skip(!process.env.E2E_USERNAME, "Temporary credentials required");
   if (!(await restoreAdminSession(page))) {
     await page.goto("/login");
-    await page.getByLabel("Usuario o correo").fill(process.env.E2E_EMAIL!);
+    await page
+      .getByLabel("Usuario", { exact: true })
+      .fill(process.env.E2E_USERNAME!);
     await page.getByLabel("Contraseña").fill(process.env.E2E_PASSWORD!);
     await page.getByRole("button", { name: "Ingresar" }).click();
     await expect(page).toHaveURL("/", { timeout: 25000 });

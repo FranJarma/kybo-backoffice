@@ -48,6 +48,8 @@ export function PaymentDialog({
   eventKey,
   uncertain,
   onRetry,
+  canDiscard = false,
+  onDiscard,
   onClose,
   onConfirm,
   methods,
@@ -66,6 +68,8 @@ export function PaymentDialog({
   eventKey?: number | string;
   uncertain: boolean;
   onRetry: () => void;
+  canDiscard?: boolean;
+  onDiscard?: () => void;
   onClose: () => void;
   onConfirm: (payments: PaymentDraft[]) => void;
   methods: SaleLookup["rows"];
@@ -499,6 +503,9 @@ export function PaymentDialog({
           className="shrink-0 space-y-3 border-t border-line bg-white px-5 py-4 sm:px-7"
         >
           <OperationNotice
+            persistentError
+            canDiscard={canDiscard}
+            onDiscard={onDiscard}
             eventKey={eventKey}
             error={error}
             uncertain={uncertain}

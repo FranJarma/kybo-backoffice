@@ -35,6 +35,7 @@ import {
 import { taskDetail, taskViews, stationView, iso } from "./queries";
 import { orderTiming } from "./timing";
 import {
+  canDeliverOrders,
   personalPreparationScope,
   requirePreparationTaskAccess,
 } from "../staff-work/access";
@@ -337,6 +338,7 @@ export function createPreparationService(db: AppDb) {
             .where(eq(preparationStations.branchId, ctx.branchId))
             .orderBy(asc(preparationStations.name));
           return {
+            capabilities: { deliver: await canDeliverOrders(tx, ctx) },
             rows: await taskViews(
               tx,
               ids.map((r) => r.id),

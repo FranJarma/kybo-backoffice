@@ -74,7 +74,12 @@ it("snapshot reads physical stock without writes and staff cannot read team task
   const view = await getDailyOperationSnapshot(ctx.db, actor, {});
   expect(
     view.stock.find((s) => s.itemId === itemId && s.locationId === bar),
-  ).toMatchObject({ physical: "0.000000", available: "0.000000" });
+  ).toMatchObject({
+    physical: "0.000000",
+    available: "0.000000",
+    minimumQuantity: "2.000000",
+    targetQuantity: "20.000000",
+  });
   expect(
     view.stock.find(
       (s) =>
@@ -88,6 +93,9 @@ it("snapshot reads physical stock without writes and staff cannot read team task
   const mine = await getDailyOperationSnapshot(ctx.db, staff, { mine: true });
   expect(mine.tasks.every((t) => t.assignedTo === staff.id)).toBe(true);
   expect(mine.people).toEqual([]);
+  expect(
+    mine.stock.find((s) => s.itemId === itemId && s.locationId === bar),
+  ).not.toHaveProperty("minimumQuantity");
 });
 it("disabled need is superseded rather than completed", async () => {
   await ctx.db.update(replenishmentPolicies).set({ enabled: false });

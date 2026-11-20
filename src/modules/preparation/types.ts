@@ -79,6 +79,7 @@ export type PrepDetail = {
   }[];
 };
 export type PrepList = {
+  capabilities?: { deliver: boolean };
   rows: PrepTask[];
   total: number;
   offset: number;

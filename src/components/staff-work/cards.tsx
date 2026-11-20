@@ -3,6 +3,8 @@
 import { Check, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { quantity } from "@/components/inventory/shared";
+import { ProductionDifferenceForm } from "@/components/production/difference-form";
+import { PreparationModifiers } from "@/components/preparation/modifiers";
 import type {
   StaffPreparationTask,
   StaffProductionOrder,
@@ -52,14 +54,10 @@ export function PreparationWorkCard({
               </span>
               <div className="min-w-0">
                 <p className="font-semibold text-brand">{line.name}</p>
-                {line.modifiers.map((m, i) => (
-                  <p key={i} className="mt-1 text-sm text-blue">
-                    {m.count} × {m.optionName}
-                    {m.instruction && m.instruction !== m.optionName
-                      ? ` · ${m.instruction}`
-                      : ""}
-                  </p>
-                ))}
+                <PreparationModifiers
+                  modifiers={line.modifiers}
+                  quantity={line.quantity}
+                />
                 {line.notes && (
                   <p className="mt-1 whitespace-pre-wrap text-sm text-muted">
                     {line.notes}
@@ -123,11 +121,20 @@ export function ProductionWorkCard({
   locked,
   timeZone,
   onAct,
+  onReport,
 }: {
   order: StaffProductionOrder;
   locked: boolean;
   timeZone: string;
   onAct: (order: StaffProductionOrder, action: "start" | "finish") => void;
+  onReport: (
+    order: StaffProductionOrder,
+    report: {
+      expectedRevision: number;
+      actualQuantity: string;
+      reason: string;
+    },
+  ) => void;
 }) {
   return (
     <article className="space-y-4 rounded-xl border border-line bg-white p-4">
@@ -139,12 +146,17 @@ export function ProductionWorkCard({
           <h3 className="mt-1 text-lg font-bold text-brand">{order.name}</h3>
         </div>
         <span
-          className={`rounded-md px-2 py-1 text-xs font-semibold ${order.state === "confirmed" ? "bg-blue-50 text-blue" : "bg-amber-50 text-amber-800"}`}
+          className={`rounded-md px-2 py-1 text-xs font-semibold ${order.state === "confirmed" && !order.difference ? "bg-blue-50 text-blue" : "bg-amber-50 text-amber-800"}`}
         >
-          {order.state === "confirmed" ? "En curso" : "Pendiente"}
+          {order.difference
+            ? "Revisión pendiente"
+            : order.state === "confirmed"
+              ? "En curso"
+              : "Pendiente"}
         </span>
       </header>
       <p className="text-xl font-bold text-brand">
+        {order.difference ? "Previsto: " : ""}
         {quantity(order.plannedQuantity, order.baseUnit)}
       </p>
       {order.scheduledFor && (
@@ -192,24 +204,56 @@ export function ProductionWorkCard({
           )}
         </details>
       )}
-      <Button
-        className="min-h-12 w-full"
-        disabled={locked}
-        data-action={order.state === "planned" ? "start" : "finish"}
-        onClick={() =>
-          onAct(order, order.state === "planned" ? "start" : "finish")
-        }
-      >
-        {order.state === "planned" ? <Play size={16} /> : <Check size={17} />}
-        {order.state === "planned"
-          ? "Comenzar producción"
-          : "Terminar producción"}
-      </Button>
-      {order.state === "confirmed" && (
-        <p className="text-xs leading-relaxed text-muted">
-          Se registra la cantidad prevista. Si hubo diferencias, avisale al
-          encargado.
-        </p>
+      {order.difference ? (
+        <div
+          role="status"
+          className="space-y-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-950"
+        >
+          <p className="font-semibold">Aviso enviado al encargado</p>
+          <p>
+            Cantidad informada:{" "}
+            {quantity(order.difference.actualQuantity, order.baseUnit)}.
+          </p>
+          <p className="whitespace-pre-wrap">{order.difference.reason}</p>
+          <p>
+            El stock se actualizará cuando el encargado revise la producción.
+          </p>
+        </div>
+      ) : (
+        <>
+          <Button
+            className="min-h-12 w-full"
+            disabled={locked}
+            data-action={order.state === "planned" ? "start" : "finish"}
+            onClick={() =>
+              onAct(order, order.state === "planned" ? "start" : "finish")
+            }
+          >
+            {order.state === "planned" ? (
+              <Play size={16} />
+            ) : (
+              <Check size={17} />
+            )}
+            {order.state === "planned"
+              ? "Comenzar producción"
+              : "Terminar según lo previsto"}
+          </Button>
+          {order.state === "confirmed" && (
+            <p className="text-xs leading-relaxed text-muted">
+              Confirmás la cantidad y los insumos previstos. Si hubo cambios,
+              usá Informar diferencia.
+            </p>
+          )}
+          {order.state === "confirmed" && (
+            <ProductionDifferenceForm
+              plannedQuantity={order.plannedQuantity}
+              baseUnit={order.baseUnit}
+              revision={order.revision}
+              locked={locked}
+              onReport={(report) => onReport(order, report)}
+            />
+          )}
+        </>
       )}
     </article>
   );

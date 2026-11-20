@@ -5,16 +5,20 @@ import { ArrowRight } from "lucide-react";
 import { PurchaseCalculation } from "@/components/inventory/purchase-calculation";
 import {
   taskAction,
-  taskDueDate,
+  taskDateLabel,
 } from "@/modules/daily-operations/presentation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FieldCaption } from "@/components/ui/field-caption";
+import { SearchCombobox } from "@/components/ui/search-combobox";
+import { taskNextStep } from "@/modules/daily-operations/presentation";
 import { quantity } from "@/lib/number-format";
 import type { TaskRow } from "@/modules/daily-operations/types";
 import { stateLabels, urgencyLabels } from "./task-list";
 export function TaskDetail({
   task,
+  latestTask,
+  unavailable = false,
   people,
   canManage,
   disabled,
@@ -23,6 +27,8 @@ export function TaskDetail({
   timeZone = "America/Argentina/Buenos_Aires",
 }: {
   task: TaskRow;
+  latestTask?: TaskRow;
+  unavailable?: boolean;
   people: { id: string; name: string }[];
   canManage: boolean;
   disabled: boolean;
@@ -38,13 +44,17 @@ export function TaskDetail({
     [stale, setStale] = useState(false),
     [uncertain, setUncertain] = useState(false);
   const pending = useRef<Record<string, unknown> | null>(null);
+  const assigneeEdited = useRef(false);
   const closed = ["done", "cancelled", "superseded"].includes(current.state);
+  const changed =
+    unavailable || (!!latestTask && latestTask.revision > current.revision);
   async function reload() {
     setBusy(true);
     try {
       const fresh = await onRefresh(true);
       if (fresh) {
         setCurrent(fresh);
+        if (!assigneeEdited.current) setAssignee(fresh.assignedTo ?? "");
         setStale(false);
         setError("");
       } else {
@@ -107,8 +117,9 @@ export function TaskDetail({
       if (!response.ok) {
         setError(result.error ?? "No pudimos realizar la operación.");
         setStale(response.status === 409);
-        setUncertain(response.status >= 500);
-        if (response.status < 500) pending.current = null;
+        const stillUncertain = uncertain || response.status >= 500;
+        setUncertain(stillUncertain);
+        if (!stillUncertain) pending.current = null;
         return;
       }
       pending.current = null;
@@ -128,22 +139,24 @@ export function TaskDetail({
       setBusy(false);
     }
   }
-  const locked = busy || disabled || stale || closed || uncertain;
+  const locked = busy || disabled || stale || changed || closed || uncertain;
   const action = taskAction(current),
     linkLocked =
-      busy || disabled || stale || uncertain || (closed && !current.documentId);
+      busy ||
+      disabled ||
+      stale ||
+      changed ||
+      uncertain ||
+      (closed && !current.documentId);
   const forecast = current.purchaseAlert;
   return (
     <OperationPanel
       title={forecast?.itemName ?? current.title}
-      label={
-        current.kind === "purchase"
-          ? "Tarea de compra"
-          : current.kind === "transfer"
-            ? "Tarea de reposición"
-            : "Operación del día"
+      description={
+        closed
+          ? stateLabels[current.state]
+          : `${urgencyLabels[current.urgency]} · ${stateLabels[current.state]}`
       }
-      description={`${urgencyLabels[current.urgency]} · ${stateLabels[current.state]}`}
       locked={busy || uncertain}
       onClose={onClose}
       footer={
@@ -173,6 +186,42 @@ export function TaskDetail({
         </>
       }
     >
+      {!closed && (
+        <p className="border-b border-line pb-4 text-sm text-brand">
+          <span className="block text-xs font-semibold text-muted">
+            Próximo paso
+          </span>
+          <strong className="mt-1 block text-base">
+            {taskNextStep(current, canManage)}
+          </strong>
+        </p>
+      )}
+      {changed && (
+        <div
+          role="status"
+          className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"
+        >
+          <p className="font-semibold">
+            {unavailable
+              ? "La tarea ya no aparece en esta vista. Conservamos lo que escribiste."
+              : "La tarea cambió. Conservamos lo que escribiste."}
+          </p>
+          <p className="mt-1">
+            {unavailable
+              ? "Puede haber cambiado de estado, responsable o posición en la lista. Actualizá para confirmar su situación."
+              : "Actualizá la tarea antes de continuar."}
+          </p>
+        </div>
+      )}
+      {disabled && !error && (
+        <p
+          role="alert"
+          className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"
+        >
+          No pudimos confirmar que la información esté actualizada. Actualizá la
+          tarea antes de continuar.
+        </p>
+      )}
       {current.quantity && (
         <section className="flex flex-wrap items-start justify-between gap-4 border-b border-line pb-6">
           <div>
@@ -190,14 +239,14 @@ export function TaskDetail({
           </div>
           {current.dueAt && (
             <span className="rounded-lg bg-orange-50 px-3 py-2 text-right text-xs font-semibold text-orange-900">
-              {taskDueDate(current.dueAt, timeZone)}
+              {taskDateLabel(current, timeZone)}
             </span>
           )}
         </section>
       )}
       {!current.quantity && current.dueAt && (
         <p className="text-sm font-semibold text-orange-900">
-          {taskDueDate(current.dueAt, timeZone)}
+          {taskDateLabel(current, timeZone)}
         </p>
       )}
       {(current.originName || current.locationName) && (
@@ -299,7 +348,7 @@ export function TaskDetail({
           Reintentar la misma operación
         </Button>
       )}
-      {stale && (
+      {(stale || changed || disabled) && (
         <Button
           variant="outline"
           className="min-h-12"
@@ -316,22 +365,28 @@ export function TaskDetail({
               <label htmlFor="daily-assignee" className="text-sm font-medium">
                 <FieldCaption required>Responsable</FieldCaption>
               </label>
-              <div className="flex flex-wrap gap-2">
-                <select
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                <SearchCombobox
                   id="daily-assignee"
+                  label="Responsable"
                   required
-                  className="min-h-12 min-w-0 flex-1 rounded-lg border bg-white px-3"
                   value={assignee}
-                  onChange={(e) => setAssignee(e.target.value)}
+                  selectedLabel={
+                    people.find((person) => person.id === assignee)?.name ??
+                    (assignee && assignee === current.assignedTo
+                      ? (current.assignedToName ?? "")
+                      : "")
+                  }
+                  options={people}
+                  onSearch={() => {}}
+                  onChange={(value) => {
+                    assigneeEdited.current = true;
+                    setAssignee(value);
+                  }}
                   disabled={locked}
-                >
-                  <option value="">Elegí una persona</option>
-                  {people.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="Elegí una persona"
+                  inputClassName="min-h-12 bg-white"
+                />
                 <Button
                   variant="outline"
                   className="min-h-12"

@@ -1,4 +1,4 @@
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db/client";
 import { branchMemberships } from "@/db/branch-schema";
@@ -95,11 +95,16 @@ export async function PUT(
           "La cuenta del local solo puede tener acceso limitado a su sucursal.",
           403,
         );
-      if (input.catalogManager !== undefined)
-        await tx
-          .update(operationalUsers)
-          .set({ catalogManager: input.catalogManager })
-          .where(eq(operationalUsers.userId, input.userId));
+      // A restored membership must not revive a prior password-recovery proof.
+      await tx
+        .update(operationalUsers)
+        .set({
+          updatedAt: sql`greatest(clock_timestamp(), ${operationalUsers.updatedAt} + interval '1 millisecond')`,
+          ...(input.catalogManager !== undefined
+            ? { catalogManager: input.catalogManager }
+            : {}),
+        })
+        .where(eq(operationalUsers.userId, input.userId));
       await tx
         .insert(branchMemberships)
         .values({

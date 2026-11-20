@@ -9,6 +9,7 @@ import { productionOrders } from "@/db/production-order-schema";
 import { stockMovements } from "@/db/stock-movement-schema";
 import { inventoryValuations, lotLocationBalances } from "@/db/stock-schema";
 import { auditEvents } from "@/db/business-schema";
+import { createProductionService } from "@/modules/production/service";
 import { createRecipeService } from "@/modules/recipes/service";
 import { createInventoryService } from "@/modules/inventory/service";
 import { executeCommand } from "@/modules/operations/command";
@@ -419,4 +420,49 @@ it("rechaza revisiones si el promedio del preparado ya se utilizó en otro lote"
     reason: "Derrame",
   });
   await expect(review(f)).rejects.toThrow("movimientos posteriores");
+});
+
+it("keeps standalone batches out of assigned-order history without breaking either list", async () => {
+  const f = await fixture();
+  const recipes = createRecipeService(ctx.db);
+  const list = await recipes.list(manager, "preparation");
+  const summary = list.rows.find((row) => row.targetId === f.output)!;
+  const recipe = await recipes.get(manager, summary.id);
+  const production = createProductionService(ctx.db);
+  const input = {
+    locationId: ctx.mapping.initialLocation.id,
+    recipeId: recipe.id,
+    revision: recipe.revision,
+    multiplier: "1",
+    actualOutput: "100",
+    producedOn: new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Argentina/Buenos_Aires",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date()),
+    selections: recipe.lines.map((line, i) => ({
+      lineId: line.id,
+      optionId: line.options[0].id,
+      quantity: i === 0 ? "10" : "100",
+    })),
+  };
+  const preview = await production.preview(manager, input);
+  const batch = await production.record(manager, {
+    ...input,
+    requestId: uid(),
+    previewToken: preview.token,
+  });
+  const history = await listProductionOrders(
+    ctx.db,
+    manager,
+    "history",
+    0,
+    false,
+  );
+  expect(history.rows.some((order) => order.id === f.id)).toBe(true);
+  expect(history.rows.some((order) => order.id === batch.id)).toBe(false);
+  expect(
+    (await production.list(manager)).rows.some((row) => row.id === batch.id),
+  ).toBe(true);
 });

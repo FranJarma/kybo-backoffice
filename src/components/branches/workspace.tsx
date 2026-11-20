@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Tabs } from "radix-ui";
+import { Tabs } from "@/components/ui/tabs";
 import {
   Archive,
   Info,

@@ -22,6 +22,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tabs } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { FieldCaption } from "@/components/ui/field-caption";
 import {
@@ -32,6 +33,11 @@ import {
 } from "@/components/ui/dialog";
 import { OperationAlert } from "@/components/ui/operation-alert";
 import { money } from "@/lib/number-format";
+import {
+  closeDraftKey,
+  readCloseDraft,
+  writeCloseDraft,
+} from "./close-draft-storage";
 import { cents, integer } from "@/modules/inventory/decimal";
 import { expenseCategories } from "@/modules/overheads/types";
 import type { CashCommand, CashSnapshot } from "@/modules/cash/types";
@@ -93,6 +99,14 @@ export function CashManager({
   onDismiss?: () => void;
 }) {
   const [snapshot, setSnapshot] = useState<CashSnapshot>();
+  const snapshotEpoch = useRef(0);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const [selectedId, setSelectedId] = useState<string | null>(null),
     [generation, setGeneration] = useState(0);
   const [view, setView] = useState<"day" | "history">("day"),
@@ -108,6 +122,72 @@ export function CashManager({
     [closeStep, setCloseStep] = useState(0);
   const [closeDraft, setCloseDraft] = useState<CloseDraft | null>(null),
     [draftSession, setDraftSession] = useState<string | null>(null);
+  const draftKey = closeDraftKey(actorId, branchId);
+  const restoredSession = useRef<string | null>(null);
+  const activeCashSession = useRef<{ key: string; id: string | null } | null>(
+    null,
+  );
+  const [draftStorageError, setDraftStorageError] = useState("");
+  const restoreCashDraft = useCallback(
+    (data: CashSnapshot) => {
+      if (!mounted.current || openingOnly || data.branchId !== branchId) return;
+      const sessionId = data.current?.id ?? null;
+      activeCashSession.current = { key: draftKey, id: sessionId };
+      const identity = `${draftKey}:${sessionId}`;
+      if (restoredSession.current === identity) return;
+      try {
+        const restored = readCloseDraft(
+          sessionStorage,
+          draftKey,
+          sessionId,
+          branchId,
+        );
+        restoredSession.current = identity;
+        if (restored && data.capabilities.close) {
+          setCloseDraft(restored);
+          setDraftSession(sessionId);
+          setCloseStep(0);
+        } else {
+          setCloseDraft(null);
+          setDraftSession(null);
+          setCloseStep(0);
+          setCloseOpen(false);
+        }
+      } catch {
+        setDraftStorageError(
+          "No se pudo recuperar el borrador de esta pestaña. Revisá los datos antes de cerrar.",
+        );
+      }
+    },
+    [branchId, draftKey, openingOnly],
+  );
+  function saveCloseDraft(next: CloseDraft, sessionId: string) {
+    if (
+      !mounted.current ||
+      activeCashSession.current?.key !== draftKey ||
+      activeCashSession.current.id !== sessionId
+    )
+      return;
+    try {
+      writeCloseDraft(sessionStorage, draftKey, sessionId, next);
+      setDraftStorageError("");
+    } catch {
+      setDraftStorageError(
+        "No se pudo guardar el borrador en esta pestaña. Mantené Caja abierta hasta terminar el cierre.",
+      );
+    }
+  }
+  function updateCloseDraft(next: CloseDraft) {
+    if (
+      !mounted.current ||
+      !draftSession ||
+      activeCashSession.current?.key !== draftKey ||
+      activeCashSession.current.id !== draftSession
+    )
+      return;
+    setCloseDraft(next);
+    saveCloseDraft(next, draftSession);
+  }
   const lastCommand = useRef<CashCommand | null>(null);
   const initialFundInput = useRef<HTMLInputElement>(null);
   const openingFocusPending = useRef(false);
@@ -129,13 +209,13 @@ export function CashManager({
     "cash",
     (raw) => {
       const result = raw as CashSnapshot;
+      snapshotEpoch.current++;
+      setLoading(false);
+      restoreCashDraft(result);
       setSnapshot(result);
       setAction(null);
       setCloseOpen(false);
-      if (!result.current || result.current.id !== draftSession) {
-        setCloseDraft(null);
-        setDraftSession(null);
-      } else setCloseStep(0);
+      setCloseStep(0);
       setSelectedId(null);
       setView("day");
       setError("");
@@ -166,13 +246,15 @@ export function CashManager({
   }, [action, loading, busy, operation.locked, focusOpeningFund]);
   useEffect(() => {
     const controller = new AbortController();
+    const epoch = ++snapshotEpoch.current;
     void cashBranchRequest<CashSnapshot>(
       branchId,
       `/api/cash${selectedId ? `?sessionId=${encodeURIComponent(selectedId)}` : ""}`,
       { signal: controller.signal },
     )
       .then((data) => {
-        if (!controller.signal.aborted) {
+        if (!controller.signal.aborted && epoch === snapshotEpoch.current) {
+          restoreCashDraft(data);
           setSnapshot(data);
           setError("");
           if (openingOnly) {
@@ -184,20 +266,24 @@ export function CashManager({
         }
       })
       .catch((error) => {
-        if (!controller.signal.aborted) setError((error as Error).message);
+        if (!controller.signal.aborted && epoch === snapshotEpoch.current)
+          setError((error as Error).message);
       })
       .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
+        if (!controller.signal.aborted && epoch === snapshotEpoch.current)
+          setLoading(false);
       });
     return () => controller.abort();
-  }, [selectedId, generation, branchId, openingOnly]);
+  }, [selectedId, generation, branchId, openingOnly, restoreCashDraft]);
   function refresh() {
+    snapshotEpoch.current++;
     setLoading(true);
     setError("");
     setGeneration((value) => value + 1);
   }
   function selectSession(id: string | null) {
     if (id === selectedId) return;
+    snapshotEpoch.current++;
     setLoading(true);
     setError("");
     setSelectedId(id);
@@ -210,9 +296,11 @@ export function CashManager({
   }
   useEffect(() => {
     if (!operation.error) return;
+    const controller = new AbortController();
     const timer = setTimeout(() => {
       setError(operation.error);
       if (operation.status === 409) {
+        const epoch = ++snapshotEpoch.current;
         setCloseStep(0);
         setError(
           "La caja cambió mientras trabajabas. Conservamos tu borrador; revisá el efectivo y los movimientos actualizados antes de confirmar.",
@@ -220,8 +308,12 @@ export function CashManager({
         void cashBranchRequest<CashSnapshot>(
           branchId,
           `/api/cash${selectedId ? `?sessionId=${encodeURIComponent(selectedId)}` : ""}`,
+          { signal: controller.signal },
         )
           .then((refreshed) => {
+            if (controller.signal.aborted || epoch !== snapshotEpoch.current)
+              return;
+            restoreCashDraft(refreshed);
             setSnapshot(refreshed);
             const command = lastCommand.current;
             if (
@@ -230,22 +322,30 @@ export function CashManager({
             ) {
               setCloseOpen(false);
               setError(
-                "Otra persona ya cerró esta jornada. Revisá su cierre en Historial. Tu borrador sigue asociado a esa jornada y no se aplicará a otra caja.",
+                "Otra persona ya cerró esta jornada. Revisá su cierre en Historial. El borrador anterior no se aplicará a otra caja.",
               );
             }
           })
           .catch(() => {
             /* Preserve the last snapshot and the complete draft. */
+          })
+          .finally(() => {
+            if (!controller.signal.aborted && epoch === snapshotEpoch.current)
+              setLoading(false);
           });
       }
     }, 0);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [
     operation.error,
     operation.errorAttempt,
     operation.status,
     branchId,
     selectedId,
+    restoreCashDraft,
   ]);
   function startAction(next: FormAction) {
     if (operation.locked) return;
@@ -267,9 +367,11 @@ export function CashManager({
     if (operation.locked) return;
     if (!snapshot?.current) return;
     if (!closeDraft || draftSession !== snapshot.current.id) {
-      setCloseDraft(newCloseDraft(snapshot.timeZone));
+      const next = newCloseDraft(snapshot.timeZone);
+      setCloseDraft(next);
       setDraftSession(snapshot.current.id);
       setCloseStep(0);
+      saveCloseDraft(next, snapshot.current.id);
     }
     setError("");
     setCloseOpen(true);
@@ -452,440 +554,448 @@ export function CashManager({
               </p>
             </div>
           ) : (
-            <>
-              <nav className="cash-tabs" aria-label="Vistas de caja">
-                <button
-                  type="button"
-                  aria-current={view === "day" ? "page" : undefined}
-                  disabled={busy}
-                  onClick={() => {
-                    setView("day");
-                    selectSession(null);
-                  }}
-                >
+            <Tabs.Root
+              className="space-y-6"
+              value={view}
+              onValueChange={(value) => {
+                if (busy || (value !== "day" && value !== "history")) return;
+                setView(value);
+                if (value === "day") selectSession(null);
+              }}
+            >
+              <Tabs.List className="cash-tabs" aria-label="Vistas de caja">
+                <Tabs.Trigger value="day" disabled={busy}>
                   <Banknote size={18} />
                   Jornada
-                </button>
-                <button
-                  type="button"
-                  aria-current={view === "history" ? "page" : undefined}
-                  disabled={busy}
-                  onClick={() => setView("history")}
-                >
+                </Tabs.Trigger>
+                <Tabs.Trigger value="history" disabled={busy}>
                   <History size={18} />
                   Historial
                   {snapshot.pendingReviews > 0 ? (
                     <span>{snapshot.pendingReviews}</span>
                   ) : null}
-                </button>
-              </nav>
-              {view === "history" ? (
-                <section className="cash-card cash-history">
-                  <div className="cash-section-heading">
-                    <div>
-                      <h2>Historial de cajas</h2>
-                      <p>
-                        Los cierres conservan el conteo original y sus
-                        comprobantes.
-                      </p>
-                    </div>
-                    <label className="cash-check">
-                      <input
-                        type="checkbox"
-                        checked={onlyPending}
-                        onChange={(event) =>
-                          setOnlyPending(event.target.checked)
-                        }
-                      />
-                      Solo pendientes de revisión
-                    </label>
-                  </div>
-                  <div className="cash-history-list">
-                    {visibleSessions.length ? (
-                      visibleSessions.map((row) => (
-                        <button
-                          type="button"
-                          key={row.id}
-                          className={
-                            selectedId === row.id ? "cash-history-selected" : ""
-                          }
-                          disabled={busy}
-                          onClick={() => selectSession(row.id)}
-                        >
-                          <span>
-                            <b>{sessionDate(row)}</b>
-                            <small>
-                              {row.state === "open"
-                                ? `Abierta por ${row.openedByName}`
-                                : `Cerrada por ${row.closedByName}`}
-                            </small>
-                          </span>
-                          <span>
-                            <b>
-                              {row.state === "open"
-                                ? "Abierta"
-                                : money(row.difference)}
-                            </b>
-                            <small>
-                              {row.reviewedAt
-                                ? "Revisada"
-                                : row.reviewRequired
-                                  ? "Revisión pendiente"
-                                  : row.state === "closed"
-                                    ? "Sin diferencias"
-                                    : "En curso"}
-                            </small>
-                          </span>
-                        </button>
-                      ))
-                    ) : (
-                      <p className="cash-empty">
-                        No hay jornadas en esta vista.
-                      </p>
-                    )}
-                  </div>
-                </section>
-              ) : null}
-              {view === "day" && !current ? (
-                <section className="cash-opening-panel">
-                  <div className="cash-opening-icon">
-                    <Banknote size={30} />
-                  </div>
-                  <div>
-                    <span className="cash-badge cash-badge-neutral">
-                      Caja cerrada
-                    </span>
-                    <h2>Empezá una nueva jornada</h2>
-                    <p>
-                      Contá el fondo de cambio y confirmá cuánto efectivo hay
-                      para abrir.
-                    </p>
-                    {snapshot.lastClosed ? (
-                      <p className="cash-muted">
-                        Último fondo dejado:{" "}
-                        <b>{money(snapshot.lastClosed.fund)}</b>
-                        {snapshot.lastClosed.reviewRequired &&
-                        !snapshot.lastClosed.reviewedAt
-                          ? " · Revisión pendiente del cierre anterior"
-                          : ""}
-                      </p>
-                    ) : (
-                      <p className="cash-muted">
-                        La primera apertura activa el control de caja para los
-                        cobros del local.
-                      </p>
-                    )}
-                  </div>
-                  {capabilities?.open ? (
-                    <Button
-                      className="cash-primary"
-                      disabled={loading || operation.locked}
-                      onClick={() => startAction("open")}
-                    >
-                      <Plus />
-                      Abrir caja
-                    </Button>
-                  ) : (
-                    <p className="cash-muted">
-                      Una persona autorizada debe abrir la caja.
-                    </p>
-                  )}
-                </section>
-              ) : null}
-              {view === "day" && overdue ? (
-                <CashNotice>
-                  <b>
-                    La caja sigue abierta después del horario previsto de cierre
-                  </b>
-                  <p>
-                    Conserva la jornada del{" "}
-                    {current ? sessionDate(current) : ""}. Los nuevos
-                    movimientos pertenecen a esta misma caja hasta que la
-                    cierres.
-                  </p>
-                </CashNotice>
-              ) : null}
-              {session &&
-              ((view === "day" && !!current) ||
-                (view === "history" && !!selectedId) ||
-                (view === "day" && !current)) ? (
-                <>
-                  <section className="cash-session-heading">
-                    <div>
-                      <span
-                        className={`cash-badge ${selectedOpen ? "" : session.reviewRequired && !session.reviewedAt ? "cash-badge-amber" : "cash-badge-neutral"}`}
-                      >
-                        {selectedOpen
-                          ? "Caja abierta"
-                          : session.reviewedAt
-                            ? "Cerrada · revisada"
-                            : session.reviewRequired
-                              ? "Cerrada · revisión pendiente"
-                              : "Caja cerrada"}
-                      </span>
-                      <h2>Jornada del {sessionDate(session)}</h2>
-                      <p>
-                        {selectedOpen
-                          ? `Abierta por ${session.openedByName} · ${sessionTime(session.openedAt, snapshot.timeZone)}`
-                          : `Cerrada por ${session.closedByName} · ${sessionTime(session.closedAt!, snapshot.timeZone)}`}{" "}
-                        · Cierre previsto {session.closeTime}
-                      </p>
-                    </div>
-                    {selectedOpen && view === "day" ? (
-                      <div className="cash-session-actions">
-                        {capabilities?.expense ? (
-                          <Button
-                            variant="outline"
-                            disabled={loading || operation.locked}
-                            onClick={() => startAction("expense")}
-                          >
-                            <Plus />
-                            Registrar gasto
-                          </Button>
-                        ) : null}
-                        {capabilities?.withdraw ? (
-                          <Button
-                            variant="outline"
-                            disabled={loading || operation.locked}
-                            onClick={() => startAction("withdraw")}
-                          >
-                            <ArrowUpRight />
-                            Retirar efectivo
-                          </Button>
-                        ) : null}
-                        {capabilities?.close ? (
-                          <Button
-                            className="cash-primary"
-                            disabled={loading || operation.locked}
-                            onClick={startClosing}
-                          >
-                            <LockKeyhole />
-                            {draftSession === current?.id
-                              ? "Continuar cierre"
-                              : "Cerrar caja"}
-                          </Button>
-                        ) : null}
+                </Tabs.Trigger>
+              </Tabs.List>
+              <Tabs.Content value={view} className="space-y-6">
+                {view === "history" ? (
+                  <section className="cash-card cash-history">
+                    <div className="cash-section-heading">
+                      <div>
+                        <h2>Historial de cajas</h2>
+                        <p>
+                          Los cierres conservan el conteo original y sus
+                          comprobantes.
+                        </p>
                       </div>
-                    ) : null}
-                  </section>
-                  <div className="cash-dashboard">
-                    <div className="cash-main-column">
-                      {selectedOpen ? (
-                        <section className="cash-balance">
-                          <p className="cash-eyebrow">
-                            EFECTIVO ESPERADO EN EL CAJÓN
-                          </p>
-                          <strong>{money(snapshot.totals.expectedCash)}</strong>
-                          <p>
-                            Fondo inicial + cobros − devoluciones y salidas de
-                            efectivo.
-                          </p>
-                          <div className="cash-balance-breakdown">
+                      <label className="cash-check">
+                        <input
+                          type="checkbox"
+                          checked={onlyPending}
+                          onChange={(event) =>
+                            setOnlyPending(event.target.checked)
+                          }
+                        />
+                        Solo pendientes de revisión
+                      </label>
+                    </div>
+                    <div className="cash-history-list">
+                      {visibleSessions.length ? (
+                        visibleSessions.map((row) => (
+                          <button
+                            type="button"
+                            key={row.id}
+                            className={
+                              selectedId === row.id
+                                ? "cash-history-selected"
+                                : ""
+                            }
+                            disabled={busy}
+                            onClick={() => selectSession(row.id)}
+                          >
                             <span>
-                              Fondo inicial
-                              <b>{money(snapshot.totals.opening)}</b>
+                              <b>{sessionDate(row)}</b>
+                              <small>
+                                {row.state === "open"
+                                  ? `Abierta por ${row.openedByName}`
+                                  : `Cerrada por ${row.closedByName}`}
+                              </small>
                             </span>
                             <span>
-                              Cobros del día
-                              <b>{money(snapshot.totals.cashCollections)}</b>
-                            </span>
-                            <span>
-                              Salidas del día
                               <b>
-                                {money(
-                                  cents(
-                                    integer(snapshot.totals.cashRefunds) +
-                                      integer(snapshot.totals.expenses) +
-                                      integer(
-                                        snapshot.totals.supplierPayments,
-                                      ) +
-                                      integer(snapshot.totals.withdrawals),
-                                  ),
-                                )}
+                                {row.state === "open"
+                                  ? "Abierta"
+                                  : money(row.difference)}
                               </b>
+                              <small>
+                                {row.reviewedAt
+                                  ? "Revisada"
+                                  : row.reviewRequired
+                                    ? "Revisión pendiente"
+                                    : row.state === "closed"
+                                      ? "Sin diferencias"
+                                      : "En curso"}
+                              </small>
                             </span>
-                          </div>
-                        </section>
+                          </button>
+                        ))
                       ) : (
-                        <section className="cash-card cash-closed-summary">
-                          <div className="cash-section-heading">
-                            <h2>Arqueo confirmado</h2>
-                            <LockKeyhole size={20} />
-                          </div>
-                          <MoneyRow
-                            label="Esperado antes del retiro de cierre"
-                            amount={session.expectedClosing}
-                          />
-                          <MoneyRow
-                            label="Contado antes del retiro"
-                            amount={session.counted}
-                          />
-                          <MoneyRow
-                            label="Retiro al cerrar"
-                            amount={session.withdrawal}
-                          />
-                          <MoneyRow
-                            label="Fondo dejado"
-                            amount={session.fund}
-                            strong
-                          />
-                          <MoneyRow
-                            label="Diferencia de efectivo"
-                            amount={session.difference}
-                            strong
-                          />
-                          {session.reason ? (
-                            <p className="cash-reason">{session.reason}</p>
-                          ) : null}
-                          {session.reviewedAt ? (
-                            <CashNotice>
-                              Revisada por {session.reviewedByName} ·{" "}
-                              {sessionTime(
-                                session.reviewedAt,
-                                snapshot.timeZone,
-                              )}
-                              <p>{session.reviewNote}</p>
-                            </CashNotice>
-                          ) : session.reviewRequired && capabilities?.review ? (
+                        <p className="cash-empty">
+                          No hay jornadas en esta vista.
+                        </p>
+                      )}
+                    </div>
+                  </section>
+                ) : null}
+                {view === "day" && !current ? (
+                  <section className="cash-opening-panel">
+                    <div className="cash-opening-icon">
+                      <Banknote size={30} />
+                    </div>
+                    <div>
+                      <span className="cash-badge cash-badge-neutral">
+                        Caja cerrada
+                      </span>
+                      <h2>Empezá una nueva jornada</h2>
+                      <p>
+                        Contá el fondo de cambio y confirmá cuánto efectivo hay
+                        para abrir.
+                      </p>
+                      {snapshot.lastClosed ? (
+                        <p className="cash-muted">
+                          Último fondo dejado:{" "}
+                          <b>{money(snapshot.lastClosed.fund)}</b>
+                          {snapshot.lastClosed.reviewRequired &&
+                          !snapshot.lastClosed.reviewedAt
+                            ? " · Revisión pendiente del cierre anterior"
+                            : ""}
+                        </p>
+                      ) : (
+                        <p className="cash-muted">
+                          La primera apertura activa el control de caja para los
+                          cobros del local.
+                        </p>
+                      )}
+                    </div>
+                    {capabilities?.open ? (
+                      <Button
+                        className="cash-primary"
+                        disabled={loading || operation.locked}
+                        onClick={() => startAction("open")}
+                      >
+                        <Plus />
+                        Abrir caja
+                      </Button>
+                    ) : (
+                      <p className="cash-muted">
+                        Una persona autorizada debe abrir la caja.
+                      </p>
+                    )}
+                  </section>
+                ) : null}
+                {view === "day" && overdue ? (
+                  <CashNotice>
+                    <b>
+                      La caja sigue abierta después del horario previsto de
+                      cierre
+                    </b>
+                    <p>
+                      Conserva la jornada del{" "}
+                      {current ? sessionDate(current) : ""}. Los nuevos
+                      movimientos pertenecen a esta misma caja hasta que la
+                      cierres.
+                    </p>
+                  </CashNotice>
+                ) : null}
+                {session &&
+                ((view === "day" && !!current) ||
+                  (view === "history" && !!selectedId) ||
+                  (view === "day" && !current)) ? (
+                  <>
+                    <section className="cash-session-heading">
+                      <div>
+                        <span
+                          className={`cash-badge ${selectedOpen ? "" : session.reviewRequired && !session.reviewedAt ? "cash-badge-amber" : "cash-badge-neutral"}`}
+                        >
+                          {selectedOpen
+                            ? "Caja abierta"
+                            : session.reviewedAt
+                              ? "Cerrada · revisada"
+                              : session.reviewRequired
+                                ? "Cerrada · revisión pendiente"
+                                : "Caja cerrada"}
+                        </span>
+                        <h2>Jornada del {sessionDate(session)}</h2>
+                        <p>
+                          {selectedOpen
+                            ? `Abierta por ${session.openedByName} · ${sessionTime(session.openedAt, snapshot.timeZone)}`
+                            : `Cerrada por ${session.closedByName} · ${sessionTime(session.closedAt!, snapshot.timeZone)}`}{" "}
+                          · Cierre previsto {session.closeTime}
+                        </p>
+                      </div>
+                      {selectedOpen && view === "day" ? (
+                        <div className="cash-session-actions">
+                          {capabilities?.expense ? (
                             <Button
                               variant="outline"
                               disabled={loading || operation.locked}
-                              onClick={() => startAction("review")}
+                              onClick={() => startAction("expense")}
                             >
-                              Registrar revisión
+                              <Plus />
+                              Registrar gasto
                             </Button>
                           ) : null}
-                        </section>
-                      )}
-                      <section className="cash-card cash-ledger">
-                        <div className="cash-section-heading">
-                          <div>
-                            <h2>Movimientos de la jornada</h2>
-                            <p>
-                              Cada cobro y salida se registra desde su operación
-                              de origen.
-                            </p>
-                          </div>
-                          <span className="cash-count">
-                            {snapshot.movements.length}
-                          </span>
-                        </div>
-                        <div className="cash-movement-list">
-                          {snapshot.movements.length ? (
-                            snapshot.movements.map((movement) => (
-                              <div key={movement.id} className="cash-movement">
-                                <span
-                                  className={`cash-movement-icon ${integer(movement.amount) < 0n ? "cash-outgoing" : ""}`}
-                                >
-                                  {integer(movement.amount) < 0n ? (
-                                    <ArrowUpRight size={17} />
-                                  ) : (
-                                    <ArrowDownLeft size={17} />
-                                  )}
-                                </span>
-                                <div className="cash-movement-description">
-                                  <b>{movement.concept}</b>
-                                  <small>
-                                    {movement.methodName} · {movement.actorName}{" "}
-                                    ·{" "}
-                                    {sessionTime(
-                                      movement.createdAt,
-                                      snapshot.timeZone,
-                                    )}
-                                  </small>
-                                  {movement.reference ? (
-                                    <small>{movement.reference}</small>
-                                  ) : null}
-                                </div>
-                                <strong
-                                  className={
-                                    integer(movement.amount) < 0n
-                                      ? "cash-negative"
-                                      : ""
-                                  }
-                                >
-                                  {money(movement.amount)}
-                                </strong>
-                              </div>
-                            ))
-                          ) : (
-                            <p className="cash-empty">
-                              Todavía no hay movimientos en esta jornada.
-                            </p>
-                          )}
-                        </div>
-                      </section>
-                    </div>
-                    <aside className="cash-side-column">
-                      <section className="cash-card cash-other-methods">
-                        <p className="cash-eyebrow">OTROS MEDIOS DE COBRO</p>
-                        <h2>Fuera del cajón</h2>
-                        <div className="cash-other-row">
-                          <CreditCard size={20} />
-                          <span>
-                            Tarjetas
-                            <small>
-                              {snapshot.totals.cardOperations} operaciones
-                            </small>
-                          </span>
-                          <b>{money(snapshot.totals.cardTotal)}</b>
-                        </div>
-                        <div className="cash-other-row">
-                          <Landmark size={20} />
-                          <span>Transferencias</span>
-                          <b>{money(snapshot.totals.transferTotal)}</b>
-                        </div>
-                        <div className="cash-other-row">
-                          <WalletCards size={20} />
-                          <span>Otros medios</span>
-                          <b>{money(snapshot.totals.otherTotal)}</b>
-                        </div>
-                        <p>
-                          Estos cobros no aumentan el efectivo físico de la
-                          caja.
-                        </p>
-                      </section>
-                      {!selectedOpen ? (
-                        <div className="cash-card">
-                          <CashPosnetSummary
-                            branchId={branchId}
-                            posnet={session.posnet}
-                            title={
-                              session.posnetReview
-                                ? "Posnet al cerrar"
-                                : "Posnet"
-                            }
-                            timeZone={snapshot.timeZone}
-                          />
-                          {session.posnetReview ? (
-                            <>
-                              <h3>Comprobante agregado durante la revisión</h3>
-                              <CashPosnetSummary
-                                branchId={session.branchId}
-                                timeZone={session.timeZone}
-                                posnet={session.posnetReview}
-                              />
-                            </>
+                          {capabilities?.withdraw ? (
+                            <Button
+                              variant="outline"
+                              disabled={loading || operation.locked}
+                              onClick={() => startAction("withdraw")}
+                            >
+                              <ArrowUpRight />
+                              Retirar efectivo
+                            </Button>
+                          ) : null}
+                          {capabilities?.close ? (
+                            <Button
+                              className="cash-primary"
+                              disabled={loading || operation.locked}
+                              onClick={startClosing}
+                            >
+                              <LockKeyhole />
+                              {draftSession === current?.id
+                                ? "Continuar cierre"
+                                : "Cerrar caja"}
+                            </Button>
                           ) : null}
                         </div>
                       ) : null}
-                      {capabilities?.supplier && view === "day" ? (
-                        <section className="cash-card cash-help">
-                          <h3>Pagos a proveedores</h3>
-                          <p>
-                            Registrá el pago o anticipo en Compras. Si sale de
-                            esta caja, aparecerá aquí una sola vez.
-                          </p>
-                          <Link href="/inventory/purchases">
-                            Ir a Compras →
-                          </Link>
+                    </section>
+                    <div className="cash-dashboard">
+                      <div className="cash-main-column">
+                        {selectedOpen ? (
+                          <section className="cash-balance">
+                            <p className="cash-eyebrow">
+                              EFECTIVO ESPERADO EN EL CAJÓN
+                            </p>
+                            <strong>
+                              {money(snapshot.totals.expectedCash)}
+                            </strong>
+                            <p>
+                              Fondo inicial + cobros − devoluciones y salidas de
+                              efectivo.
+                            </p>
+                            <div className="cash-balance-breakdown">
+                              <span>
+                                Fondo inicial
+                                <b>{money(snapshot.totals.opening)}</b>
+                              </span>
+                              <span>
+                                Cobros del día
+                                <b>{money(snapshot.totals.cashCollections)}</b>
+                              </span>
+                              <span>
+                                Salidas del día
+                                <b>
+                                  {money(
+                                    cents(
+                                      integer(snapshot.totals.cashRefunds) +
+                                        integer(snapshot.totals.expenses) +
+                                        integer(
+                                          snapshot.totals.supplierPayments,
+                                        ) +
+                                        integer(snapshot.totals.withdrawals),
+                                    ),
+                                  )}
+                                </b>
+                              </span>
+                            </div>
+                          </section>
+                        ) : (
+                          <section className="cash-card cash-closed-summary">
+                            <div className="cash-section-heading">
+                              <h2>Arqueo confirmado</h2>
+                              <LockKeyhole size={20} />
+                            </div>
+                            <MoneyRow
+                              label="Esperado antes del retiro de cierre"
+                              amount={session.expectedClosing}
+                            />
+                            <MoneyRow
+                              label="Contado antes del retiro"
+                              amount={session.counted}
+                            />
+                            <MoneyRow
+                              label="Retiro al cerrar"
+                              amount={session.withdrawal}
+                            />
+                            <MoneyRow
+                              label="Fondo dejado"
+                              amount={session.fund}
+                              strong
+                            />
+                            <MoneyRow
+                              label="Diferencia de efectivo"
+                              amount={session.difference}
+                              strong
+                            />
+                            {session.reason ? (
+                              <p className="cash-reason">{session.reason}</p>
+                            ) : null}
+                            {session.reviewedAt ? (
+                              <CashNotice>
+                                Revisada por {session.reviewedByName} ·{" "}
+                                {sessionTime(
+                                  session.reviewedAt,
+                                  snapshot.timeZone,
+                                )}
+                                <p>{session.reviewNote}</p>
+                              </CashNotice>
+                            ) : session.reviewRequired &&
+                              capabilities?.review ? (
+                              <Button
+                                variant="outline"
+                                disabled={loading || operation.locked}
+                                onClick={() => startAction("review")}
+                              >
+                                Registrar revisión
+                              </Button>
+                            ) : null}
+                          </section>
+                        )}
+                        <section className="cash-card cash-ledger">
+                          <div className="cash-section-heading">
+                            <div>
+                              <h2>Movimientos de la jornada</h2>
+                              <p>
+                                Cada cobro y salida se registra desde su
+                                operación de origen.
+                              </p>
+                            </div>
+                            <span className="cash-count">
+                              {snapshot.movements.length}
+                            </span>
+                          </div>
+                          <div className="cash-movement-list">
+                            {snapshot.movements.length ? (
+                              snapshot.movements.map((movement) => (
+                                <div
+                                  key={movement.id}
+                                  className="cash-movement"
+                                >
+                                  <span
+                                    className={`cash-movement-icon ${integer(movement.amount) < 0n ? "cash-outgoing" : ""}`}
+                                  >
+                                    {integer(movement.amount) < 0n ? (
+                                      <ArrowUpRight size={17} />
+                                    ) : (
+                                      <ArrowDownLeft size={17} />
+                                    )}
+                                  </span>
+                                  <div className="cash-movement-description">
+                                    <b>{movement.concept}</b>
+                                    <small>
+                                      {movement.methodName} ·{" "}
+                                      {movement.actorName} ·{" "}
+                                      {sessionTime(
+                                        movement.createdAt,
+                                        snapshot.timeZone,
+                                      )}
+                                    </small>
+                                    {movement.reference ? (
+                                      <small>{movement.reference}</small>
+                                    ) : null}
+                                  </div>
+                                  <strong
+                                    className={
+                                      integer(movement.amount) < 0n
+                                        ? "cash-negative"
+                                        : ""
+                                    }
+                                  >
+                                    {money(movement.amount)}
+                                  </strong>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="cash-empty">
+                                Todavía no hay movimientos en esta jornada.
+                              </p>
+                            )}
+                          </div>
                         </section>
-                      ) : null}
-                    </aside>
-                  </div>
-                </>
-              ) : null}
-            </>
+                      </div>
+                      <aside className="cash-side-column">
+                        <section className="cash-card cash-other-methods">
+                          <p className="cash-eyebrow">OTROS MEDIOS DE COBRO</p>
+                          <h2>Fuera del cajón</h2>
+                          <div className="cash-other-row">
+                            <CreditCard size={20} />
+                            <span>
+                              Tarjetas
+                              <small>
+                                {snapshot.totals.cardOperations} operaciones
+                              </small>
+                            </span>
+                            <b>{money(snapshot.totals.cardTotal)}</b>
+                          </div>
+                          <div className="cash-other-row">
+                            <Landmark size={20} />
+                            <span>Transferencias</span>
+                            <b>{money(snapshot.totals.transferTotal)}</b>
+                          </div>
+                          <div className="cash-other-row">
+                            <WalletCards size={20} />
+                            <span>Otros medios</span>
+                            <b>{money(snapshot.totals.otherTotal)}</b>
+                          </div>
+                          <p>
+                            Estos cobros no aumentan el efectivo físico de la
+                            caja.
+                          </p>
+                        </section>
+                        {!selectedOpen ? (
+                          <div className="cash-card">
+                            <CashPosnetSummary
+                              branchId={branchId}
+                              posnet={session.posnet}
+                              title={
+                                session.posnetReview
+                                  ? "Posnet al cerrar"
+                                  : "Posnet"
+                              }
+                              timeZone={snapshot.timeZone}
+                            />
+                            {session.posnetReview ? (
+                              <>
+                                <h3>
+                                  Comprobante agregado durante la revisión
+                                </h3>
+                                <CashPosnetSummary
+                                  branchId={session.branchId}
+                                  timeZone={session.timeZone}
+                                  posnet={session.posnetReview}
+                                />
+                              </>
+                            ) : null}
+                          </div>
+                        ) : null}
+                        {capabilities?.supplier && view === "day" ? (
+                          <section className="cash-card cash-help">
+                            <h3>Pagos a proveedores</h3>
+                            <p>
+                              Registrá el pago o anticipo en Compras. Si sale de
+                              esta caja, aparecerá aquí una sola vez.
+                            </p>
+                            <Link href="/inventory/purchases">
+                              Ir a Compras →
+                            </Link>
+                          </section>
+                        ) : null}
+                      </aside>
+                    </div>
+                  </>
+                ) : null}
+              </Tabs.Content>
+            </Tabs.Root>
           )}
         </>
       ) : null}
@@ -1233,13 +1343,13 @@ export function CashManager({
           snapshot={snapshot}
           sessionId={draftSession!}
           draft={closeDraft}
-          onChange={setCloseDraft}
+          onChange={updateCloseDraft}
           step={closeStep}
           onStep={setCloseStep}
           busy={busy}
           uncertain={operation.uncertain}
           recovery={recovery}
-          error={operation.uncertain ? "" : error}
+          error={operation.uncertain ? "" : error || draftStorageError}
           onError={setError}
           onDismiss={() => {
             setCloseOpen(false);

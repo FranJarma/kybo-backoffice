@@ -1,4 +1,42 @@
 import type { TaskRow } from "./types";
+export function taskIsClosed(task: Pick<TaskRow, "state">) {
+  return ["done", "cancelled", "superseded"].includes(task.state);
+}
+export function taskDateLabel(task: TaskRow, timeZone: string) {
+  if (!task.dueAt) return null;
+  if (!taskIsClosed(task)) return taskDueDate(task.dueAt, timeZone);
+  return `Fecha prevista: ${new Intl.DateTimeFormat("es-AR", { timeZone, day: "numeric", month: "short", year: "numeric" }).format(new Date(task.dueAt))}`;
+}
+export function taskNextStep(task: TaskRow, canManage: boolean) {
+  if (taskIsClosed(task)) return "Consultar resultado";
+  if (task.assigneeUnavailable)
+    return canManage ? "Reasignar responsable" : "Avisar al encargado";
+  if (task.state === "blocked") return "Revisar impedimento";
+  if (task.state === "awaiting_review") return "Revisar resultado";
+  if (!task.assignedTo)
+    return canManage ? "Asignar responsable" : "Esperar asignación";
+  if (task.kind === "purchase")
+    return task.documentId
+      ? "Seguir pedido en Compras"
+      : task.quantity
+        ? "Preparar pedido de compra"
+        : "Estimar consumo del insumo";
+  if (task.kind === "production")
+    return !task.documentId
+      ? canManage
+        ? "Confirmar preparación en Depósito"
+        : "Esperar confirmación del encargado"
+      : task.state === "in_progress"
+        ? "Registrar resultado de producción"
+        : "Comenzar preparación";
+  if (task.kind === "transfer")
+    return !task.documentId
+      ? canManage
+        ? "Confirmar reposición"
+        : "Esperar confirmación del encargado"
+      : "Confirmar llegada a destino";
+  return "Ver detalle del control";
+}
 export function taskAction(t: TaskRow) {
   if (t.kind === "purchase")
     return {

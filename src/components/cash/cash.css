@@ -31,7 +31,7 @@
 .kybo-cash input,
 .kybo-cash textarea,
 .kybo-cash select {
-  font: inherit;
+  font-family: inherit;
 }
 .kybo-cash button,
 .kybo-cash summary {
@@ -101,23 +101,9 @@
   gap: 24px;
   border-bottom: 1px solid #e2eaf3;
 }
-.cash-tabs button {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  padding: 0 3px 14px;
-  border-bottom: 3px solid transparent;
-  color: #62738f;
-  font-size: 14px;
-  font-weight: 700;
-}
-.cash-tabs button[aria-current] {
-  border-color: #ff8500;
-  color: #071b42;
-}
 .cash-tabs button > span {
-  background: #fff1db;
-  color: #946009;
+  background: var(--blue-soft);
+  color: var(--blue);
   border-radius: 10px;
   padding: 1px 6px;
   font-size: 11px;
@@ -505,8 +491,9 @@
 .cash-field input:focus,
 .cash-field select:focus,
 .cash-field textarea:focus {
-  outline: 2px solid #80b6f0;
-  outline-offset: 0;
+  border-color: var(--blue);
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
 }
 .cash-field input:disabled,
 .cash-field textarea:disabled {

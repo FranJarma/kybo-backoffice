@@ -1,9 +1,18 @@
 import { integer, six } from "../inventory/decimal";
 import type { StockRow } from "./types";
 
-export type StockItemSummary = Omit<StockRow, "locationId" | "locationName"> & {
+export type StockItemSummary = Omit<
+  StockRow,
+  "locationId" | "locationName" | "minimumQuantity" | "targetQuantity"
+> & {
   locations: StockRow[];
 };
+export function stockNeedsReplenishment(row: StockRow) {
+  return (
+    row.minimumQuantity !== undefined &&
+    integer(row.available) < integer(row.minimumQuantity)
+  );
+}
 
 /** Group before pagination so an item's stock never disappears onto another location's page. */
 export function summarizeStockByItem(

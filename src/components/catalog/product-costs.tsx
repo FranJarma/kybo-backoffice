@@ -87,12 +87,14 @@ export function useProductCosts(
 export function ProductCostSummary({
   model,
   error,
+  compact = false,
 }: {
   model?: ProductCost;
   error?: string;
+  compact?: boolean;
 }) {
   return (
-    <div className="py-2 text-sm text-brand tabular-nums">
+    <div className={`${compact ? "" : "py-2"} text-sm text-brand tabular-nums`}>
       <span className="min-w-32">
         {!model ? (
           error ? (
@@ -111,7 +113,7 @@ export function ProductCostSummary({
             {money(model.min)} – {money(model.max)}
           </>
         )}
-        {model && (
+        {model && (!compact || model.referenceItems.length > 0) && (
           <span className="mt-1 block text-xs font-normal text-muted">
             {model.referenceItems.length
               ? "Incluye referencias"

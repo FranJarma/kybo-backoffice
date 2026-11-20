@@ -14,6 +14,9 @@ ENV KYBO_STANDALONE=1
 COPY next.config.ts next-env.d.ts tsconfig.json postcss.config.mjs ./
 COPY src ./src
 COPY public ./public
+# Include the printing installer assets in Next.js output-file tracing.
+COPY connector/windows/*.ps1 connector/windows/*.cs ./connector/windows/
+COPY connector/windows/assets/kybo-logo.png ./connector/windows/assets/kybo-logo.png
 RUN pnpm build
 
 FROM base AS runner

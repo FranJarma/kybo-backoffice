@@ -7,7 +7,9 @@ test("simulates the financial break-even locally, preserves expense drafts and r
   test.skip(process.env.E2E_MANAGED !== "1", "Disposable database required");
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/login");
-  await page.getByLabel("Usuario o correo").fill(process.env.E2E_EMAIL!);
+  await page
+    .getByLabel("Usuario", { exact: true })
+    .fill(process.env.E2E_USERNAME!);
   await page.getByLabel("Contraseña").fill(process.env.E2E_PASSWORD!);
   await page.getByRole("button", { name: "Ingresar", exact: true }).click();
   await expect(page).toHaveURL(/\/(?:settings\/branches)?$/, {

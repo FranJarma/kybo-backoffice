@@ -1,4 +1,5 @@
 import { loadCombo } from "../combos/service";
+import { enqueueOrderPrints, cancelOrderPrints } from "@/modules/printing/snapshot";
 import { resolveSaleCustomer } from "./customer";
 import { assignLocator } from "../pickup/service";
 import { lookupProducts } from "./product-lookup";
@@ -598,6 +599,7 @@ async function insertOrder(
     locatorMode === "automatic",
   );
   await publishOrder(tx, actor, id);
+  await enqueueOrderPrints(tx, actor, id);
   return {
     order,
     lines: insertedLines,
@@ -964,6 +966,7 @@ export function createSalesService(db: AppDb) {
         await audit(tx, a, "sales", id, "cancel", input);
         await cancelStock(tx, ctx, id, input.requestId);
         await cancelSaleTasks(tx, a, id, input.reason);
+        await cancelOrderPrints(tx, a, id);
         return saleDetail(tx, id);
       });
     },

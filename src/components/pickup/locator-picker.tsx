@@ -48,25 +48,36 @@ export function LocatorPicker({
       <Button
         type="button"
         variant="outline"
-        className={`min-h-12 w-full gap-2 whitespace-normal rounded-lg px-3 text-xs shadow-none sm:text-sm ${value !== null ? "border-orange-300 bg-orange-50/40 hover:bg-orange-50" : "border-line bg-white"}`}
+        className={`min-h-12 w-full gap-2 whitespace-normal rounded-lg px-3 py-1 text-xs leading-5 shadow-none sm:text-sm ${value !== null ? "border-orange-300 bg-orange-50/40 hover:bg-orange-50" : "border-line bg-white"}`}
         disabled={disabled || !fleet}
         onClick={() => setOpen(true)}
       >
         <Radio className="size-5 shrink-0" aria-hidden="true" />
         <span>
-          {automatic
-            ? !fleet
-              ? "Se asigna al confirmar"
-              : value === null
-                ? "Sin localizadores disponibles"
-                : `Localizador ${value} · Automático · Cambiar`
-            : value === null
-              ? !fleet
-                ? "Consultando localizadores…"
-                : locatorSelection(fleet, null).required
-                  ? "Elegir localizador · Obligatorio"
-                  : "Sin localizador · No hay disponibles"
-              : `Localizador ${value} · Cambiar`}
+          {automatic ? (
+            !fleet ? (
+              "Se asigna al confirmar"
+            ) : value === null ? (
+              "Sin localizadores disponibles"
+            ) : (
+              <>
+                <span className="block">Localizador {value}</span>
+                <span className="block text-xs font-medium">
+                  Automático · Cambiar
+                </span>
+              </>
+            )
+          ) : value === null ? (
+            !fleet ? (
+              "Consultando localizadores…"
+            ) : locatorSelection(fleet, null).required ? (
+              "Elegir localizador · Obligatorio"
+            ) : (
+              "Sin localizador · No hay disponibles"
+            )
+          ) : (
+            `Localizador ${value} · Cambiar`
+          )}
         </span>
       </Button>
       {automatic && value !== null && (

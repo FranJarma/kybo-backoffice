@@ -11,7 +11,9 @@ test("loads product costs and authenticates after changing the local server port
   await page.goto("/login");
   const actualOrigin = new URL(page.url()).origin;
   expect(new URL(process.env.BETTER_AUTH_URL!).origin).not.toBe(actualOrigin);
-  await page.getByLabel("Usuario o correo").fill(process.env.E2E_EMAIL!);
+  await page
+    .getByLabel("Usuario", { exact: true })
+    .fill(process.env.E2E_USERNAME!);
   await page.getByLabel("Contraseña").fill(process.env.E2E_PASSWORD!);
   await page.getByRole("button", { name: "Ingresar", exact: true }).click();
   await expect(page).toHaveURL(/\/(?:settings\/branches)?$/, {

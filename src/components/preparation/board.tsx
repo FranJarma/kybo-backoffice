@@ -163,6 +163,7 @@ export function PreparationBoard({
       key={t.id}
       task={t}
       actorId={actorId}
+      canDeliver={feed.data?.capabilities?.deliver ?? manager}
       locked={locked}
       now={feed.now}
       onAct={act}
@@ -248,6 +249,8 @@ export function PreparationBoard({
           uncertain={operation.uncertain}
           busy={operation.busy}
           retry={operation.retry}
+          canDiscard={operation.canDiscard}
+          onDiscard={operation.discardRejected}
         />
       )}
       {notice && (
@@ -505,8 +508,9 @@ export function PreparationBoard({
         </div>
       )}
       <p className="text-[11px] leading-relaxed text-muted">
-        La cola se actualiza con la pantalla abierta. Registrar preparación
-        todavía no descuenta insumos del inventario.
+        La cola se actualiza con la pantalla abierta. Al marcar listo se
+        descuentan los ingredientes reservados; la entrega se registra desde el
+        puesto del local.
       </p>
       {detail && (
         <PrepDetailDialog
@@ -525,6 +529,8 @@ export function PreparationBoard({
               uncertain={operation.uncertain}
               busy={operation.busy}
               retry={operation.retry}
+              canDiscard={operation.canDiscard}
+              onDiscard={operation.discardRejected}
             />
           }
         />

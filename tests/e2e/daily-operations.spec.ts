@@ -107,7 +107,8 @@ test("central preparation requires assignment and confirms a real order from the
   await page
     .getByRole("dialog")
     .getByRole("combobox", { name: "Responsable", exact: true })
-    .selectOption("staff");
+    .fill("Ana");
+  await page.getByRole("option", { name: "Ana", exact: true }).click();
   await page.getByRole("button", { name: "Asignar", exact: true }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.getByText(task.title, { exact: true }).click();
@@ -256,7 +257,8 @@ for (const size of [
     await page
       .getByRole("dialog")
       .getByRole("combobox", { name: "Responsable", exact: true })
-      .selectOption("staff");
+      .fill("Ana");
+    await page.getByRole("option", { name: "Ana", exact: true }).click();
     await page.getByRole("button", { name: "Asignar", exact: true }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
     if (size.width === 600) {
@@ -289,7 +291,7 @@ for (const size of [
       path: `.next-e2e/daily-board-${size.width}.png`,
       fullPage: true,
     });
-    await page.getByRole("button", { name: "Stock por ubicación" }).click();
+    await page.getByRole("tab", { name: "Stock por ubicación" }).click();
     await expect(
       page.getByText("Vasos descartables", { exact: true }),
     ).toBeVisible();
@@ -297,17 +299,14 @@ for (const size of [
       .getByRole("article")
       .filter({ hasText: "Vasos descartables" });
     await expect(page.getByRole("article")).toHaveCount(50);
-    await expect(cups.getByText("28 unit", { exact: true })).toBeVisible();
-    await cups
-      .getByText("Ver disponible por ubicación", { exact: false })
-      .click();
+    await expect(cups.getByText("28 unid.", { exact: true })).toBeVisible();
     await expect(cups.getByText("Depósito", { exact: true })).toBeVisible();
-    await expect(cups.getByText("20 unit", { exact: true })).toBeVisible();
+    await expect(cups.getByText("20 unid.", { exact: true })).toBeVisible();
     await page.getByLabel("Ubicación", { exact: true }).selectOption("bar");
-    await expect(cups.getByText("8 unit", { exact: true })).toBeVisible();
-    await expect(cups.getByText("28 unit", { exact: true })).toHaveCount(0);
+    await expect(cups.getByText("8 unid.", { exact: true })).toBeVisible();
+    await expect(cups.getByText("28 unid.", { exact: true })).toHaveCount(0);
     await page.getByLabel("Ubicación", { exact: true }).selectOption("");
-    await expect(cups.getByText("28 unit", { exact: true })).toBeVisible();
+    await expect(cups.getByText("28 unid.", { exact: true })).toBeVisible();
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= innerWidth,

@@ -159,6 +159,19 @@ it("does not expose a station queue or detail to a personal employee with no sta
   ).rejects.toMatchObject({ status: 403 });
 });
 
+it("reports delivery capability using the same policy as delivery authorization", async () => {
+  const prep = createPreparationService(c.db);
+  expect((await prep.list(c.actors.staff)).capabilities).toEqual({
+    deliver: false,
+  });
+  expect((await prep.list(c.actors.manager)).capabilities).toEqual({
+    deliver: true,
+  });
+  expect((await prep.list(c.actors.admin)).capabilities).toEqual({
+    deliver: true,
+  });
+});
+
 it("rejects starting an unassigned station even when its task ID is known", async () => {
   const tasks = await order();
   await expect(
@@ -659,13 +672,11 @@ it("rejects shared-store commands before execution or replay while preserving it
 
 it("keeps store preparation queues and details private when the station assignment table is unavailable", async () => {
   const tasks = await order();
-  await c.db
-    .insert(workplaceStoreAccounts)
-    .values({
-      userId: c.actors.staff.id,
-      branchId: c.branchId,
-      createdBy: c.actors.admin.id,
-    });
+  await c.db.insert(workplaceStoreAccounts).values({
+    userId: c.actors.staff.id,
+    branchId: c.branchId,
+    createdBy: c.actors.admin.id,
+  });
   await c.client.exec(
     "alter table workplace_station_assignments rename to workplace_station_assignments_unavailable",
   );

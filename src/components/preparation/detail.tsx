@@ -2,6 +2,7 @@
 import { useErrorFeedback } from "@/components/ui/use-error-feedback";
 import { OperationAlert } from "@/components/ui/operation-alert";
 import { PreparationInstructions } from "./instructions";
+import { PreparationModifiers } from "./modifiers";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
@@ -122,7 +123,7 @@ export function PrepDetailDialog({
                 ] as const
               ).map(([label, value]) => (
                 <div key={label}>
-                  <p className="text-[11px] text-muted">{label}</p>
+                  <p className="text-xs text-muted">{label}</p>
                   <p className="mt-1 text-sm font-extrabold tabular-nums text-brand">
                     {duration(value)}
                   </p>
@@ -135,21 +136,17 @@ export function PrepDetailDialog({
             </p>
             <ul className="space-y-3">
               {data.task.lines.map((l) => (
-                <li key={l.id} className="break-words text-sm">
+                <li key={l.id} className="break-words text-base">
                   <strong>
                     {l.quantity} × {l.name}
                   </strong>
-                  {l.modifiers?.map((m, i) => (
-                    <p key={i} className="mt-1 text-sm font-medium text-blue">
-                      {m.count} × {m.optionName}
-                      {m.instruction && m.instruction !== m.optionName
-                        ? ` · ${m.instruction}`
-                        : ""}
-                    </p>
-                  ))}
+                  <PreparationModifiers
+                    modifiers={l.modifiers ?? []}
+                    quantity={l.quantity}
+                  />
                   <PreparationInstructions guide={l.preparation} />
                   {l.notes && (
-                    <p className="mt-1 whitespace-pre-wrap text-xs text-muted">
+                    <p className="mt-2 whitespace-pre-wrap text-sm text-brand">
                       {l.notes}
                     </p>
                   )}

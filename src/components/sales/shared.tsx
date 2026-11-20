@@ -46,12 +46,18 @@ export function OperationNotice({
   busy,
   retry,
   eventKey,
+  canDiscard = false,
+  onDiscard,
+  persistentError = false,
 }: {
   error: string;
   uncertain: boolean;
   busy: boolean;
   retry: () => void;
   eventKey?: number | string;
+  canDiscard?: boolean;
+  onDiscard?: () => void;
+  persistentError?: boolean;
 }) {
   if (!error && !uncertain) return null;
   return (
@@ -66,12 +72,38 @@ export function OperationNotice({
           message={error}
         />
       )}
+      {persistentError &&
+        error &&
+        !error.startsWith(
+          "No hay stock disponible suficiente para reservar:",
+        ) && (
+          <p
+            role="alert"
+            className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800"
+          >
+            {error}
+          </p>
+        )}
       {uncertain && (
         <div
           role="status"
           className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"
         >
-          <p>El resultado del envío está pendiente de confirmar.</p>
+          <p>
+            {canDiscard
+              ? "El servidor rechazó este envío por permisos. Descartalo para seguir con otras tareas."
+              : "El resultado del envío está pendiente de confirmar."}
+          </p>
+          {canDiscard && onDiscard && (
+            <Button
+              className="mt-3 mr-3"
+              variant="outline"
+              disabled={busy}
+              onClick={onDiscard}
+            >
+              Descartar envío rechazado
+            </Button>
+          )}
           <Button
             className="mt-3"
             variant="outline"

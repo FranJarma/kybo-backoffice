@@ -4,6 +4,7 @@ import type { Tx } from "@/db/types";
 import type { Actor } from "@/lib/access";
 import { requireCatalogAccess } from "@/lib/access";
 import { productionOrders } from "@/db/production-order-schema";
+import { productionBatches } from "@/db/production-schema";
 import { recipeVersions } from "@/db/recipe-schema";
 import { locations, branchMemberships } from "@/db/branch-schema";
 import { user, operationalUsers } from "@/db/auth-schema";
@@ -14,6 +15,7 @@ import { stockDocuments } from "@/db/inventory-document-schema";
 import { inventoryLots } from "@/db/inventory-schema";
 import { integer, six } from "../inventory/decimal";
 import { latestProductionResult } from "./result";
+import { productionDifferences } from "./difference";
 import { AppError } from "@/lib/errors";
 import { getStoreProfile, workplaceSchemaReady } from "../workplace/access";
 import { centralPreparationLocation } from "../daily-operations/central-preparation";
@@ -83,9 +85,19 @@ export async function listProductionOrders(
     )
     .innerJoin(locations, eq(locations.id, productionOrders.locationId))
     .leftJoin(user, eq(user.id, productionOrders.assignedTo))
+    // Direct batch registrations use an internal order for their stock movements.
+    // Their history belongs to the batch list, not the assigned-order workflow.
+    .leftJoin(
+      productionBatches,
+      and(
+        eq(productionBatches.id, productionOrders.id),
+        eq(productionBatches.branchId, productionOrders.branchId),
+      ),
+    )
     .where(
       and(
         eq(productionOrders.branchId, actor.branchId!),
+        isNull(productionBatches.id),
         personalDepot
           ? depot
             ? eq(productionOrders.locationId, depot.id)
@@ -111,6 +123,10 @@ export async function listProductionOrders(
     .limit(101)
     .offset(offset);
   const rows = page.slice(0, 100);
+  const differences = await productionDifferences(
+    db,
+    rows.map((row) => row.order.id),
+  );
   const compositions = rows.map(
     (r) =>
       r.order.composition as {
@@ -212,6 +228,7 @@ export async function listProductionOrders(
         baseUnit: r.baseUnit,
         location: r.location,
         assignee: r.assignee,
+        difference: differences.get(order.id) ?? null,
         preparation: r.preparation,
         result:
           actor.role === "staff"

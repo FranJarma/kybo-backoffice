@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FieldCaption } from "@/components/ui/field-caption";
@@ -16,12 +16,14 @@ export function PurchaseAdvanceForm({
   timeZone,
   locked,
   onSaved,
+  onBusy,
 }: {
   actorId: string;
   order: PurchaseOrder;
   timeZone: string;
   locked: boolean;
   onSaved: () => void;
+  onBusy?: (busy: boolean) => void;
 }) {
   const [visible, setVisible] = useState(false),
     [source, setSource] = useState<"cash" | "external">("external"),
@@ -41,9 +43,13 @@ export function PurchaseAdvanceForm({
     saved,
   );
   const canRegister = ["ordered", "partially_received"].includes(order.state);
+  useEffect(() => {
+    onBusy?.(operation.locked);
+    return () => onBusy?.(false);
+  }, [operation.locked, onBusy]);
   if (!canRegister && !operation.uncertain) return null;
   return (
-    <section className="space-y-4 rounded-xl border border-line bg-white p-5 sm:p-7">
+    <section className="space-y-4 border-t border-line pt-5">
       <OperationNotice
         error={operation.error}
         eventKey={operation.errorAttempt}

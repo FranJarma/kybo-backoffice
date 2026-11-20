@@ -133,17 +133,7 @@
   overflow-x: auto;
 }
 .branches-tab {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  gap: 10px;
-  min-height: 57px;
-  padding: 12px 20px 17px;
-  border-bottom: 3px solid transparent;
-  color: #52647d;
-  font-weight: 650;
-  font-size: 14px;
+  padding-inline: 16px;
 }
 .branches-tab svg {
   width: 18px;
@@ -161,9 +151,7 @@
   color: var(--brand);
 }
 .branches-tab[data-state="active"] {
-  border-color: #0669db;
-  color: #0759b6;
-  background: linear-gradient(transparent, #eaf3ff80);
+  background: #eaf4ff;
 }
 .branches-tab[data-state="active"] > span {
   background: #d9eaff;
@@ -941,15 +929,14 @@
   overflow-wrap: anywhere;
 }
 .branches-address-row > button {
-  height: 28px;
-  min-height: 28px;
-  padding: 3px 7px;
+  min-height: 44px;
+  padding: 8px 12px;
   color: #0759b6;
-  font-size: 11px;
+  font-size: 12px;
 }
 .branches-address-row > button svg {
-  width: 12px;
-  height: 12px;
+  width: 16px;
+  height: 16px;
 }
 .branches-address-form {
   gap: 18px;

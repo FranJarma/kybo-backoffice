@@ -1,5 +1,6 @@
 import type { PrepTask } from "@/modules/preparation/types";
 import type { PreparationGuide } from "@/modules/recipes/preparation-guide";
+import type { ProductionDifference } from "@/modules/production/difference";
 
 export type StaffPreparationTask = PrepTask & {
   canStart: boolean;
@@ -7,6 +8,7 @@ export type StaffPreparationTask = PrepTask & {
   orderReady: boolean;
 };
 export type StaffProductionOrder = {
+  difference?: ProductionDifference | null;
   id: string;
   revision: number;
   state: "planned" | "confirmed";

@@ -37,10 +37,10 @@ export function OrderControls({
   return (
     <section
       data-pos-order-setup
-      className="grid min-w-0 gap-x-4 gap-y-3 rounded-xl border border-line bg-white p-3 min-[560px]:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]"
+      className="grid min-w-0 gap-x-4 gap-y-2 rounded-xl border border-line bg-white p-3 @min-[560px]:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] @min-[900px]:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1.5fr)]"
     >
       <fieldset className="min-w-0">
-        <legend className="mb-2 text-xs font-semibold text-muted">
+        <legend className="mb-1 text-xs font-semibold text-muted">
           Lugar de consumo
         </legend>
         <div className="flex gap-2">
@@ -69,7 +69,7 @@ export function OrderControls({
         </div>
       </fieldset>
       <fieldset className="min-w-0">
-        <legend className="mb-2 text-xs font-semibold text-muted">
+        <legend className="mb-1 text-xs font-semibold text-muted">
           Forma de consumo
         </legend>
         <div className="flex gap-2">
@@ -91,11 +91,11 @@ export function OrderControls({
           ))}
         </div>
       </fieldset>
-      <fieldset className="min-w-0 border-t border-line pt-3 min-[560px]:col-span-2">
-        <legend className="px-1 text-xs font-semibold text-muted">
+      <fieldset className="min-w-0 @min-[560px]:col-span-2 @min-[900px]:col-span-1">
+        <legend className="mb-1 text-xs font-semibold text-muted @min-[900px]:sr-only">
           Acciones
         </legend>
-        <div className="grid min-w-0 items-start gap-3 min-[440px]:grid-cols-[minmax(0,1fr)_minmax(170px,0.7fr)]">
+        <div className="grid min-w-0 items-start gap-3 @min-[360px]:grid-cols-[minmax(0,1fr)_minmax(160px,0.7fr)] @min-[900px]:grid-cols-[minmax(0,1fr)_minmax(145px,0.85fr)]">
           {actions}
         </div>
       </fieldset>

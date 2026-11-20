@@ -10,7 +10,24 @@ export const locationSchema = z
   .strict();
 const reason = z.string().trim().min(3).max(1000);
 const optionalReason = z.string().trim().max(1000).default("");
+export const schedulePeriodSchema = z
+  .object({
+    userId: z.string().min(1).max(100),
+    shiftId: z.uuid(),
+    from: z.string(),
+    to: z.string(),
+    weekdays: z.array(z.number().int().min(0).max(6)).min(1).max(7),
+  })
+  .strict();
+export const assignPeriodSchema = schedulePeriodSchema
+  .extend({
+    action: z.literal("assignPeriod"),
+    expectedShiftRevision: z.number().int().positive(),
+  })
+  .strict();
+export type SchedulePeriodInput = z.infer<typeof schedulePeriodSchema>;
 export const attendanceCommandSchema = z.discriminatedUnion("action", [
+  assignPeriodSchema,
   z
     .object({
       action: z.literal("punch"),

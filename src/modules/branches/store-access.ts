@@ -10,6 +10,7 @@ export function assertStoreHttpAccess(actor: Partial<Actor>, request: Request) {
     /^\/api\/sales(?:\/|$)/.test(path) || /^\/api\/pickup(?:\/|$)/.test(path);
   const permitted =
     (pos && ["GET", "POST"].includes(method)) ||
+    (path === "/api/printing" && ["GET", "POST"].includes(method)) ||
     (path === "/api/fulfillment/state" && method === "GET") ||
     (path === "/api/fulfillment/deliver" && method === "POST") ||
     (path === "/api/cash/status" && method === "GET") ||

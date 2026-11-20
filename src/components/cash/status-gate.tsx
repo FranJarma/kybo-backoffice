@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { Banknote } from "lucide-react";
 import { cashBranchRequest } from "./shared";
+import { CashOpeningAction } from "./opening-action";
 
 type Status = {
   available: boolean;
@@ -10,8 +10,15 @@ type Status = {
   open: boolean;
   sessionId: string | null;
   canOpen: boolean;
+  actorId?: string;
 };
-export function CashStatusGate({ branchId }: { branchId: string }) {
+export function CashStatusGate({
+  branchId,
+  actorId,
+}: {
+  branchId: string;
+  actorId?: string;
+}) {
   const [status, setStatus] = useState<Status | null>(null);
   useEffect(() => {
     const controller = new AbortController();
@@ -46,22 +53,22 @@ export function CashStatusGate({ branchId }: { branchId: string }) {
   return (
     <div
       role="status"
-      className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+      className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-amber-200 bg-amber-50 px-4 py-1 text-sm text-amber-950"
     >
       <Banknote className="size-5 shrink-0" />
       <span>
-        La caja de esta sucursal está cerrada.{" "}
+        <strong>Caja cerrada.</strong>{" "}
         {status.canOpen
           ? "Abrila antes de registrar cobros locales."
           : "Una persona autorizada debe abrirla antes de registrar cobros locales."}
       </span>
-      {status.canOpen ? (
-        <Link
-          href="/finance/cash"
-          className="font-semibold underline underline-offset-4"
-        >
-          Abrir caja
-        </Link>
+      {status.canOpen && (status.actorId || actorId) ? (
+        <CashOpeningAction
+          branchId={branchId}
+          actorId={status.actorId || actorId!}
+          variant="ghost"
+          className="font-semibold text-inherit underline underline-offset-4"
+        />
       ) : null}
     </div>
   );

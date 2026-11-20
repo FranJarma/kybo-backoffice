@@ -32,6 +32,54 @@ const task = {
   orderReady: false,
 } as unknown as StaffPreparationTask;
 
+it("aclara los modificadores por unidad y el total para varias unidades, tanto en Comandas como en el celular", async () => {
+  const { PreparationWorkCard } = await import("@/components/staff-work/cards");
+  const { PrepCard } = await import("@/components/preparation/card");
+  const modified = {
+    ...task,
+    lines: [
+      {
+        ...task.lines[0],
+        quantity: 3,
+        modifiers: [
+          {
+            groupName: "Extras",
+            optionName: "Perlas explosivas",
+            count: 2,
+            instruction: "Agregar al final",
+          },
+        ],
+      },
+    ],
+  };
+  const phone = renderToStaticMarkup(
+    React.createElement(PreparationWorkCard, {
+      task: modified,
+      locked: false,
+      onAct() {},
+    }),
+  );
+  const board = renderToStaticMarkup(
+    React.createElement(PrepCard, {
+      task: {
+        ...modified,
+        enqueuedAt: new Date().toISOString(),
+        timing: { totalSeconds: 0 },
+      } as never,
+      actorId: "employee",
+      locked: false,
+      now: Date.now(),
+      onAct() {},
+      onDetail() {},
+    }),
+  );
+  for (const html of [phone, board]) {
+    expect(html).toContain("Perlas explosivas");
+    expect(html).toContain("2 por unidad · 6 en total");
+    expect(html).toContain("Agregar al final");
+  }
+});
+
 it("offers only preparation actions and the current station lines", async () => {
   const { PreparationWorkCard } = await import("@/components/staff-work/cards");
   const pending = renderToStaticMarkup(
@@ -105,6 +153,7 @@ it("provides a single production confirmation without editable quantities", asyn
       locked: false,
       timeZone: "America/Argentina/Buenos_Aires",
       onAct: () => {},
+      onReport: () => {},
     }),
   );
   expect(html).toContain('data-action="finish"');

@@ -55,7 +55,9 @@ export async function executeCommand<T>(
     // Command-level authorization runs before claiming or replaying an operation.
     // Unknown/future commands default to manager access until explicitly classified.
     const productionCommand =
-      action === "production-start" || action === "production-finish";
+      action === "production-start" ||
+      action === "production-finish" ||
+      action === "production-report";
     const staffCommand =
       action === "complete" ||
       action === "deliver" ||
@@ -76,7 +78,8 @@ export async function executeCommand<T>(
     // still check the persistent marker, after the cheap command-role rejection.
     if (
       (ctx.accountKind === "store" ||
-        (ctx.accountKind === undefined && (await getStoreProfile(tx, actor.id)))) &&
+        (ctx.accountKind === undefined &&
+          (await getStoreProfile(tx, actor.id)))) &&
       action !== "deliver"
     )
       throw new AppError(

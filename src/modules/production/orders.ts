@@ -35,6 +35,7 @@ import type { StockAllocation } from "../operations/types";
 import { auditEvents } from "@/db/business-schema";
 import { planConsumption } from "./consumption";
 import { productionManager, productionExecutor } from "./access";
+import { productionDifferences } from "./difference";
 const decimal = z
   .string()
   .regex(/^\d{1,12}\.\d{6}$/)
@@ -235,6 +236,13 @@ export async function finishProduction(
   )
     fail("La producción cambió o ya terminó.");
   productionExecutor(ctx, order.assignedTo);
+  if (
+    ctx.role === "staff" &&
+    (await productionDifferences(tx, [order.id])).has(order.id)
+  )
+    fail(
+      "El encargado debe revisar la diferencia informada antes de finalizar esta producción.",
+    );
   const expected = new Map<string, bigint>();
   if (ctx.role === "staff") {
     for (const component of (

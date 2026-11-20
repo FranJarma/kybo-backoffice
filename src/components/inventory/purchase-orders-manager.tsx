@@ -1,7 +1,8 @@
 "use client";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { Plus, RefreshCw, Truck, ArrowUpRight } from "lucide-react";
+import { Plus, RefreshCw, Truck, ArrowUpRight, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { OperationAlert } from "@/components/ui/operation-alert";
 import { OperationNotice } from "@/components/sales/shared";
 import type {
@@ -12,7 +13,7 @@ import type {
 } from "@/modules/procurement/types";
 import { getJson, useOperation, date, today } from "./shared";
 import { PurchaseOrderEditor } from "./purchase-order-editor";
-import { PurchaseOrderDetail, orderStates } from "./purchase-order-detail";
+import { PurchaseOrderDetail, OrderStatus } from "./purchase-order-detail";
 import { PurchasesManager } from "./purchases-manager";
 import { OperationPanel } from "@/components/ui/operation-panel";
 import type { PurchaseSeed } from "@/modules/supply-alerts/presentation";
@@ -24,6 +25,7 @@ export function PurchaseOrdersManager({
   initialDraft,
   embedded = false,
   onBusy,
+  active = true,
 }: {
   actorId: string;
   timeZone: string;
@@ -31,6 +33,7 @@ export function PurchaseOrdersManager({
   initialDraft?: PurchaseSeed[];
   embedded?: boolean;
   onBusy?: (busy: boolean) => void;
+  active?: boolean;
 }) {
   const [data, setData] = useState<OrderSnapshot | null>(null),
     [selected, setSelected] = useState(initialDraft ? "" : initialOrderId),
@@ -39,7 +42,9 @@ export function PurchaseOrdersManager({
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [loading, setLoading] = useState(true),
-    [filter, setFilter] = useState("open");
+    [filter, setFilter] = useState("open"),
+    [search, setSearch] = useState(""),
+    [advanceBusy, setAdvanceBusy] = useState(false);
   const generation = useRef(0);
   const formId = useId();
   const load = useCallback(async () => {
@@ -72,6 +77,7 @@ export function PurchaseOrdersManager({
     }
   }, [initialOrderId]);
   useEffect(() => {
+    if (!active) return;
     const timer = setTimeout(() => void load(), 0);
     return () => {
       clearTimeout(timer);
@@ -79,7 +85,7 @@ export function PurchaseOrdersManager({
       // eslint-disable-next-line react-hooks/exhaustive-deps
       generation.current++;
     };
-  }, [load]);
+  }, [load, active]);
   const saved = useCallback(
     (result: unknown) => {
       const o = (result as { result: PurchaseOrder }).result;
@@ -107,11 +113,12 @@ export function PurchaseOrdersManager({
     "purchase-orders",
     saved,
   );
-  const locked = loading || !!error || operation.locked || !data?.available;
+  const commandLocked = operation.locked || advanceBusy;
+  const locked = loading || !!error || commandLocked || !data?.available;
   useEffect(() => {
-    onBusy?.(operation.locked || editing || !!receiving);
+    onBusy?.(commandLocked || editing || !!receiving);
     return () => onBusy?.(false);
-  }, [operation.locked, editing, receiving, onBusy]);
+  }, [commandLocked, editing, receiving, onBusy]);
   const order = data?.orders.find((o) => o.id === selected);
   if (receiving)
     return (
@@ -131,6 +138,19 @@ export function PurchaseOrdersManager({
   const rows = [...(data?.orders ?? [])]
     .filter(
       (o) => filter === "all" || !["received", "cancelled"].includes(o.state),
+    )
+    .filter((o) =>
+      `${o.supplierName} ${o.lines.map((l) => l.itemName).join(" ")}`
+        .normalize("NFD")
+        .replace(/\p{M}/gu, "")
+        .toLocaleLowerCase("es")
+        .includes(
+          search
+            .normalize("NFD")
+            .replace(/\p{M}/gu, "")
+            .toLocaleLowerCase("es")
+            .trim(),
+        ),
     )
     .sort((a, b) => {
       const rank = (o: PurchaseOrder) =>
@@ -165,7 +185,7 @@ export function PurchaseOrdersManager({
           <Button
             variant="outline"
             className="min-h-12"
-            disabled={loading || operation.locked}
+            disabled={loading || commandLocked}
             onClick={() => void load()}
           >
             <RefreshCw className="size-4" />
@@ -187,6 +207,20 @@ export function PurchaseOrdersManager({
           )}
         </div>
       </header>
+      {loading && (
+        <p role="status" className="text-sm text-muted">
+          {data ? "Actualizando pedidos…" : "Consultando pedidos…"}
+        </p>
+      )}
+      {error && !editing && !order && (
+        <p
+          role="alert"
+          className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
+        >
+          {error} La información anterior se conserva; actualizá antes de
+          registrar una llegada.
+        </p>
+      )}
       {!editing && !order && (
         <OperationAlert
           tone="error"
@@ -226,7 +260,7 @@ export function PurchaseOrdersManager({
       {editing ? (
         <OperationPanel
           title="Preparar pedido"
-          label="Compras"
+          size="wide"
           description="Elegí el proveedor, revisá las cantidades y confirmá la llegada estimada."
           locked={operation.locked}
           onClose={() => setEditing(false)}
@@ -276,9 +310,9 @@ export function PurchaseOrdersManager({
       ) : order ? (
         <OperationPanel
           title="Detalle del pedido"
-          label="Compras"
+          size="wide"
           description="Seguí lo pedido y registrá cada entrega."
-          locked={operation.locked}
+          locked={commandLocked}
           onClose={() => setSelected("")}
         >
           {error && (
@@ -305,6 +339,7 @@ export function PurchaseOrdersManager({
             locked={locked}
             actorId={actorId}
             onUpdated={() => void load()}
+            onAdvanceBusy={setAdvanceBusy}
             onBack={() => setSelected("")}
             onReceive={() => setReceiving(order)}
             onCommand={(command) =>
@@ -332,6 +367,22 @@ export function PurchaseOrdersManager({
                 </select>
               </label>
             </div>
+            <label className="grid w-full max-w-md gap-2 text-sm font-semibold">
+              Buscar pedido
+              <span className="relative">
+                <Search
+                  className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted"
+                  aria-hidden="true"
+                />
+                <Input
+                  type="search"
+                  className="min-h-12 bg-white pl-10"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Proveedor o insumo…"
+                />
+              </span>
+            </label>
             <section
               aria-label="Pedidos registrados"
               className="divide-y divide-line rounded-xl border border-line bg-white"
@@ -353,10 +404,20 @@ export function PurchaseOrdersManager({
                     className="flex flex-wrap items-center justify-between gap-4 p-5 sm:p-6"
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="font-bold">{o.supplierName}</p>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <p className="break-words font-bold">
+                          {o.supplierName}
+                        </p>
+                        <OrderStatus
+                          state={o.state}
+                          overdue={
+                            !!o.expectedOn && o.expectedOn < today(timeZone)
+                          }
+                        />
+                      </div>
                       <p className="mt-2 text-sm text-muted-foreground">
-                        {o.lines.length} insumo{o.lines.length === 1 ? "" : "s"}{" "}
-                        · {orderStates[o.state]}
+                        {o.lines.length} insumo
+                        {o.lines.length === 1 ? "" : "s"}{" "}
                       </p>
                       <p className="mt-2 text-sm text-muted-foreground">
                         {o.lines
@@ -384,6 +445,7 @@ export function PurchaseOrdersManager({
                     <div className="flex flex-wrap gap-2">
                       {["ordered", "partially_received"].includes(o.state) && (
                         <Button
+                          variant="outline"
                           className="min-h-12"
                           disabled={locked}
                           onClick={() => {

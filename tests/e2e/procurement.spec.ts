@@ -202,7 +202,7 @@ for (const width of [600, 768, 1024])
     });
     await page.goto("http://127.0.0.1:3000/__procurement-fixture");
     await page.addScriptTag({ path: ".next-e2e/procurement-ui.js" });
-    await page.getByRole("button", { name: "Pedidos", exact: true }).click();
+    await page.getByRole("tab", { name: "Pedidos", exact: true }).click();
     await page.getByRole("button", { name: "Ver pedido", exact: true }).click();
     await expect(page.getByText("100 unid.").last()).toBeVisible();
     await page

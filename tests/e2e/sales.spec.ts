@@ -7,9 +7,9 @@ import {
   restoreStaffSession,
   saveStaffSession,
 } from "../helpers/browser-session";
-const email = process.env.E2E_EMAIL,
+const username = process.env.E2E_USERNAME,
   password = process.env.E2E_PASSWORD;
-test.skip(!email || !password, "Temporary E2E credentials required");
+test.skip(!username || !password, "Temporary E2E credentials required");
 let cookies: Awaited<ReturnType<BrowserContext["cookies"]>> | undefined;
 async function signIn(page: Page) {
   if (!cookies && (await restoreAdminSession(page)))
@@ -20,7 +20,7 @@ async function signIn(page: Page) {
     return;
   }
   await page.goto("/login");
-  await page.getByLabel("Usuario o correo").fill(email!);
+  await page.getByLabel("Usuario", { exact: true }).fill(username!);
   await page.getByLabel("Contraseña").fill(password!);
   await page.getByRole("button", { name: "Ingresar" }).click();
   await expect(page).toHaveURL("/", { timeout: 25000 });
@@ -65,13 +65,16 @@ test("staff reaches POS without administrative catalog access", async ({
   request,
 }) => {
   test.setTimeout(90000);
-  test.skip(!process.env.E2E_STAFF_EMAIL, "Temporary staff fixture required");
+  test.skip(
+    !process.env.E2E_STAFF_USERNAME,
+    "Temporary staff fixture required",
+  );
   expect((await request.get("/api/sales")).status()).toBe(401);
   if (!(await restoreStaffSession(page))) {
     await page.goto("/login");
     await page
-      .getByLabel("Usuario o correo")
-      .fill(process.env.E2E_STAFF_EMAIL!);
+      .getByLabel("Usuario", { exact: true })
+      .fill(process.env.E2E_STAFF_USERNAME!);
     await page.getByLabel("Contraseña").fill(password!);
     await page.getByRole("button", { name: "Ingresar" }).click();
     await expect(page).toHaveURL("/sales", { timeout: 25000 });

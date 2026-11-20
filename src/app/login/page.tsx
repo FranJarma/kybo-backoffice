@@ -1,6 +1,5 @@
 import Image from "next/image";
 import { LoginForm } from "@/components/login-form";
-import { Card } from "@/components/ui/card";
 import { safeLoginReturn } from "@/lib/login-return";
 export default async function LoginPage({
   searchParams,
@@ -9,29 +8,48 @@ export default async function LoginPage({
 }) {
   const returnTo = safeLoginReturn((await searchParams).returnTo);
   return (
-    <main className="flex min-h-screen items-center justify-center bg-surface px-4 py-8">
-      <Card className="w-full max-w-md gap-0 p-7 sm:p-9">
+    <main className="grid min-h-dvh bg-white lg:grid-cols-2">
+      <div className="relative hidden overflow-hidden bg-brand lg:block">
         <Image
-          src="/assets/kybo-logo.png"
-          width={130}
-          height={70}
-          alt="Kybo"
-          className="mb-7 h-auto w-[112px] object-contain"
-          priority
+          src="/assets/login-kybo-artwork.webp"
+          alt=""
+          fill
+          sizes="(min-width: 1024px) 50vw, 1px"
+          className="object-cover"
         />
-        <div className="mb-7">
-          <p className="mb-2 text-xs font-bold uppercase tracking-[.16em] text-accent">
+      </div>
+      <section
+        aria-labelledby="login-heading"
+        className="flex min-w-0 flex-col px-6 py-8 sm:px-10 lg:px-12"
+      >
+        <div className="mx-auto flex w-full max-w-md items-center gap-4">
+          <Image
+            src="/assets/kybo-logo.png"
+            width={130}
+            height={70}
+            alt="Kybo"
+            className="h-auto w-28 object-contain"
+            preload
+          />
+          <span className="border-l border-line py-2 pl-4 text-sm font-semibold text-brand">
             Operations
-          </p>
-          <h1 className="text-3xl font-extrabold tracking-tight text-brand">
-            Ingresá a Kybo
-          </h1>
-          <p className="mt-2 text-sm text-muted">
-            Acceso privado para gestionar los datos del local.
-          </p>
+          </span>
         </div>
-        <LoginForm returnTo={returnTo} />
-      </Card>
+        <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-start py-12 sm:py-16 lg:justify-center">
+          <div className="mb-8">
+            <h1
+              id="login-heading"
+              className="text-3xl font-extrabold tracking-tight text-brand"
+            >
+              Ingresá a Kybo
+            </h1>
+            <p className="mt-3 max-w-sm text-base leading-7 text-muted">
+              Acceso privado para gestionar los datos del local.
+            </p>
+          </div>
+          <LoginForm returnTo={returnTo} />
+        </div>
+      </section>
     </main>
   );
 }

@@ -61,9 +61,10 @@ export function startLocatorPolling({
     };
     request = current;
     try {
-      const result = await getJson<LocatorFleet>("/api/pickup", {
-        signal: controller.signal,
-      });
+      const result = await getJson<LocatorFleet>(
+        "/api/pickup",
+        controller.signal,
+      );
       if (live && request === current && !controller.signal.aborted) {
         onFleet(result);
         onError("");
