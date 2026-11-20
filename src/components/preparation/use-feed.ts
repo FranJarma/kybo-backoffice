@@ -18,7 +18,12 @@ function usePreparationResource<T>(url: string, revision: number) {
       controller: AbortController | null = null;
     let poll: ReturnType<typeof setTimeout> | undefined;
     async function load() {
-      if (document.hidden) return;
+      if (
+        !alive ||
+        document.hidden ||
+        (controller && !controller.signal.aborted)
+      )
+        return;
       clearTimeout(poll);
       const n = ++serial;
       controller?.abort();
@@ -55,6 +60,7 @@ function usePreparationResource<T>(url: string, revision: number) {
           );
       } finally {
         clearTimeout(timeout);
+        if (controller === own) controller = null;
         if (alive && n === serial) poll = setTimeout(load, 5000);
       }
     }

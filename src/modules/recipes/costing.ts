@@ -15,6 +15,13 @@ export async function costComposition(
   branchId?: string,
 ): Promise<CompositionCost> {
   const estimate = await costContext(db, branchId);
+  return estimateCompositionCost(components, estimate);
+}
+
+export function estimateCompositionCost(
+  components: Component[],
+  estimate: Awaited<ReturnType<typeof costContext>>,
+): CompositionCost {
   let total = 0n;
   const missing = new Set<string>();
   const referenceItems = new Set<string>();

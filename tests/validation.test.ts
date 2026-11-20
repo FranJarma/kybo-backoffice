@@ -39,6 +39,7 @@ describe("strict catalog inputs", () => {
       recipeUsable: true,
       name: "Leche",
       baseUnit: "ml",
+      stockTracked: true,
       unitCost: null,
     });
   });

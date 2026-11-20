@@ -1,4 +1,4 @@
-import { and, asc, count, eq, ilike, sql } from "drizzle-orm";
+import { and, asc, count, eq, ilike, inArray, sql } from "drizzle-orm";
 import type { AppDb } from "@/db/client";
 import type { Tx } from "@/db/types";
 import { items } from "@/db/item-schema";
@@ -48,27 +48,38 @@ export async function stockByBranch(
         .select({ total: count() })
         .from(items)
         .where(and(filter, eq(items.stockTracked, true)));
+      const lots = catalog.length
+        ? await tx
+            .select({ lot: inventoryLots, balance: lotLocationBalances })
+            .from(lotLocationBalances)
+            .innerJoin(
+              inventoryLots,
+              eq(inventoryLots.id, lotLocationBalances.lotId),
+            )
+            .where(
+              and(
+                eq(lotLocationBalances.branchId, ctx.branchId),
+                inArray(
+                  inventoryLots.itemId,
+                  catalog.map(({ item }) => item.id),
+                ),
+              ),
+            )
+        : [];
+      const lotsByItem = new Map<string, typeof lots>();
+      for (const row of lots) {
+        const itemLots = lotsByItem.get(row.lot.itemId);
+        if (itemLots) itemLots.push(row);
+        else lotsByItem.set(row.lot.itemId, [row]);
+      }
       const rows = [];
       for (const { item, valuation } of catalog) {
-        const lots = await tx
-          .select({ lot: inventoryLots, balance: lotLocationBalances })
-          .from(lotLocationBalances)
-          .innerJoin(
-            inventoryLots,
-            eq(inventoryLots.id, lotLocationBalances.lotId),
-          )
-          .where(
-            and(
-              eq(lotLocationBalances.branchId, ctx.branchId),
-              eq(inventoryLots.itemId, item.id),
-            ),
-          );
         let physical = 0n,
           available = 0n,
           expired = 0n,
           blocked = 0n,
           undated = 0n;
-        for (const { lot, balance } of lots) {
+        for (const { lot, balance } of lotsByItem.get(item.id) ?? []) {
           const q = integer(balance.quantity);
           physical += q;
           if (lot.expiresOn !== null && lot.expiresOn <= today) expired += q;
@@ -110,6 +121,40 @@ export async function stockByBranch(
     { isolationLevel: "repeatable read", accessMode: "read only" },
   );
 }
+function toLotRow(
+  {
+    lot,
+    item,
+    balance,
+    location,
+  }: {
+    lot: typeof inventoryLots.$inferSelect;
+    item: typeof items.$inferSelect;
+    balance: typeof lotLocationBalances.$inferSelect;
+    location: typeof locations.$inferSelect;
+  },
+  today: string,
+): LotRow {
+  return {
+    id: lot.id,
+    itemId: item.id,
+    itemName: item.name,
+    baseUnit: item.baseUnit,
+    locationId: balance.locationId,
+    locationName: location.name,
+    receiptId: lot.receiptId,
+    receivedOn: lot.receivedOn,
+    expiresOn: lot.expiresOn,
+    lotCode: lot.lotCode,
+    initialQuantity: lot.initialQuantity,
+    remainingQuantity: balance.quantity,
+    reservedQuantity: balance.reserved,
+    blocked: lot.blocked || balance.blocked,
+    expired: lot.expiresOn !== null && lot.expiresOn <= today,
+    revision: balance.revision,
+    createdAt: lot.createdAt.toISOString(),
+  };
+}
 export async function scopedLot(
   db: AppDb | Tx,
   ctx: OperationalContext,
@@ -141,28 +186,7 @@ export async function scopedLot(
       "El lote no existe en esta ubicación.",
       404,
     );
-  const { lot, item, balance, location } = row;
-  return {
-    id: lot.id,
-    itemId: item.id,
-    itemName: item.name,
-    baseUnit: item.baseUnit,
-    locationId,
-    locationName: location.name,
-    receiptId: lot.receiptId,
-    receivedOn: lot.receivedOn,
-    expiresOn: lot.expiresOn,
-    lotCode: lot.lotCode,
-    initialQuantity: lot.initialQuantity,
-    remainingQuantity: balance.quantity,
-    reservedQuantity: balance.reserved,
-    blocked: lot.blocked || balance.blocked,
-    expired:
-      lot.expiresOn !== null &&
-      lot.expiresOn <= businessDate(now, ctx.timeZone),
-    revision: balance.revision,
-    createdAt: lot.createdAt.toISOString(),
-  };
+  return toLotRow(row, businessDate(now, ctx.timeZone));
 }
 export async function lotsByBranch(
   db: AppDb,
@@ -177,11 +201,15 @@ export async function lotsByBranch(
   );
   const rows = await db
     .select({
-      lotId: inventoryLots.id,
-      locationId: lotLocationBalances.locationId,
+      lot: inventoryLots,
+      balance: lotLocationBalances,
+      item: items,
+      location: locations,
     })
     .from(lotLocationBalances)
     .innerJoin(inventoryLots, eq(inventoryLots.id, lotLocationBalances.lotId))
+    .innerJoin(items, eq(items.id, inventoryLots.itemId))
+    .innerJoin(locations, eq(locations.id, lotLocationBalances.locationId))
     .where(condition)
     .orderBy(
       asc(inventoryLots.expiresOn),
@@ -195,10 +223,9 @@ export async function lotsByBranch(
     .from(lotLocationBalances)
     .innerJoin(inventoryLots, eq(inventoryLots.id, lotLocationBalances.lotId))
     .where(condition);
+  const today = businessDate(now, ctx.timeZone);
   return {
-    rows: await Promise.all(
-      rows.map((r) => scopedLot(db, ctx, r.lotId, r.locationId, now)),
-    ),
+    rows: rows.map((row) => toLotRow(row, today)),
     total,
   };
 }

@@ -10,6 +10,7 @@ import {
   productFulfillmentVersions,
 } from "@/db/product-fulfillment-schema";
 import { loadConfiguration, saveBindings } from "./configuration";
+import { costConfigurations } from "../catalog/cost-configurations";
 import { defaultSelections, resolveComposition } from "./composition";
 import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
@@ -197,6 +198,14 @@ type EstimatedItemCost = {
   source: "inventory" | "reference" | "preparation" | "missing" | "untracked";
 };
 export async function costContext(db: ReadDb, branchId?: string) {
+  return loadCostContext(db, branchId);
+}
+
+async function loadCostContext(
+  db: ReadDb,
+  branchId?: string,
+  currentGraph?: Awaited<ReturnType<typeof graph>>,
+) {
   const stock = new Map((await db.select().from(items)).map((i) => [i.id, i]));
   const valuations = new Map(
     (branchId
@@ -208,7 +217,9 @@ export async function costContext(db: ReadDb, branchId?: string) {
     ).map((v) => [v.itemId, v]),
   );
   const prepared = new Map(
-    (await graph(db, true)).map((r) => [r.recipe.outputItemId!, r]),
+    (currentGraph ?? (await graph(db, true)))
+      .filter((r) => r.recipe.kind === "preparation")
+      .map((r) => [r.recipe.outputItemId!, r]),
   );
   const cache = new Map<string, EstimatedItemCost>();
   const estimate = (id: string, path: string[] = []): EstimatedItemCost => {
@@ -791,8 +802,9 @@ export function createRecipeService(db: AppDb) {
               ),
             )
             .where(where);
-          const estimate = await costContext(tx, branchId);
+          if (!rows.length) return { rows: [], total: total.n };
           const currentGraph = await graph(tx);
+          const estimate = await loadCostContext(tx, branchId, currentGraph);
           const unitCosts = new Map(
             currentGraph.map((r) => {
               let totalCost = 0n;
@@ -828,22 +840,27 @@ export function createRecipeService(db: AppDb) {
               ];
             }),
           );
-          for (const r of rows)
-            if (r.version.compositionModel === "configurable") {
-              const config = await loadConfiguration(tx, r.version.id);
-              const { costComposition } = await import("./costing");
+          const configurable = rows.filter(
+            (r) => r.version.compositionModel === "configurable",
+          );
+          if (configurable.length) {
+            const configurations = await costConfigurations(
+              tx,
+              configurable.map((r) => r.version),
+            );
+            const { estimateCompositionCost } = await import("./costing");
+            for (const r of configurable) {
+              const config = configurations.get(r.version.id)!;
               unitCosts.set(
                 r.recipe.id,
-                (
-                  await costComposition(
-                    tx,
-                    resolveComposition(config, defaultSelections(config))
-                      .components,
-                    branchId,
-                  )
+                estimateCompositionCost(
+                  resolveComposition(config, defaultSelections(config))
+                    .components,
+                  estimate,
                 ).totalCost,
               );
             }
+          }
           return {
             rows: rows.map(
               ({

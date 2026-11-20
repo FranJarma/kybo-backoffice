@@ -1,0 +1,170 @@
+{
+  "observedAt": "2026-11-19T17:50:18.153Z",
+  "environment": "PGlite synthetic in-memory; source services; no HTTP/auth/browser; concurrent build may affect wall time",
+  "measurements": [
+    {
+      "name": "stock_71_items",
+      "samples": [
+        {
+          "ms": 53,
+          "statements": 4,
+          "selects": 3,
+          "rows": 71,
+          "total": 71
+        },
+        {
+          "ms": 19,
+          "statements": 4,
+          "selects": 3,
+          "rows": 71,
+          "total": 71
+        },
+        {
+          "ms": 18,
+          "statements": 4,
+          "selects": 3,
+          "rows": 71,
+          "total": 71
+        }
+      ]
+    },
+    {
+      "name": "lots_99_entries",
+      "samples": [
+        {
+          "ms": 19,
+          "statements": 2,
+          "selects": 2,
+          "rows": 99,
+          "total": 99
+        },
+        {
+          "ms": 15,
+          "statements": 2,
+          "selects": 2,
+          "rows": 99,
+          "total": 99
+        },
+        {
+          "ms": 15,
+          "statements": 2,
+          "selects": 2,
+          "rows": 99,
+          "total": 99
+        }
+      ]
+    },
+    {
+      "name": "recipe_list_10_configurable",
+      "samples": [
+        {
+          "ms": 53,
+          "statements": 20,
+          "selects": 19,
+          "rows": 10,
+          "total": 10
+        },
+        {
+          "ms": 32,
+          "statements": 20,
+          "selects": 19,
+          "rows": 10,
+          "total": 10
+        },
+        {
+          "ms": 33,
+          "statements": 20,
+          "selects": 19,
+          "rows": 10,
+          "total": 10
+        }
+      ]
+    },
+    {
+      "name": "products_page_30_of_51",
+      "samples": [
+        {
+          "ms": 19,
+          "statements": 6,
+          "selects": 5,
+          "rows": 30,
+          "total": 51
+        },
+        {
+          "ms": 15,
+          "statements": 6,
+          "selects": 5,
+          "rows": 30,
+          "total": 51
+        },
+        {
+          "ms": 15,
+          "statements": 6,
+          "selects": 5,
+          "rows": 30,
+          "total": 51
+        }
+      ]
+    },
+    {
+      "name": "products_page_21_of_51",
+      "samples": [
+        {
+          "ms": 15,
+          "statements": 6,
+          "selects": 5,
+          "rows": 21,
+          "total": 51
+        },
+        {
+          "ms": 14,
+          "statements": 6,
+          "selects": 5,
+          "rows": 21,
+          "total": 51
+        },
+        {
+          "ms": 13,
+          "statements": 6,
+          "selects": 5,
+          "rows": 21,
+          "total": 51
+        }
+      ]
+    },
+    {
+      "name": "locator_fleet_empty",
+      "samples": [
+        {
+          "ms": 7,
+          "statements": 4,
+          "selects": 4,
+          "rows": 0,
+          "total": null
+        },
+        {
+          "ms": 5,
+          "statements": 4,
+          "selects": 4,
+          "rows": 0,
+          "total": null
+        },
+        {
+          "ms": 6,
+          "statements": 4,
+          "selects": 4,
+          "rows": 0,
+          "total": null
+        }
+      ]
+    }
+  ],
+  "dataset": {
+    "items": 71,
+    "products": 51,
+    "configurableRecipes": 10,
+    "lots": 100,
+    "locations": 1,
+    "branches": 1
+  }
+}

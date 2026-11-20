@@ -22,10 +22,14 @@ export function date(value: string) {
   const [year, month, day] = value.slice(0, 10).split("-");
   return `${day}/${month}/${year}`;
 }
-export async function getJson<T>(url: string): Promise<T> {
+export async function getJson<T>(
+  url: string,
+  options?: { signal?: AbortSignal },
+): Promise<T> {
   const response = await fetch(url, {
     cache: "no-store",
     headers: branchHeaders(),
+    ...(options?.signal ? { signal: options.signal } : {}),
   });
   if (!response.ok) throw new Error(await errorText(response));
   return response.json() as Promise<T>;
