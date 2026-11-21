@@ -2,17 +2,16 @@
 import { LatestOrderPrinting } from "@/components/printing/order-printing";
 import { useErrorFeedback } from "@/components/ui/use-error-feedback";
 import { CashStatusGate } from "@/components/cash/status-gate";
+import type { ComboSaleConfiguration } from "./combo-configurator";
+import { OrderConfigurationDialog } from "./order-configuration-dialog";
 import {
-  ComboConfigurator,
-  type ComboSaleConfiguration,
-} from "./combo-configurator";
-
+  saveConfiguredLine,
+  type OrderConfiguration,
+} from "./order-configuration";
 import { CustomerPicker } from "./customer-picker";
-import { OrderControls } from "./order-controls";
-import { ProductConfigurator } from "./product-configurator";
+import { OrderControls, OrderFulfillmentFields } from "./order-controls";
 import type { PublicConfiguration } from "@/modules/recipes/configuration";
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import {
   Plus,
   RotateCw,
@@ -21,6 +20,7 @@ import {
   MessageSquare,
   SlidersHorizontal,
   ShoppingBag,
+  Trash2,
   ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -55,7 +55,7 @@ import {
   appendCartLine,
   type CartLine,
 } from "./cart";
-import { Control, SalesScope, OperationNotice, selectClass } from "./shared";
+import { Control, SalesScope, OperationNotice } from "./shared";
 import { PaymentDialog, type PaymentDraft } from "./payment-dialog";
 import { SaleDetailDialog } from "./sale-detail-dialog";
 import { SaleHistory } from "./history";
@@ -437,11 +437,9 @@ export function SalesManager({
     setTableId("");
     setNotice("");
   }
-  const [configuring, setConfiguring] = useState<{
-    row: SaleLookup["rows"][number];
-    config: PublicConfiguration | ComboSaleConfiguration;
-    index?: number;
-  } | null>(null);
+  const [configuring, setConfiguring] = useState<OrderConfiguration | null>(
+    null,
+  );
   const loadConfiguration = useCallback(
     (row: SaleLookup["rows"][number]) => {
       const combo = row.kind === "combo";
@@ -748,100 +746,28 @@ export function SalesManager({
   const workspace = (
     <div
       data-pos
+      data-pos-active-panel={showCart ? tabletPanel : undefined}
       className={`pos-surface ${fontClassName} flex h-full min-h-0 flex-col gap-2 [&>div:not([data-pos-workspace])]:shrink-0`}
     >
       <CashStatusGate key={branchId} branchId={branchId} actorId={actorId} />
-      <Dialog
-        open={!!configuring}
-        onOpenChange={(open) => {
-          if (!open) setConfiguring(null);
+      <OrderConfigurationDialog
+        configuration={configuring}
+        line={
+          configuring?.index === undefined
+            ? undefined
+            : lines[configuring.index]
+        }
+        channel={channel}
+        fontClassName={fontClassName}
+        onClose={() => setConfiguring(null)}
+        onConfirm={(configuration) => {
+          if (!configuring) return;
+          setLines((current) =>
+            saveConfiguredLine(current, configuring, configuration),
+          );
+          setConfiguring(null);
         }}
-      >
-        <DialogContent
-          className={`pos-surface pos-configuration-dialog ${fontClassName} ${configuring && "definition" in configuring.config ? "pos-configuration-dialog--combo" : ""} [&_[data-slot=dialog-close]]:flex [&_[data-slot=dialog-close]]:min-h-12 [&_[data-slot=dialog-close]]:min-w-12 [&_[data-slot=dialog-close]]:items-center [&_[data-slot=dialog-close]]:justify-center`}
-        >
-          <DialogHeader className="pos-configuration-header">
-            <DialogTitle>{configuring?.row.name}</DialogTitle>
-            <DialogDescription>
-              Elegí las opciones de este producto.
-            </DialogDescription>
-          </DialogHeader>
-          {configuring &&
-            ("definition" in configuring.config ? (
-              <ComboConfigurator
-                config={configuring.config}
-                initialChoices={
-                  configuring.index === undefined
-                    ? undefined
-                    : lines[configuring.index]?.comboChoices
-                }
-                channel={channel}
-                onCancel={() => setConfiguring(null)}
-                onConfirm={(data) => {
-                  setLines((current) => {
-                    const index = configuring.index;
-                    const item = {
-                      ...(index === undefined
-                        ? newCartLine(configuring.row)
-                        : current[index]),
-                      ...data,
-                      expectedPricingRevision:
-                        configuring.config.pricingRevision,
-                      configurable: true,
-                      expectedFulfillmentVersionId: undefined,
-                      expectedRecipeVersionId: undefined,
-                      modifiers: [],
-                      price: inputDecimal(data.expectedPrice),
-                      priceReason: "",
-                    };
-                    return index === undefined
-                      ? appendCartLine(current, item)
-                      : current.map((l, i) => (i === index ? item : l));
-                  });
-                  setConfiguring(null);
-                }}
-              />
-            ) : (
-              <ProductConfigurator
-                key={configuring.config.recipeVersionId}
-                config={configuring.config}
-                initialSelection={
-                  configuring.index === undefined
-                    ? undefined
-                    : lines[configuring.index]?.modifiers
-                }
-                onCancel={() => setConfiguring(null)}
-                onConfirm={(data) => {
-                  setLines((current) => {
-                    const index = configuring.index;
-                    const item = {
-                      ...(index === undefined
-                        ? newCartLine(configuring.row)
-                        : current[index]),
-                      ...data,
-                      expectedPricingRevision:
-                        configuring.config.pricingRevision,
-                      expectedFulfillmentVersionId:
-                        "fulfillmentVersionId" in configuring.config
-                          ? (configuring.config.fulfillmentVersionId ??
-                            undefined)
-                          : undefined,
-                      configurable:
-                        "groups" in configuring.config &&
-                        configuring.config.groups.length > 0,
-                      price: inputDecimal(data.expectedPrice),
-                      priceReason: "",
-                    };
-                    return index === undefined
-                      ? appendCartLine(current, item)
-                      : current.map((l, i) => (i === index ? item : l));
-                  });
-                  setConfiguring(null);
-                }}
-              />
-            ))}
-        </DialogContent>
-      </Dialog>
+      />
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line">
         <div>
           <h1
@@ -999,7 +925,7 @@ export function SalesManager({
       <div hidden={!showCart} className={showCart ? "contents" : "hidden"}>
         <div className="@container shrink-0">
           {isAppend && appendSale ? (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-xl border border-blue-100 bg-blue-50 p-3">
               <div>
                 <p className="text-sm font-bold text-brand">
                   Nuevo pedido · {appendSale.tableName}
@@ -1046,6 +972,23 @@ export function SalesManager({
                 setTableId("");
               }}
               actions={orderActions}
+              details={
+                <OrderFulfillmentFields
+                  origin={origin}
+                  fulfillment={fulfillment}
+                  channel={channel}
+                  externalId={externalId}
+                  tableId={tableId}
+                  tables={tables}
+                  selectedTable={selectedTable}
+                  locked={locked}
+                  originLocked={lines.length > 0}
+                  onChannelChange={setChannel}
+                  onExternalIdChange={setExternalId}
+                  onTableChange={setTableId}
+                  onOpenAccount={(saleId) => void selectSale(saleId)}
+                />
+              }
             />
           )}
         </div>
@@ -1057,99 +1000,6 @@ export function SalesManager({
             data-pos-catalogue
             className={`${tabletPanel === "products" ? "flex" : "hidden"} min-h-0 min-w-0 flex-col gap-3 lg:flex`}
           >
-            {!isAppend &&
-              (origin !== "counter" || fulfillment === "dine_in") && (
-                <section className="surface-panel grid shrink-0 gap-3 p-3 sm:grid-cols-2">
-                  {origin === "delivery" ? (
-                    <>
-                      <Control label="Plataforma" required>
-                        <select
-                          required
-                          value={channel}
-                          disabled={locked || lines.length > 0}
-                          className={selectClass}
-                          onChange={(e) =>
-                            setChannel(e.target.value as SaleChannel)
-                          }
-                        >
-                          <option value="pedidosya">PedidosYa</option>
-                          <option value="ubereats">Uber Eats</option>
-                        </select>
-                      </Control>
-                      <Control label="Número del pedido externo" required>
-                        <Input
-                          required
-                          value={externalId}
-                          disabled={locked}
-                          maxLength={80}
-                          placeholder="Ej. 2280061098"
-                          onChange={(e) => setExternalId(e.target.value)}
-                        />
-                      </Control>
-                    </>
-                  ) : origin === "table" ? (
-                    <Control label="Mesa" required>
-                      <select
-                        required
-                        className={selectClass}
-                        disabled={locked || lines.length > 0}
-                        value={tableId}
-                        onChange={(e) => setTableId(e.target.value)}
-                      >
-                        <option value="">Seleccionar mesa</option>
-                        {tables.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.name}
-                            {t.saleId ? " · Cuenta abierta" : ""}
-                          </option>
-                        ))}
-                      </select>
-                    </Control>
-                  ) : (
-                    <>
-                      {fulfillment === "dine_in" && (
-                        <Control label="Mesa de consumo" optional>
-                          <select
-                            className={selectClass}
-                            value={tableId}
-                            disabled={locked}
-                            onChange={(e) => setTableId(e.target.value)}
-                          >
-                            <option value="">Sin mesa asociada</option>
-                            {tables.map((t) => (
-                              <option key={t.id} value={t.id}>
-                                {t.name}
-                              </option>
-                            ))}
-                          </select>
-                        </Control>
-                      )}
-                    </>
-                  )}
-                  {origin === "table" && selectedTable?.saleId && (
-                    <p className="text-sm text-amber-800 sm:col-span-2">
-                      Esta mesa ya tiene una cuenta.{" "}
-                      <Link
-                        className="font-bold underline"
-                        href={`/sales?account=${selectedTable.saleId}`}
-                        onClick={(event) => {
-                          if (
-                            !event.metaKey &&
-                            !event.ctrlKey &&
-                            !event.shiftKey &&
-                            !event.altKey
-                          ) {
-                            event.preventDefault();
-                            void selectSale(selectedTable.saleId!);
-                          }
-                        }}
-                      >
-                        Abrir venta #{selectedTable.saleNumber}
-                      </Link>
-                    </p>
-                  )}
-                </section>
-              )}
             <ProductPicker
               key={channel}
               channel={channel}
@@ -1164,14 +1014,6 @@ export function SalesManager({
             data-pos-order
             className={`${tabletPanel === "order" ? "flex" : "hidden"} min-h-0 min-w-0 flex-col gap-2 lg:flex`}
           >
-            <Button
-              variant="outline"
-              className="min-h-12 justify-start lg:hidden"
-              onClick={() => setTabletPanel("products")}
-            >
-              <ArrowLeft size={18} />
-              Seguir agregando productos
-            </Button>
             <Cart
               key={`${branchId}:${channel}:${draftGeneration}`}
               onEdit={(index) =>
@@ -1185,22 +1027,54 @@ export function SalesManager({
               locked={locked}
               allowPrice={role !== "staff" || channel !== "counter"}
               total={total}
+              fontClassName={fontClassName}
+              tools={
+                <div className="pos-order-tools">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="pos-order-note"
+                    disabled={locked}
+                    onClick={() => {
+                      setOrderNoteDraft(notes);
+                      setOrderNoteOpen(true);
+                    }}
+                  >
+                    <MessageSquare size={16} />
+                    <span className="truncate">
+                      {notes ? `Nota: ${notes}` : "Agregar nota al pedido"}
+                    </span>
+                  </Button>
+                  {lines.length > 0 && (
+                    <>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        aria-label="Actualizar precios"
+                        disabled={locked}
+                        onClick={refreshPrices}
+                      >
+                        <RotateCw size={14} />
+                        Precios
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        aria-label="Vaciar pedido"
+                        disabled={locked}
+                        onClick={() => setClearOpen(true)}
+                      >
+                        <Trash2 size={14} />
+                        Vaciar
+                      </Button>
+                    </>
+                  )}
+                </div>
+              }
             >
-              <Button
-                type="button"
-                variant="ghost"
-                className="mb-1 min-h-12 w-full justify-start px-0 text-xs text-muted"
-                disabled={locked}
-                onClick={() => {
-                  setOrderNoteDraft(notes);
-                  setOrderNoteOpen(true);
-                }}
-              >
-                <MessageSquare size={16} />
-                <span className="truncate">
-                  {notes ? `Nota: ${notes}` : "Agregar nota al pedido"}
-                </span>
-              </Button>
               {isAppend ? (
                 <Button
                   className="min-h-14 w-full text-base"
@@ -1218,7 +1092,7 @@ export function SalesManager({
                   Abrir cuenta
                 </Button>
               ) : (
-                <div className="space-y-2">
+                <>
                   <Button
                     className="min-h-14 w-full text-base"
                     disabled={locked || !valid}
@@ -1232,12 +1106,11 @@ export function SalesManager({
                   >
                     {lines.length > 0 && total === "0.00"
                       ? "Registrar sin cargo"
-                      : origin === "delivery"
-                        ? "Registrar con cobro"
-                        : "Cobrar"}
+                      : "Continuar al cobro"}
                   </Button>
                   {origin === "delivery" && (
                     <Button
+                      data-pos-order-pending
                       className="w-full"
                       variant="outline"
                       disabled={locked || !valid}
@@ -1246,30 +1119,18 @@ export function SalesManager({
                       Registrar pendiente de cobro
                     </Button>
                   )}
-                </div>
+                </>
               )}
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full lg:hidden"
+                onClick={() => setTabletPanel("products")}
+              >
+                <ArrowLeft size={18} />
+                Seguir agregando
+              </Button>
             </Cart>
-            {lines.length > 0 && (
-              <div className="flex flex-wrap items-center justify-between gap-1">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={locked}
-                  onClick={refreshPrices}
-                >
-                  <RotateCw size={14} />
-                  Actualizar precios
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={locked}
-                  onClick={() => setClearOpen(true)}
-                >
-                  Vaciar pedido
-                </Button>
-              </div>
-            )}
           </div>
         </div>
         {tabletPanel === "products" && (
@@ -1322,7 +1183,10 @@ export function SalesManager({
           if (!locked) setOrderNoteOpen(open);
         }}
       >
-        <DialogContent showCloseButton={false}>
+        <DialogContent
+          showCloseButton={false}
+          className={`pos-surface ${fontClassName}`}
+        >
           <DialogHeader>
             <DialogTitle>Observaciones del pedido</DialogTitle>
             <DialogDescription>
@@ -1368,7 +1232,7 @@ export function SalesManager({
         </DialogContent>
       </Dialog>
       <Dialog open={clearOpen} onOpenChange={setClearOpen}>
-        <DialogContent>
+        <DialogContent className={`pos-surface ${fontClassName}`}>
           <DialogHeader>
             <DialogTitle>¿Vaciar el pedido?</DialogTitle>
             <DialogDescription>

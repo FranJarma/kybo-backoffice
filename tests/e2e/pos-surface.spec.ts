@@ -9,6 +9,9 @@ import { createRequire } from "node:module";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import type { SaleDetail, SaleLookup } from "../../src/modules/sales/types";
+import type { ComboSaleConfiguration } from "../../src/components/sales/combo-configurator";
+import type { PrintingSnapshot } from "../../src/modules/printing/types";
 const require = createRequire(import.meta.url);
 const reportDirectory = process.env.POS_SURFACE_REPORT_DIR;
 const posFonts = [
@@ -72,6 +75,171 @@ const categories = [
   { id: "soft", name: "Soft" },
   { id: "salados", name: "Salados" },
 ];
+const comboRow: SaleLookup["rows"][number] = {
+  id: id(10),
+  name: "Combo merienda",
+  kind: "combo",
+  price: "9000.00",
+  categoryId: "combos",
+  configured: true,
+  vatPending: false,
+  pricingRevision: 1,
+};
+const comboConfiguration: ComboSaleConfiguration = {
+  basePrice: "9000.00",
+  catalogBasePrice: "9000.00",
+  vatRate: "0.00",
+  pricingRevision: 1,
+  unavailableProductIds: [],
+  definition: {
+    id: id(700),
+    productId: comboRow.id,
+    revision: 1,
+    actorId: "fixture-catalog-manager",
+    createdAt: new Date("2026-11-20T12:00:00.000Z"),
+    groups: [
+      {
+        id: id(701),
+        versionId: id(700),
+        name: "Bebida",
+        position: 0,
+        quantity: 1,
+        sourceGroupId: null,
+        sourceGroupVersionId: null,
+        source: null,
+        options: [
+          {
+            id: id(711),
+            groupId: id(701),
+            productId: id(2),
+            position: 0,
+            name: "Shake Oreo",
+            archived: false,
+            counter: "0.00",
+            pedidosya: "0.00",
+            ubereats: "0.00",
+          },
+          {
+            id: id(712),
+            groupId: id(701),
+            productId: id(8),
+            position: 1,
+            name: "Cappuccino",
+            archived: false,
+            counter: "500.00",
+            pedidosya: "500.00",
+            ubereats: "500.00",
+          },
+        ],
+      },
+      {
+        id: id(702),
+        versionId: id(700),
+        name: "Salado",
+        position: 1,
+        quantity: 1,
+        sourceGroupId: null,
+        sourceGroupVersionId: null,
+        source: null,
+        options: [
+          {
+            id: id(713),
+            groupId: id(702),
+            productId: id(9),
+            position: 0,
+            name: "Waffle con jamón y queso",
+            archived: false,
+            counter: "0.00",
+            pedidosya: "0.00",
+            ubereats: "0.00",
+          },
+        ],
+      },
+    ],
+  },
+};
+const historicalSale: SaleDetail = {
+  id: id(800),
+  number: 42,
+  revision: 1,
+  origin: "counter",
+  channel: "counter",
+  fulfillment: "takeaway",
+  status: "closed",
+  tableId: null,
+  tableName: null,
+  customerId: id(854),
+  customerName: "Cliente del historial",
+  externalId: null,
+  totalAmount: "3500.00",
+  paidAmount: "3500.00",
+  balanceDue: "0.00",
+  localCollected: "3500.00",
+  platformCollected: "0.00",
+  orderCount: 1,
+  businessDate: "2026-11-20",
+  createdAt: "2026-11-20T17:00:00.000Z",
+  closedAt: "2026-11-20T17:00:00.000Z",
+  notes: null,
+  cancelReason: null,
+  orders: [
+    {
+      id: id(801),
+      locatorNumber: 12,
+      sequence: 1,
+      totalAmount: "3500.00",
+      notes: null,
+      createdAt: "2026-11-20T17:00:00.000Z",
+      lines: [
+        {
+          id: id(802),
+          productId: id(8),
+          name: "Cappuccino",
+          lineKind: "product",
+          parentLineId: null,
+          quantity: 1,
+          listPrice: "3500.00",
+          unitPrice: "3500.00",
+          lineTotal: "3500.00",
+          priceReason: null,
+          notes: null,
+          recipeVersionId: null,
+          compositionStatus: "not_required",
+          modifiers: [],
+          vatRate: "0.00",
+          netTotal: "3500.00",
+          vatTotal: "0.00",
+        },
+      ],
+    },
+  ],
+  payments: [
+    {
+      id: id(803),
+      kind: "collection",
+      collector: "local",
+      methodName: "Efectivo",
+      methodKind: "cash",
+      amount: "3500.00",
+      reference: null,
+      originalPaymentId: null,
+      createdAt: "2026-11-20T17:00:00.000Z",
+      actorId: "history-cashier",
+      commissionPercent: "0.00",
+      commissionAmount: "0.00",
+      settlementNet: "3500.00",
+    },
+  ],
+};
+const printingSnapshot: PrintingSnapshot = {
+  ready: false,
+  canConfigure: false,
+  canManage: false,
+  settings: { enabled: false, revision: 1, printerName: "" },
+  connector: null,
+  jobs: [],
+  message: "Impresión desactivada en el fixture.",
+};
 function configuration(productId: string, modifierScenario = false) {
   const product = rows.find((row) => row.id === productId)!;
   if (modifierScenario && [id(1), id(2)].includes(productId)) {
@@ -316,9 +484,19 @@ type Call = { method: string; path: string; elapsedMs: number };
 const longProductName =
   "Waffle de chipá con jamón, queso y una descripción extendida para comprobar el ajuste de nombres " +
   "superextensosininterrupciones".repeat(3);
-type SurfaceFixtureOptions = { edgeCases?: boolean; modifiers?: boolean };
+type SurfaceFixtureOptions = {
+  edgeCases?: boolean;
+  modifiers?: boolean;
+  combos?: boolean;
+  navigation?: boolean;
+};
 async function mount(page: Page, options: SurfaceFixtureOptions = {}) {
-  const { edgeCases = false, modifiers = false } = options;
+  const {
+    edgeCases = false,
+    modifiers = false,
+    combos = false,
+    navigation = false,
+  } = options;
   const calls: Call[] = [],
     errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -387,17 +565,20 @@ async function mount(page: Page, options: SurfaceFixtureOptions = {}) {
       if (kind === "products")
         return route.fulfill({
           json: {
-            rows: edgeCases
-              ? rows.map((row, index) =>
-                  index === rows.length - 1
-                    ? { ...row, name: longProductName, imageAssetId: null }
-                    : row,
-                )
-              : rows,
+            rows: [
+              ...(edgeCases
+                ? rows.map((row, index) =>
+                    index === rows.length - 1
+                      ? { ...row, name: longProductName, imageAssetId: null }
+                      : row,
+                  )
+                : rows),
+              ...(combos ? [comboRow] : []),
+            ],
             categories: edgeCases
               ? [...categories, { id: "empty", name: "Sin productos" }]
               : categories,
-            total: rows.length,
+            total: rows.length + Number(combos),
             offset: 0,
           },
         });
@@ -413,8 +594,61 @@ async function mount(page: Page, options: SurfaceFixtureOptions = {}) {
             total: 4,
           },
         });
+      if (kind === "customers" && navigation)
+        return route.fulfill({
+          json: {
+            rows: [
+              {
+                id: id(850),
+                name: "Cliente de prueba",
+                email: "cliente@example.test",
+              },
+            ],
+            total: 1,
+          },
+        });
       return route.fulfill({ json: { rows: [], total: 0 } });
     }
+    if (
+      navigation &&
+      url.pathname === "/api/sales" &&
+      route.request().method() === "GET"
+    )
+      return route.fulfill({
+        json: { rows: [historicalSale], total: 1, offset: 0 },
+      });
+    if (navigation && url.pathname === "/api/sales/" + historicalSale.id)
+      return route.fulfill({ json: historicalSale });
+    if (navigation && url.pathname === "/api/fulfillment/state")
+      return route.fulfill({
+        json: {
+          capabilities: { deliver: false },
+          combos: [],
+          rows: [
+            {
+              lineId: id(802),
+              name: "Cappuccino",
+              orderId: id(801),
+              returnLots: [],
+              progress: {
+                mode: "direct",
+                ordered: 1,
+                completed: 1,
+                delivered: 1,
+                cancelled: 0,
+              },
+              task: null,
+              notes: null,
+            },
+          ],
+          cancelled: false,
+          resolution: null,
+        },
+      });
+    if (navigation && url.pathname === "/api/printing")
+      return route.fulfill({ json: printingSnapshot });
+    if (combos && url.pathname === `/api/sales/products/${comboRow.id}/combo`)
+      return route.fulfill({ json: comboConfiguration });
     const config = url.pathname.match(
       /^\/api\/sales\/products\/([^/]+)\/configuration$/,
     );
@@ -446,6 +680,455 @@ async function mount(page: Page, options: SurfaceFixtureOptions = {}) {
   return { calls, errors, catalogueReadyMs };
 }
 const profiles: unknown[] = [];
+async function showOrder(page: Page) {
+  const summary = page.getByRole("button", { name: /^Ver pedido/ });
+  if (await summary.isVisible()) await summary.click();
+  await expect(page.getByTestId("cart-lines")).toBeVisible();
+  return page.locator("[data-pos-order]");
+}
+async function showProducts(page: Page) {
+  const back = page.getByRole("button", {
+    name: "Seguir agregando",
+    exact: true,
+  });
+  if (await back.isVisible()) await back.click();
+}
+async function addDefaultOrder(page: Page) {
+  const options = await openProductOptions(page);
+  await options
+    .getByRole("button", { name: "Agregar al pedido", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Agregar Shake Oreo", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Agregar Soft Frutilla", exact: true })
+    .click();
+}
+async function saveOptions(dialog: Locator) {
+  await dialog
+    .getByRole("button", {
+      name: /^(Agregar al pedido|Guardar opciones|Guardar cambios)$/,
+    })
+    .click();
+}
+async function expectTouchControl(page: Page, control: Locator) {
+  await expect(control).toBeVisible();
+  const box = await control.boundingBox();
+  const viewport = page.viewportSize()!;
+  expect(box!.width).toBeGreaterThanOrEqual(44);
+  expect(box!.height).toBeGreaterThanOrEqual(44);
+  expect(box!.x).toBeGreaterThanOrEqual(0);
+  expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width + 1);
+  expect(box!.y).toBeGreaterThanOrEqual(0);
+  expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height + 1);
+}
+async function expectOrderWidth(page: Page) {
+  const viewport = page.viewportSize()!;
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(viewport.width);
+  const widths = await page
+    .locator("[data-pos-order], [data-testid=cart-line]")
+    .evaluateAll((elements) =>
+      elements.map((element) => ({
+        width: element.clientWidth,
+        content: element.scrollWidth,
+      })),
+    );
+  for (const width of widths)
+    expect(width.content).toBeLessThanOrEqual(width.width + 1);
+}
+const businessRequests = (calls: Call[]) => ({
+  catalogue: calls.filter((call) => call.path.includes("kind=products")).length,
+  configuration: calls.filter((call) => call.path.includes("/configuration"))
+    .length,
+  combos: calls.filter((call) => /\/combo[?]/.test(call.path)).length,
+});
+
+for (const viewport of [
+  { width: 320, height: 720 },
+  { width: 360, height: 740 },
+  { width: 390, height: 844 },
+  { width: 768, height: 1024 },
+  { width: 1024, height: 768 },
+  { width: 1280, height: 800 },
+  { width: 390, height: 640 },
+])
+  test(`order layout remains physically usable at ${viewport.width}x${viewport.height}`, async ({
+    page,
+  }) => {
+    test.setTimeout(60000);
+    await page.setViewportSize(viewport);
+    const app = await mount(page);
+    await addDefaultOrder(page);
+    const order = await showOrder(page);
+    await expect(page.getByTestId("cart-line")).toHaveCount(3);
+    await expect
+      .poll(
+        async () =>
+          (await page.getByTestId("cart-lines").boundingBox())?.height ?? 0,
+      )
+      .toBeGreaterThanOrEqual(44);
+    const plus = order.getByRole("button", {
+      name: "Aumentar Oreo Iced Latte",
+      exact: true,
+    });
+    const minus = order.getByRole("button", {
+      name: "Disminuir Oreo Iced Latte",
+      exact: true,
+    });
+    await plus.click();
+    await expectTouchControl(page, plus);
+    await expect(page.getByTestId("cart-total")).toHaveText(/26[.]400/);
+    await minus.click();
+    await expectTouchControl(page, minus);
+    await expect(page.getByTestId("cart-total")).toHaveText(/18[.]900/);
+    await order
+      .getByRole("button", {
+        name: "Editar opciones de Oreo Iced Latte",
+        exact: true,
+      })
+      .click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Cancelar", exact: true })
+      .click();
+    const checkout = order.getByRole("button", {
+      name: "Continuar al cobro",
+      exact: true,
+    });
+    await expectTouchControl(page, checkout);
+    await expectOrderWidth(page);
+    await expect(page.locator("[data-pos-catalogue]")).toHaveCount(1);
+    await expect(page.getByTestId("cart-lines")).toHaveCount(1);
+    if (reportDirectory) {
+      await mkdir(reportDirectory, { recursive: true });
+      await page.screenshot({
+        path: join(
+          reportDirectory,
+          `order-${viewport.width}x${viewport.height}.png`,
+        ),
+      });
+    }
+    await checkout.click();
+    await expect(
+      page
+        .getByRole("dialog")
+        .getByRole("heading", { name: "Registrar cobro", exact: true }),
+    ).toBeVisible();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: /^(Cancelar|Volver al pedido)$/ })
+      .click();
+    await expect(page.getByTestId("cart-total")).toHaveText(/18[.]900/);
+    await showProducts(page);
+    await expect(
+      page
+        .getByRole("button", { name: "Agregar Oreo Iced Latte", exact: true })
+        .getByText("1 en pedido", { exact: true }),
+    ).toBeVisible();
+    expect(app.errors).toEqual([]);
+  });
+
+test("order line edits, notes, removal and undo retain the configured draft on mobile", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const app = await mount(page, { modifiers: true });
+  let options = await openProductOptions(page);
+  await saveOptions(options);
+  const order = await showOrder(page);
+  const line = page.getByTestId("cart-line");
+  await order
+    .getByRole("button", { name: "Aumentar Oreo Iced Latte", exact: true })
+    .click();
+  await expect(page.getByTestId("cart-total")).toHaveText(/15[.]200/);
+  const editNotes = () =>
+    line
+      .getByRole("button", {
+        name: "Editar observaciones de Oreo Iced Latte",
+        exact: true,
+      })
+      .click();
+  await editNotes();
+  let note = page.getByRole("dialog");
+  await note
+    .getByRole("textbox", {
+      name: "Observaciones de Oreo Iced Latte",
+      exact: true,
+    })
+    .fill("Nota descartada");
+  await note.getByRole("button", { name: "Cancelar", exact: true }).click();
+  await expect(line).not.toContainText("Nota descartada");
+  await editNotes();
+  note = page.getByRole("dialog");
+  await note
+    .getByRole("textbox", {
+      name: "Observaciones de Oreo Iced Latte",
+      exact: true,
+    })
+    .fill("Sin hielo");
+  await note
+    .getByRole("button", { name: "Guardar cambios", exact: true })
+    .click();
+  await expect(line).toContainText("Sin hielo");
+  await line
+    .getByRole("button", {
+      name: "Editar opciones de Oreo Iced Latte",
+      exact: true,
+    })
+    .click();
+  options = page.getByRole("dialog");
+  await modifierLabel(options, "Mango").click();
+  await options
+    .getByRole("button", { name: "Aumentar Coco", exact: true })
+    .click();
+  await options.getByRole("button", { name: "Cancelar", exact: true }).click();
+  await expect(line).toContainText(/1 [x×] Chocolate/);
+  await expect(page.getByTestId("cart-total")).toHaveText(/15[.]200/);
+  await line
+    .getByRole("button", {
+      name: "Editar opciones de Oreo Iced Latte",
+      exact: true,
+    })
+    .click();
+  options = page.getByRole("dialog");
+  await expect(modifierRadio(options, "Chocolate")).toBeChecked();
+  await modifierLabel(options, "Mango").click();
+  await options
+    .getByRole("button", { name: "Aumentar Coco", exact: true })
+    .click();
+  await saveOptions(options);
+  await expect(page.getByTestId("cart-total")).toHaveText(/15[.]600/);
+  await expect(line).toContainText(/1 [x×] Mango/);
+  await expect(line).toContainText(/1 [x×] Coco/);
+  await expect(line).toContainText("Sin hielo");
+  await line
+    .getByRole("button", { name: "Quitar Oreo Iced Latte", exact: true })
+    .click();
+  await expect(line).toHaveCount(0);
+  await expect(page.getByTestId("cart-total")).toHaveText(/0[,.]00/);
+  await order.getByRole("button", { name: "Deshacer", exact: true }).click();
+  await expect(line).toHaveCount(1);
+  await expect(line).toContainText("Sin hielo");
+  await expect(line).toContainText(/1 [x×] Mango/);
+  await expect(page.getByTestId("cart-total")).toHaveText(/15[.]600/);
+  await order
+    .getByRole("button", { name: "Disminuir Oreo Iced Latte", exact: true })
+    .click();
+  await expect(page.getByTestId("cart-total")).toHaveText(/7[.]800/);
+  expect(app.errors).toEqual([]);
+});
+
+test("order draft retains customer, locator, notes and quantities through history detail and breakpoints", async ({
+  page,
+}) => {
+  test.setTimeout(60000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  const app = await mount(page, { navigation: true });
+  const customer = page.getByRole("combobox", { name: "Cliente", exact: true });
+  await customer.fill("Cliente de prueba");
+  await page.getByRole("option", { name: /Cliente de prueba/ }).click();
+  await page.getByRole("button", { name: /^Localizador 1\b/ }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Localizador 3", exact: true })
+    .click();
+  await addDefaultOrder(page);
+  await showOrder(page);
+  await page
+    .getByRole("button", { name: "Aumentar Oreo Iced Latte", exact: true })
+    .click();
+  await page.getByRole("button", { name: /Agregar nota al pedido/ }).click();
+  const note = page.getByRole("dialog");
+  await note.getByRole("textbox").fill("Llevar todo junto");
+  await note.getByRole("button", { name: /Guardar/ }).click();
+  await expect
+    .poll(() => businessRequests(app.calls).configuration)
+    .toBe(rows.length);
+  const initial = businessRequests(app.calls);
+  for (const viewport of [
+    { width: 320, height: 720 },
+    { width: 360, height: 740 },
+    { width: 768, height: 1024 },
+    { width: 1024, height: 768 },
+    { width: 1280, height: 800 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await showOrder(page);
+    await expect(page.getByTestId("cart-total")).toHaveText(/26[.]400/);
+    await expect(page.getByTestId("cart-line")).toHaveCount(3);
+    await expect(customer).toHaveValue("Cliente de prueba");
+    await expect(
+      page.getByRole("button", { name: /^Localizador 3\b/ }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /Nota: Llevar todo junto/ }),
+    ).toBeVisible();
+    await expect(page.locator("[data-pos-catalogue]")).toHaveCount(1);
+    await expect(page.getByTestId("cart-lines")).toHaveCount(1);
+    expect(businessRequests(app.calls)).toEqual(initial);
+  }
+  await page.getByRole("button", { name: "Historial", exact: true }).click();
+  await page.getByRole("button", { name: /#42/ }).click();
+  const detail = page.getByRole("dialog");
+  await expect(
+    detail.getByRole("heading", { name: "Venta #42", exact: true }),
+  ).toBeVisible();
+  await detail
+    .getByRole("button", { name: "Cerrar detalle de venta", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Nueva venta", exact: true }).click();
+  await showOrder(page);
+  await expect(page.getByTestId("cart-total")).toHaveText(/26[.]400/);
+  await expect(customer).toHaveValue("Cliente de prueba");
+  await expect(
+    page.getByRole("button", { name: /^Localizador 3\b/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /Nota: Llevar todo junto/ }),
+  ).toBeVisible();
+  expect(businessRequests(app.calls)).toEqual(initial);
+  expect(app.errors).toEqual([]);
+});
+
+test("order combo editing preserves quantity notes and confirmed component choices", async ({
+  page,
+}) => {
+  test.setTimeout(60000);
+  await page.setViewportSize({ width: 768, height: 1024 });
+  const app = await mount(page, { combos: true });
+  for (let index = 0; index < 2; index++) {
+    const options = await openProductOptions(page, "Combo merienda");
+    await options
+      .getByRole("button", { name: "Shake Oreo", exact: true })
+      .click();
+    await options
+      .getByRole("button", { name: "Waffle con jamón y queso", exact: true })
+      .click();
+    await options
+      .getByRole("button", { name: "Agregar combo", exact: true })
+      .click();
+  }
+  const order = await showOrder(page);
+  const line = page.getByTestId("cart-line");
+  await expect(line).toHaveCount(1);
+  await expect(page.getByTestId("cart-total")).toHaveText(/18[.]000/);
+  await line
+    .getByRole("button", {
+      name: "Editar observaciones de Combo merienda",
+      exact: true,
+    })
+    .click();
+  const note = page.getByRole("dialog");
+  await note
+    .getByRole("textbox", {
+      name: "Observaciones de Combo merienda",
+      exact: true,
+    })
+    .fill("Para compartir");
+  await note
+    .getByRole("button", { name: "Guardar cambios", exact: true })
+    .click();
+  await line
+    .getByRole("button", {
+      name: "Editar opciones de Combo merienda",
+      exact: true,
+    })
+    .click();
+  let options = page.getByRole("dialog");
+  await expect(
+    options.getByRole("button", { name: "Shake Oreo", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await options.getByRole("button", { name: /^Cappuccino/ }).click();
+  await options.getByRole("button", { name: "Cancelar", exact: true }).click();
+  await expect(page.getByTestId("cart-total")).toHaveText(/18[.]000/);
+  await expect(line).toContainText("Shake Oreo");
+  await expect(line).not.toContainText("Cappuccino");
+  await line
+    .getByRole("button", {
+      name: "Editar opciones de Combo merienda",
+      exact: true,
+    })
+    .click();
+  options = page.getByRole("dialog");
+  await expect(
+    options.getByRole("button", { name: "Shake Oreo", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await options.getByRole("button", { name: /^Cappuccino/ }).click();
+  await options
+    .getByRole("button", { name: "Agregar combo", exact: true })
+    .click();
+  await expect(page.getByTestId("cart-total")).toHaveText(/19[.]000/);
+  await expect(line).toHaveCount(1);
+  await expect(line).toContainText("Cappuccino");
+  await expect(line).toContainText("Para compartir");
+  await expect(
+    order.getByRole("button", { name: "Aumentar Combo merienda", exact: true }),
+  ).toBeVisible();
+  expect(app.errors).toEqual([]);
+});
+
+test("order scroll keeps its heading total and checkout action reachable", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const app = await mount(page);
+  for (const row of rows.slice(1))
+    await page
+      .getByRole("button", { name: `Agregar ${row.name}`, exact: true })
+      .click();
+  const order = await showOrder(page);
+  const heading = order.getByRole("heading", {
+    name: "Pedido actual",
+    exact: true,
+  });
+  const checkout = order.getByRole("button", {
+    name: "Continuar al cobro",
+    exact: true,
+  });
+  const lines = page.getByTestId("cart-lines");
+  const before = {
+    heading: await heading.boundingBox(),
+    checkout: await checkout.boundingBox(),
+    total: await page.getByTestId("cart-total").textContent(),
+  };
+  expect(
+    await lines.evaluate((element) => element.scrollHeight),
+  ).toBeGreaterThan(await lines.evaluate((element) => element.clientHeight));
+  await lines.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await expect
+    .poll(() => lines.evaluate((element) => element.scrollTop))
+    .toBeGreaterThan(0);
+  const after = {
+    heading: await heading.boundingBox(),
+    checkout: await checkout.boundingBox(),
+    total: await page.getByTestId("cart-total").textContent(),
+  };
+  for (const region of ["heading", "checkout"] as const)
+    for (const value of ["x", "y", "width", "height"] as const)
+      expect(
+        Math.abs(after[region]![value] - before[region]![value]),
+      ).toBeLessThanOrEqual(1);
+  expect(after.total).toBe(before.total);
+  await expectTouchControl(page, checkout);
+  await expectOrderWidth(page);
+  if (reportDirectory) {
+    await mkdir(reportDirectory, { recursive: true });
+    await page.screenshot({
+      path: join(reportDirectory, "order-scroll-390.png"),
+    });
+    await writeFile(
+      join(reportDirectory, "order-scroll.json"),
+      JSON.stringify({ before, after }, null, 2),
+    );
+  }
+  expect(app.errors).toEqual([]);
+});
 test("modifiers keep header and footer fixed while option groups scroll", async ({
   page,
 }) => {
@@ -1021,7 +1704,9 @@ for (const viewport of [
     await page.setViewportSize(viewport);
     expect(catalogueCalls()).toBe(before.catalogue);
     expect(configurationCalls()).toBe(before.configuration);
-    await page.getByRole("button", { name: "Cobrar", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Continuar al cobro", exact: true })
+      .click();
     const payment = page.getByRole("dialog");
     await payment
       .getByRole("button", { name: "Efectivo", exact: true })

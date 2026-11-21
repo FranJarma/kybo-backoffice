@@ -245,7 +245,9 @@ test("configures VAT and fees, charges final prices and preserves the historical
   await expect(add).toContainText("10.000,00");
   await add.tap();
   await expect(page.getByTestId("cart-total")).toHaveText(/10\.000,00/);
-  await page.getByRole("button", { name: "Cobrar", exact: true }).tap();
+  await page
+    .getByRole("button", { name: "Continuar al cobro", exact: true })
+    .tap();
   dialog = page.getByRole("dialog");
   await expect(dialog.getByText(/Comisión/i)).toHaveCount(0);
   await dialog.getByRole("button", { name: methodName, exact: true }).tap();

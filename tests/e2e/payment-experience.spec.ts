@@ -79,7 +79,9 @@ test("payment dialog distinguishes empty methods, retries, cash and split paymen
   ).toBe(true);
   await page.goto("/sales");
   await page.getByRole("button", { name: "Agregar Tea", exact: true }).tap();
-  await page.getByRole("button", { name: "Cobrar", exact: true }).tap();
+  await page
+    .getByRole("button", { name: "Continuar al cobro", exact: true })
+    .tap();
   const dialog = page.getByRole("dialog");
   await expect(
     dialog.getByText("No hay medios de pago configurados.", { exact: true }),

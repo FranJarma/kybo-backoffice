@@ -9,6 +9,11 @@ import {
 } from "@/components/sales/touch-selection";
 import type { PublicConfiguration } from "@/modules/recipes/configuration";
 import { SalesManager } from "@/components/sales/sales-manager";
+import {
+  confirmedComboConfiguration,
+  confirmedProductConfiguration,
+  saveConfiguredLine,
+} from "@/components/sales/order-configuration";
 vi.stubGlobal("React", React);
 const line = (extra: Partial<CartLine> = {}): CartLine => ({
   productId: "tea",
@@ -96,6 +101,108 @@ describe("tactile cart consolidation", () => {
     expect(appendCartLine(lines, line({ productId: "0" }))[0].quantity).toBe(2);
   });
 });
+describe("confirmed order configurations", () => {
+  const row = { id: "tea", name: "Tea" };
+  const selection = {
+    expectedRecipeVersionId: "recipe2",
+    modifiers: [{ recipeModifierOptionId: "mango", count: 2 }],
+    modifierLabels: ["2 x Mango"],
+    expectedPrice: "1550.75",
+  };
+
+  it("uses exact-match merge when adding and preserves quantity and notes during option edits", () => {
+    const update = confirmedProductConfiguration(
+      {
+        ...config([
+          { id: "pearls", name: "Perlas", min: 0, max: 3, options: [] },
+        ]),
+        fulfillmentVersionId: "physical2",
+        pricingRevision: 3,
+      },
+      selection,
+    );
+    const first = saveConfiguredLine([], { row }, update);
+    expect(saveConfiguredLine(first, { row }, update)[0].quantity).toBe(2);
+
+    const original = [
+      line({
+        quantity: 3,
+        notes: "Sin hielo",
+        price: "900",
+        priceReason: "Promoción",
+      }),
+      { ...first[0], notes: "Sin hielo" },
+    ];
+    const edited = saveConfiguredLine(original, { row, index: 0 }, update);
+
+    expect(edited).toHaveLength(2);
+    expect(edited[0]).toMatchObject({
+      ...selection,
+      quantity: 3,
+      notes: "Sin hielo",
+      price: "1550,75",
+      priceReason: "",
+      expectedFulfillmentVersionId: "physical2",
+      expectedPricingRevision: 3,
+    });
+    expect(edited[1]).toBe(original[1]);
+    expect(original[0].priceReason).toBe("Promoción");
+    expect(
+      saveConfiguredLine(
+        edited,
+        { row: { ...row, id: "another" }, index: 0 },
+        update,
+      ),
+    ).toBe(edited);
+  });
+
+  it("keeps every combo child binding and published version when updating a cart line", () => {
+    const comboChoices = [
+      {
+        groupId: "g",
+        optionId: "updated",
+        expectedFulfillmentVersionId: "child-physical2",
+        expectedRecipeVersionId: "child-recipe2",
+        modifiers: selection.modifiers,
+      },
+    ];
+    const update = confirmedComboConfiguration(
+      {
+        definition: {
+          id: "combo2",
+          productId: row.id,
+          revision: 2,
+          actorId: "tester",
+          createdAt: new Date(0),
+          groups: [],
+        },
+        basePrice: "2000.00",
+        pricingRevision: 4,
+      },
+      {
+        expectedComboVersionId: "combo2",
+        comboChoices,
+        expectedPrice: "2050.00",
+        modifierLabels: ["1 x Tea (incluido)", ...selection.modifierLabels],
+      },
+    );
+    const original = [line({ quantity: 4, notes: "Separados" })];
+    const [edited] = saveConfiguredLine(original, { row, index: 0 }, update);
+
+    expect(edited).toMatchObject({
+      quantity: 4,
+      notes: "Separados",
+      price: "2050",
+      priceReason: "",
+      expectedComboVersionId: "combo2",
+      expectedPricingRevision: 4,
+      comboChoices,
+      modifiers: [],
+    });
+    expect(edited.expectedRecipeVersionId).toBeUndefined();
+    expect(edited.expectedFulfillmentVersionId).toBeUndefined();
+  });
+});
 it("places the product before modifiers and keeps price editing secondary", () => {
   const cartProps: React.ComponentProps<typeof Cart> = {
     lines: [line({ modifierLabels: ["Perlas mango"] })],
@@ -112,9 +219,25 @@ it("places the product before modifiers and keeps price editing secondary", () =
   expect(html).not.toContain('placeholder="Sin hielo, para compartir…"');
   expect(html).toContain('aria-label="Editar precio de Tea"');
   expect(html).toContain('aria-label="Editar observaciones de Tea"');
-  expect(html).toContain("min-h-12");
+  expect(html).toContain('data-size="icon"');
   expect(html).toContain("overflow-y-auto");
 });
+it("keeps the order total and both review actions in one footer", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(SalesManager, {
+      actorId: "test",
+      branchId: "branch",
+      role: "admin",
+    }),
+  );
+  expect(html.match(/aria-label="Pedido actual"/g)).toHaveLength(1);
+  expect(html).toContain('aria-label="Productos del pedido"');
+  const footer = html.match(/<footer\b[^>]*>([\s\S]*?)<\/footer>/)?.[1];
+  expect(footer).toContain('data-testid="cart-total"');
+  expect(footer).toContain("Continuar al cobro");
+  expect(footer).toContain("Seguir agregando");
+});
+
 it("keeps stock help and order note forms outside the register until requested", () => {
   const html = renderToStaticMarkup(
     React.createElement(SalesManager, {

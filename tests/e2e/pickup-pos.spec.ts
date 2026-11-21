@@ -220,7 +220,10 @@ test("automatic locators follow availability during payment and manual choices r
   await page
     .getByRole("button", { name: "Agregar Kybo Tea", exact: true })
     .click();
-  const pay = page.getByRole("button", { name: "Cobrar", exact: true });
+  const pay = page.getByRole("button", {
+    name: "Continuar al cobro",
+    exact: true,
+  });
   await expect(pay).toBeEnabled();
   await pay.click();
   await page.getByRole("button", { name: "Efectivo", exact: true }).click();
@@ -544,11 +547,21 @@ test("tablet order entry keeps the catalogue spacious and the order accessible a
     page.getByRole("region", { name: "Pedido actual" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Aumentar Kybo Tea" }).tap();
+  await expect(page.getByTestId("cart-total")).toHaveText(/10\.000/);
+  await page.getByRole("button", { name: "Disminuir Kybo Tea" }).tap();
+  await expect(page.getByTestId("cart-total")).toHaveText(/5\.000/);
+  await page.getByRole("button", { name: "Quitar Kybo Tea" }).tap();
+  await expect(page.getByTestId("cart-line")).toHaveCount(0);
+  await page.getByRole("button", { name: "Deshacer", exact: true }).tap();
+  await expect(page.getByTestId("cart-total")).toHaveText(/5\.000/);
+  await page.getByRole("button", { name: "Aumentar Kybo Tea" }).tap();
   await expect(
-    page.getByRole("button", { name: "Cobrar", exact: true }),
+    page.getByRole("button", { name: "Continuar al cobro", exact: true }),
   ).toBeInViewport();
   await page.screenshot({ path: ".next/pos-tablet-order.png", fullPage: true });
-  await page.getByRole("button", { name: "Seguir agregando productos" }).tap();
+  await page
+    .getByRole("button", { name: "Seguir agregando", exact: true })
+    .tap();
   await expect(summary).toContainText("2 unid.");
   await page.getByRole("button", { name: "Herramientas" }).tap();
   await expect(
@@ -562,7 +575,7 @@ test("tablet order entry keeps the catalogue spacious and the order accessible a
   ).toBeVisible();
   await expect(summary).toBeHidden();
   await expect(
-    page.getByRole("button", { name: "Cobrar", exact: true }),
+    page.getByRole("button", { name: "Continuar al cobro", exact: true }),
   ).toBeInViewport();
   expect(
     await page.evaluate(
@@ -578,7 +591,7 @@ test("tablet order entry keeps the catalogue spacious and the order accessible a
   await expect(summary).toContainText("2 unid.");
   await summary.tap();
   await expect(
-    page.getByRole("button", { name: "Cobrar", exact: true }),
+    page.getByRole("button", { name: "Continuar al cobro", exact: true }),
   ).toBeInViewport();
   expect(
     await page.evaluate(
@@ -794,7 +807,10 @@ test("typed customers and optional email travel with checkout without an extra r
   await page
     .getByRole("button", { name: "Agregar Kybo Tea", exact: true })
     .click();
-  const pay = page.getByRole("button", { name: "Cobrar", exact: true });
+  const pay = page.getByRole("button", {
+    name: "Continuar al cobro",
+    exact: true,
+  });
   await expect(pay).toBeDisabled();
   await page
     .getByLabel("Email del cliente (opcional)")
@@ -893,7 +909,10 @@ test("clearing a typed customer also clears its hidden email and permits an occa
   const customer = page.getByRole("combobox", { name: "Cliente", exact: true });
   await customer.fill("Nombre anterior");
   await page.getByLabel("Email del cliente (opcional)").fill("invalido");
-  const pay = page.getByRole("button", { name: "Cobrar", exact: true });
+  const pay = page.getByRole("button", {
+    name: "Continuar al cobro",
+    exact: true,
+  });
   await expect(pay).toBeDisabled();
   await customer.fill("");
   await customer.press("Tab");

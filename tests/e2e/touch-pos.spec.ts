@@ -109,7 +109,7 @@ test("touch register adds directly, preserves uncertain payment and refreshes st
     0,
   );
   await expect(
-    page.getByRole("button", { name: "Cobrar", exact: true }),
+    page.getByRole("button", { name: "Continuar al cobro", exact: true }),
   ).toBeDisabled();
   await expect(
     page.getByRole("button", { name: "Registrar sin cargo", exact: true }),
@@ -207,7 +207,9 @@ test("touch register adds directly, preserves uncertain payment and refreshes st
     .fill("tactil");
   await expect(add).toBeVisible();
   expect(catalogueCalls).toBe(0);
-  await page.getByRole("button", { name: "Cobrar", exact: true }).tap();
+  await page
+    .getByRole("button", { name: "Continuar al cobro", exact: true })
+    .tap();
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: method.name, exact: true }).tap();
   await dialog.getByLabel("Efectivo recibido 1").fill("10000");
@@ -267,9 +269,16 @@ test("touch register adds directly, preserves uncertain payment and refreshes st
       "scrollWidth",
       viewport.width,
     );
+    const summary = page.getByRole("button", { name: /Ver pedido/ });
+    const openedReview = await summary.isVisible();
+    if (openedReview) await summary.tap();
     await expect(
-      page.getByRole("button", { name: "Cobrar", exact: true }),
+      page.getByRole("button", { name: "Continuar al cobro", exact: true }),
     ).toBeVisible();
+    if (openedReview)
+      await page
+        .getByRole("button", { name: "Seguir agregando", exact: true })
+        .tap();
   }
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.screenshot({

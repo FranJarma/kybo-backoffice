@@ -35,3 +35,15 @@ El gate aislado ampliado pasó 4/4 casos y los unitarios 34/34. Verifica resize 
 RED de implementación: 9 fallos esperados por metadata/copy/identidad visual; después se reprodujo y corrigió maxCount=0. GREEN final: 75 casos en 7 archivos, typecheck, ESLint y Prettier. Browser: 5 casos sobre componentes reales pasaron en 1280/768/390; defaults por producto, receta independiente de selección/precio cero, simple/múltiple, límites, disponibilidad, cancelar/reabrir y edición conservando cantidad/notas con precio recalculado. La apariencia usa key persistida con fallback neutro; no se alteran IDs de binding ni consultas adicionales. Se revisaron capturas de los tres tamaños y el pie del modal conserva acciones visibles.
 
 El bootstrap alternativo del helper de tests se completó con PGlite nueva y usuarios descartables; el E2E integrado quedó bloqueado por permisos de socket a 127.0.0.1:3017. No se ejecutaron casos ni se anuló esa restricción.
+
+La revisión independiente detectó claves semánticas de fixtures que no cubrían los UUID reales de modificadores. Una consulta de lectura de identidades activas permitió completar el adaptador con 24 opciones persistidas de cinco grupos. RED: 20 fallos esperados; GREEN: 49 casos focalizados, typecheck, lint y formato. Renombrar opciones no cambia su apariencia; Sin perlas usa X y Sin salsa círculo neutro. Claves nuevas conservan fallback. No se modificaron datos.
+
+El caso adicional de 390x640 desplaza grupos de 0 a 476 px y comprueba posición/tamaño idénticos de cabecera y pie, sin desplazar diálogo o documento. Pasó 1/1. La revisión acotada aprobó los tres hallazgos corregidos sin nuevos bloqueantes.
+
+## Task 4: pedido
+
+RED: el área de líneas medía 0 px a 390x844. Se extrajeron OrderLine, el diálogo y las transformaciones de configuración, conservando el editor aislado de notas/precios y Deshacer. El manager mantiene borrador, caché y coordinación. Cliente y localizador siguen compartidos entre catálogo y revisión.
+
+GREEN: 55 casos focalizados con PGlite descartable; typecheck, lint y formato correctos. El navegador pasó 14/14 en 35 s con componentes reales y HTTP interceptado, incluidos combos, cantidades, notas, eliminar/deshacer, cliente/localizador, historial/detalle y cambios de ancho. Se verificaron 320/360/390/768/1024/1280 y 390x640. La lista a 390x844 ahora mide 189,875 px; el cobro entra sin desplazar la pantalla a 390x640. En alturas pequeñas el resto del contexto y Seguir agregando se alcanzan desplazando la revisión.
+
+Se eliminó un subtotal redundante que recortaba el cobro en 17 px. Cabecera, total y cobro permanecen fijos al desplazar solo las líneas. La selección de origen/consumo usa el naranja aprobado. Revisión independiente de esta etapa en curso.

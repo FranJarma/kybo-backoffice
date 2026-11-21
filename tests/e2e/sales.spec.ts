@@ -268,7 +268,7 @@ test("table keeps multiple orders in one visit, settles balance and delivery pre
     .getByRole("textbox", { name: `Motivo del precio de ${product.name}` })
     .fill("Precio informado por PedidosYa");
   await page
-    .getByRole("button", { name: "Registrar con cobro", exact: true })
+    .getByRole("button", { name: "Continuar al cobro", exact: true })
     .click();
   await dialog
     .getByRole("combobox", { name: "Cobrado por 1" })
