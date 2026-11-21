@@ -16,7 +16,7 @@
 
 **Proyecto de ChatGPT:** Sistema de Gestión de Kybo.
 
-**Estado de esta entrega:** implementación en curso en la feature branch, con contratos concretos en sección12 y evidencia actualizada en docs/pos-ux-ui-verification.md.
+**Estado de esta entrega:** implementación y revisión de aplicación completadas en la feature branch local. Contratos concretos en sección 12; pruebas, capturas, límites y entrega en `docs/pos-ux-ui-verification.md`. La publicación remota con capturas requiere autorización explícita para el repositorio público y quedó pendiente después del rechazo automático.
 
 ## Global Constraints
 
@@ -309,25 +309,25 @@ Son responsabilidades objetivo, no una orden de crear todos esos archivos si ya 
 
 **Interfaces:** consumes la implementación integrada y el baseline; produces evidencia de fidelidad visual, corrección, reutilización y rendimiento, con riesgos pendientes explícitos.
 
-- [ ] Comparar Figma con capturas reales en 1280×800, 768×1024, 390×844 y anchos 320/360/1024. Probar altura corta, teclado, foco, scroll y nombres largos.
-- [ ] Medir de nuevo peticiones, renders y tiempos bajo las mismas condiciones del baseline. Optimizar solo el cuello de botella demostrado y repetir la medición que lo confirma.
-- [ ] Confirmar que no se duplicó lógica de negocio por dispositivo, que las extracciones tienen responsabilidad clara y que no aparecieron dependencias/abstracciones innecesarias.
-- [ ] Ejecutar `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build` y `pnpm test:e2e` con el entorno de test documentado. Si algo está bloqueado por entorno o falla antes de la feature, reportarlo con evidencia; no afirmar que pasó.
-- [ ] Aplicar revisión independiente de especificación y calidad con Superpowers; corregir hallazgos materiales y verificar los cambios afectados.
-- [ ] Actualizar documentación y descripción de PR con comportamiento final, validación, comparación de rendimiento y limitaciones. Entregar la feature branch para revisión; no publicar en producción ni mergear automáticamente.
+- [x] Comparar Figma con capturas reales en 1280×800, 768×1024, 390×844 y anchos 320/360/1024. Probar altura corta, teclado, foco, scroll y nombres largos.
+- [x] Medir de nuevo peticiones, renders y tiempos bajo las mismas condiciones del baseline. Optimizar solo el cuello de botella demostrado y repetir la medición que lo confirma.
+- [x] Confirmar que no se duplicó lógica de negocio por dispositivo, que las extracciones tienen responsabilidad clara y que no aparecieron dependencias/abstracciones innecesarias.
+- [x] Ejecutar `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build` y `pnpm test:e2e` con el entorno de test documentado. Si algo está bloqueado por entorno o falla antes de la feature, reportarlo con evidencia; no afirmar que pasó.
+- [x] Aplicar revisión independiente de especificación y calidad con Superpowers; corregir hallazgos materiales y verificar los cambios afectados.
+- [x] Actualizar documentación y descripción de PR con comportamiento final, validación, comparación de rendimiento y limitaciones. Entregar la feature branch para revisión; no publicar en producción ni mergear automáticamente.
 
 ## 9. Criterios de aceptación del conjunto
 
-- [ ] El flujo implementado se corresponde con el Figma unificado y su último ajuste del cobro.
-- [ ] Productos, modificadores, revisión y cobro funcionan con datos reales en los tres tamaños, no solo con el ejemplo del prototipo.
-- [ ] No hay pérdida de borrador por navegación/cambio de ancho ni operaciones duplicadas por reintentos.
-- [ ] Las reglas actuales de combos, recetas, precio, impuestos, comisiones, permisos, stock y localizadores están preservadas salvo cambios deliberados y probados.
-- [ ] No hay regresión demostrada de carga/caché/polling; las optimizaciones reportadas tienen medición antes/después.
-- [ ] El manager tiene menor mezcla de responsabilidades y usa unidades compartidas; no existen implementaciones paralelas por viewport.
-- [ ] El refactor no contamina el tema de módulos ajenos al POS.
-- [ ] Las pruebas requeridas se ejecutaron o sus bloqueos están documentados de forma verificable.
-- [ ] Los assets aprobados son persistentes y correctos; no se usan capturas completas de Figma como UI ni URLs temporales de exportación en producción.
-- [ ] Existe resumen final del diff, validación y riesgos. Rama exacta: `feature/ux-ui-pos-improvements`.
+- [x] El flujo implementado se corresponde con el Figma unificado y su último ajuste del cobro.
+- [x] Productos, modificadores, revisión y cobro funcionan con datos reales en los tres tamaños, no solo con el ejemplo del prototipo.
+- [x] No hay pérdida de borrador por navegación/cambio de ancho ni operaciones duplicadas por reintentos.
+- [x] Las reglas actuales de combos, recetas, precio, impuestos, comisiones, permisos, stock y localizadores están preservadas salvo cambios deliberados y probados.
+- [x] No hay regresión demostrada de carga/caché/polling; las optimizaciones reportadas tienen medición antes/después.
+- [x] El manager tiene menor mezcla de responsabilidades y usa unidades compartidas; no existen implementaciones paralelas por viewport.
+- [x] El refactor no contamina el tema de módulos ajenos al POS.
+- [x] Las pruebas requeridas se ejecutaron o sus bloqueos están documentados de forma verificable.
+- [x] Los assets aprobados son persistentes y correctos; no se usan capturas completas de Figma como UI ni URLs temporales de exportación en producción.
+- [x] Existe resumen final del diff, validación y riesgos. Rama exacta: `feature/ux-ui-pos-improvements`.
 
 ## 10. Mensaje para pegar en el nuevo chat
 
@@ -354,9 +354,9 @@ Preservá las mejoras de velocidad existentes: caché, carga diferida de configu
 - Las rutas existentes se verificaron en el árbol del repositorio. Los archivos propuestos están identificados como extracciones condicionadas a que no exista equivalente.
 - Se preservan los contratos conocidos y se exige leer las firmas restantes antes de fijar extracciones; este documento no inventa la estructura interna de los archivos no leídos.
 - Los cinco focos de revisión tienen pruebas y tareas responsables.
-- La creación de la rama y la ejecución del código corresponden al nuevo chat; este archivo no afirma que esos pasos ya ocurrieron.
+- La rama exacta y las siete etapas se completaron en esta ejecución. La lista de aceptación registra el alcance implementado; la verificación diferencia checks aprobados, fallos preexistentes y bloqueos de entorno.
 
-## 12. Contratos concretos del checkout (20 de noviembre de 2026)
+## 12. Contratos concretos del checkout (20–21 de noviembre de 2026)
 
 ### Base y aislamiento
 
@@ -409,7 +409,7 @@ Preservá las mejoras de velocidad existentes: caché, carga diferida de configu
 4. Caja: apertura local ya implementada; seguir revalidación transaccional. No ejecutar operaciones reales.
 5. Resiliencia: falta exclusión sincrónica en submit/retry de useOperation. Se ampliará únicamente por este fallo demostrado con dos invocaciones en el mismo turno; no se creará otro sistema de idempotencia.
 6. Stock: StockShortageNotice abre hoy otro Dialog desde PaymentDialog. El detalle debe mostrarse inline/desplegable.
-7. Fotos dinámicas: no sustituir imágenes reales por las del pedido ilustrativo de Figma. No existe correspondencia productId→paleta aprobada en main; usar fallback neutro y un adaptador tipado por IDs hasta disponer de esa correspondencia.
+7. Fotos dinámicas: no sustituir imágenes reales por las del pedido ilustrativo de Figma. Main no tenía correspondencia productId→paleta aprobada. Durante la ejecución se verificaron nueve IDs contra Figma y se incorporaron sus ocho filas exactas; los demás conservan fallback neutro. El adaptador es tipado y no compara nombres.
 8. Fuente y assets: no agregar URLs efímeras al runtime. Mantener los iconos Lucide existentes y descargar solo assets exactos cuando sean estáticos y necesarios.
 9. Apariencia de modificadores: las claves persistidas verificadas de Perlas, Salsa y Helado se resuelven en `src/components/sales/modifier-presentation.ts`. La clave `229be374-c4bf-4f7c-a4f9-0cc4e5f84700` identifica la X de Sin perlas. La clave `9bf66daa-1dd6-4cfc-a5d9-e99116c46a67` identifica el círculo neutro de Sin salsa. Las claves desconocidas conservan el círculo neutro. El nombre visible se usa solo para la etiqueta.
 
@@ -420,5 +420,5 @@ Preservá las mejoras de velocidad existentes: caché, carga diferida de configu
 - Los E2E reales se ejecutan con scripts/e2e-run.ts y DB temporal; payment-receipt.spec.ts usa además un fixture de navegador sin DB, apropiado para layout/cálculos.
 - sales.spec.ts conserva selectores obsoletos de cliente/medios y “Cobrar y registrar”; fijar baseline antes de actualizarlos.
 - Revisiones: inspección independiente de cobro/recuperación realizada primero en faa5460 y luego corregida expresamente contra b5946319; apertura de caja e incertidumbre previa al fetch ya estaban resueltas en main.
-- Pendiente antes de editar app: checks de main, capturas/peticiones/perfil y commit de esta etapa; registrar sus resultados reales en docs/pos-ux-ui-verification.md.
+- La etapa 1 completó contratos, checks, capturas, peticiones y perfil antes de editar app; commit `29abd3f`. Los resultados y el cierre de las siete etapas están en `docs/pos-ux-ui-verification.md`. La publicación de la rama completa queda como paso final de autorización, con entrega Git local verificable disponible.
 

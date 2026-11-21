@@ -1,0 +1,178 @@
+
+> kybo-operations-next@0.6.0-rc.1 build C:\Users\franj\AppData\Local\Temp\kybo-pos-ux-ui-api
+> next build "--webpack"
+
+[1m[38;2;173;127;168mΓû▓ Next.js 16.3.6[39m[22m (webpack)
+[32m[1mΓ£ô[22m[39m Running next.config.ts took 132ms
+
+[37m[1m [22m[39m Creating an optimized production build ...
+[32m[1mΓ£ô[22m[39m Compiled successfully in 64s
+[37m[1m [22m[39m Running TypeScript ...
+[37m[1m [22m[39m Finished TypeScript in 52s ...
+[37m[1m [22m[39m Collecting page data using 15 workers ...
+[37m[1m [22m[39m Generating static pages using 15 workers (0/100) ...
+Error: BETTER_AUTH_SECRET and BETTER_AUTH_URL are required.
+    at <unknown> (C:\Users\franj\AppData\Local\Temp\kybo-pos-ux-ui-api\.next\server\chunks\8799.js:4:57311)
+    at y (C:\Users\franj\AppData\Local\Temp\kybo-pos-ux-ui-api\.next\server\chunks\8799.js:4:58151)
+    at p (C:\Users\franj\AppData\Local\Temp\kybo-pos-ux-ui-api\.next\server\app\account\password\page.js:1:343)
+Error: DATABASE_URL is required (or explicitly configure KYBO_LOCAL_DB outside production).
+    at l (C:\Users\franj\AppData\Local\Temp\kybo-pos-ux-ui-api\.next\server\chunks\8799.js:1:31189)
+    at k (C:\Users\franj\AppData\Local\Temp\kybo-pos-ux-ui-api\.next\server\chunks\8799.js:1:30642)
+    at p (C:\Users\franj\AppData\Local\Temp\kybo-pos-ux-ui-api\.next\server\app\account\password\page.js:1:332)
+[37m[1m [22m[39m Generating static pages using 15 workers (25/100) 
+[37m[1m [22m[39m Generating static pages using 15 workers (50/100) 
+[37m[1m [22m[39m Generating static pages using 15 workers (75/100) 
+[32m[1mΓ£ô[22m[39m Generating static pages using 15 workers (100/100) in 4.5s
+[37m[1m [22m[39m Finalizing page optimization ...
+[37m[1m [22m[39m Collecting build traces ...
+
+[4mRoute (app)[24m
+Γöî ╞Æ /
+Γö£ Γùï /_not-found
+Γö£ ╞Æ /[entity]
+Γö£ ╞Æ /account/password
+Γö£ ╞Æ /api/account/password
+Γö£ ╞Æ /api/account/recovery
+Γö£ ╞Æ /api/attendance
+Γö£ ╞Æ /api/attendance/qr
+Γö£ ╞Æ /api/attendance/schedule-preview
+Γö£ ╞Æ /api/auth/[...all]
+Γö£ ╞Æ /api/branches
+Γö£ ╞Æ /api/branches/[id]
+Γö£ ╞Æ /api/branches/[id]/address
+Γö£ ╞Æ /api/branches/[id]/address/search
+Γö£ ╞Æ /api/branches/[id]/locations
+Γö£ ╞Æ /api/branches/[id]/members
+Γö£ ╞Æ /api/branches/[id]/products/[productId]
+Γö£ ╞Æ /api/branches/current
+Γö£ ╞Æ /api/branches/select
+Γö£ ╞Æ /api/cash
+Γö£ ╞Æ /api/cash/photos
+Γö£ ╞Æ /api/cash/photos/[id]
+Γö£ ╞Æ /api/cash/status
+Γö£ ╞Æ /api/catalog/[entity]
+Γö£ ╞Æ /api/catalog/[entity]/[id]
+Γö£ ╞Æ /api/catalog/[entity]/[id]/move
+Γö£ ╞Æ /api/finance/break-even
+Γö£ ╞Æ /api/finance/expenses
+Γö£ ╞Æ /api/fulfillment/[action]
+Γö£ ╞Æ /api/identity
+Γö£ ╞Æ /api/identity/policy
+Γö£ ╞Æ /api/inventory
+Γö£ ╞Æ /api/inventory/[id]
+Γö£ ╞Æ /api/inventory/adjustments
+Γö£ ╞Æ /api/inventory/internal-use
+Γö£ ╞Æ /api/inventory/recalls
+Γö£ ╞Æ /api/inventory/replenishment
+Γö£ ╞Æ /api/inventory/reservations
+Γö£ ╞Æ /api/inventory/supply-alerts
+Γö£ ╞Æ /api/invitations/onboarding
+Γö£ ╞Æ /api/items/[id]/suppliers
+Γö£ ╞Æ /api/media
+Γö£ ╞Æ /api/media/[id]
+Γö£ ╞Æ /api/modifier-groups
+Γö£ ╞Æ /api/modifier-groups/[id]
+Γö£ ╞Æ /api/operations/day
+Γö£ ╞Æ /api/operations/day/reconcile
+Γö£ ╞Æ /api/operations/tasks/[id]
+Γö£ ╞Æ /api/pickup
+Γö£ ╞Æ /api/pickup/orders/[id]
+Γö£ ╞Æ /api/preparation
+Γö£ ╞Æ /api/preparation/[id]
+Γö£ ╞Æ /api/preparation/metrics
+Γö£ ╞Æ /api/preparation/people
+Γö£ ╞Æ /api/preparation/settings
+Γö£ ╞Æ /api/preparation/settings/[action]
+Γö£ ╞Æ /api/printing
+Γö£ ╞Æ /api/printing/connector
+Γö£ ╞Æ /api/printing/installer
+Γö£ ╞Æ /api/procurement/orders
+Γö£ ╞Æ /api/procurement/orders/[id]
+Γö£ ╞Æ /api/procurement/orders/[id]/advances
+Γö£ ╞Æ /api/product-option-groups
+Γö£ ╞Æ /api/product-option-groups/[id]
+Γö£ ╞Æ /api/production
+Γö£ ╞Æ /api/production/[id]
+Γö£ ╞Æ /api/production/assignees
+Γö£ ╞Æ /api/production/orders
+Γö£ ╞Æ /api/production/orders/[id]
+Γö£ ╞Æ /api/production/preview
+Γö£ ╞Æ /api/products/[id]/combo
+Γö£ ╞Æ /api/products/[id]/fulfillment
+Γö£ ╞Æ /api/products/[id]/recipe
+Γö£ ╞Æ /api/products/costs
+Γö£ ╞Æ /api/products/setup
+Γö£ ╞Æ /api/public/pickup/[key]
+Γö£ ╞Æ /api/purchases
+Γö£ ╞Æ /api/purchases/[id]
+Γö£ ╞Æ /api/purchases/[id]/payments
+Γö£ ╞Æ /api/recipes
+Γö£ ╞Æ /api/recipes/[id]
+Γö£ ╞Æ /api/recipes/[id]/conversion
+Γö£ ╞Æ /api/recipes/[id]/cost
+Γö£ ╞Æ /api/recipes/preview
+Γö£ ╞Æ /api/sales
+Γö£ ╞Æ /api/sales/[id]
+Γö£ ╞Æ /api/sales/[id]/[action]
+Γö£ ╞Æ /api/sales/lookup
+Γö£ ╞Æ /api/sales/products/[id]/combo
+Γö£ ╞Æ /api/sales/products/[id]/configuration
+Γö£ ╞Æ /api/sales/tables
+Γö£ ╞Æ /api/settings/cash
+Γö£ ╞Æ /api/settings/users
+Γö£ ╞Æ /api/settings/users/[id]/recovery
+Γö£ ╞Æ /api/staff/work
+Γö£ ╞Æ /api/stock-resolutions/[id]
+Γö£ ╞Æ /api/transfers
+Γö£ ╞Æ /api/transfers/[id]/[action]
+Γö£ ╞Æ /api/transfers/batch
+Γö£ ╞Æ /api/workplace
+Γö£ ╞Æ /branch-assignment
+Γö£ ╞Æ /finance/cash
+Γö£ ╞Æ /finance/expenses
+Γö£ ╞Æ /inventory
+Γö£ ╞Æ /inventory/internal-use
+Γö£ ╞Æ /inventory/items
+Γö£ ╞Æ /inventory/presentations
+Γö£ ╞Æ /inventory/purchases
+Γö£ ╞Æ /inventory/replenishment
+Γö£ ╞Æ /inventory/suppliers
+Γö£ ╞Æ /inventory/supply-alerts
+Γö£ ╞Æ /inventory/transfers
+Γö£ Γùï /invite
+Γö£ ╞Æ /kitchen
+Γö£ ╞Æ /kitchen/production
+Γö£ ╞Æ /login
+Γö£ Γùï /manifest.webmanifest
+Γö£ ╞Æ /onboarding
+Γö£ ╞Æ /operations/day
+Γö£ ╞Æ /pickup/[key]
+Γö£ ╞Æ /products
+Γö£ ╞Æ /products/categories
+Γö£ ╞Æ /products/combo-groups
+Γö£ ╞Æ /products/ingredients
+Γö£ ╞Æ /products/modifiers
+Γö£ ╞Æ /products/recipes
+Γö£ ╞Æ /pwa-icon/[size]
+Γö£ ╞Æ /recover-password
+Γö£ ╞Æ /sales
+Γö£ ╞Æ /sales/customers
+Γö£ ╞Æ /sales/tables
+Γö£ ╞Æ /settings/attendance
+Γö£ ╞Æ /settings/branches
+Γö£ ╞Æ /settings/cash
+Γö£ ╞Æ /settings/payment-methods
+Γö£ ╞Æ /settings/printing
+Γö£ ╞Æ /settings/store-account
+Γö£ ╞Æ /settings/users
+Γö£ ╞Æ /staff/attendance
+Γö£ ╞Æ /staff/attendance/qr
+Γö£ ╞Æ /staff/attendance/scan
+Γö£ ╞Æ /staff/schedule
+Γö£ ╞Æ /staff/work
+Γöö ╞Æ /workplace
+
+
+Γùï  (Static)   prerendered as static content
+╞Æ  (Dynamic)  server-rendered on demand
+

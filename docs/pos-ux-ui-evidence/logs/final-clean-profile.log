@@ -1,0 +1,11 @@
+
+Running 3 tests using 1 worker
+
+(node:46468) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1/3] tests\e2e\pos-surface.spec.ts:3077:3 ΓÇ║ POS baseline preserves one draft and cached options at 1280px
+[2/3] tests\e2e\pos-surface.spec.ts:3077:3 ΓÇ║ POS baseline preserves one draft and cached options at 768px
+[3/3] tests\e2e\pos-surface.spec.ts:3077:3 ΓÇ║ POS baseline preserves one draft and cached options at 390px
+  3 passed (15.2s)

@@ -1,0 +1,310 @@
+
+Running 13 tests using 1 worker
+
+(node:32648) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x   1 tests\e2e\pos-operation.spec.ts:496:3 ΓÇ║ retries the identical command after 400 and failed local cleanup (5.7s)
+(node:24604) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x   2 tests\e2e\pos-operation.spec.ts:496:3 ΓÇ║ retries the identical command after 409 and failed local cleanup (5.7s)
+(node:42236) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x   3 tests\e2e\pos-surface.spec.ts:3374:5 ΓÇ║ shell catalogue has a physical product target at 320 with delivery (1.2s)
+(node:13164) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x   4 tests\e2e\pos-surface.spec.ts:3374:5 ΓÇ║ shell catalogue has a physical product target at 320 with receipt (1.8s)
+(node:40060) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x   5 tests\e2e\pos-surface.spec.ts:3374:5 ΓÇ║ shell catalogue has a physical product target at 360 with delivery (1.2s)
+(node:32572) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x   6 tests\e2e\pos-surface.spec.ts:3374:5 ΓÇ║ shell catalogue has a physical product target at 360 with receipt (1.8s)
+(node:45132) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x   7 tests\e2e\pos-surface.spec.ts:3374:5 ΓÇ║ shell catalogue has a physical product target at 390 with delivery (1.2s)
+(node:38704) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok  8 tests\e2e\pos-surface.spec.ts:3374:5 ΓÇ║ shell catalogue has a physical product target at 390 with receipt (1.8s)
+  x   9 tests\e2e\pos-surface.spec.ts:3405:1 ΓÇ║ cancel permission rejection releases sale detail and retains the new draft (6.6s)
+(node:30200) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x  10 tests\e2e\pos-surface.spec.ts:3437:3 ΓÇ║ account deep link preserves the discard policy for a saved command (uncertain=false) (6.5s)
+(node:18700) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 11 tests\e2e\pos-surface.spec.ts:3437:3 ΓÇ║ account deep link preserves the discard policy for a saved command (uncertain=true) (1.5s)
+  x  12 tests\e2e\pos-surface.spec.ts:3469:1 ΓÇ║ price refresh sends the current revision and preserves the edited line (1.2s)
+(node:2040) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x  13 tests\e2e\pos-surface.spec.ts:3500:1 ΓÇ║ checkout can safely discard after a stock rejection and failed local cleanup (6.6s)
+
+
+  1) tests\e2e\pos-operation.spec.ts:496:3 ΓÇ║ retries the identical command after 400 and failed local cleanup 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByTestId('state')
+    Expected: "incierto"
+    Received: "edici├│n"
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toHaveText" getByTestId('state') with timeout 5000ms
+      - waiting for getByTestId('state')
+        14 ├ù locator resolved to <output data-testid="state">edici├│n</output>
+           - unexpected value "edici├│n"
+
+
+      503 |     const submit = page.getByRole("button", {name:"Enviar", exact:true});
+      504 |     await submit.click();
+    > 505 |     await expect(page.getByTestId("state")).toHaveText("incierto");
+          |                                             ^
+      506 |     await expect(page.getByTestId("discard")).toHaveText("true");
+      507 |     expect(JSON.parse((await saved(page))!)).toMatchObject({url:"/api/sales",payload:JSON.parse(requests[0].body),outcomeUncertain:false});
+      508 |     await submit.click();
+        at C:\Users\franj\AppData\Local\Temp\kybo-pos-ux-ui-api\tests\e2e\pos-operation.spec.ts:505:45
+
+    Error Context: test-results\pos-operation-retries-the--d08a9-00-and-failed-local-cleanup\error-context.md
+
+  2) tests\e2e\pos-operation.spec.ts:496:3 ΓÇ║ retries the identical command after 409 and failed local cleanup 
+
+    Error: expect(locator).toHaveText(expected) failed
+
+    Locator:  getByTestId('state')
+    Expected: "incierto"
+    Received: "edici├│n"
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toHaveText" getByTestId('state') with timeout 5000ms
+      - waiting for getByTestId('state')
+        14 ├ù locator resolved to <output data-testid="state">edici├│n</output>
+           - unexpected value "edici├│n"
+
+
+      503 |     const submit = page.getByRole("button", {name:"Enviar", exact:true});
+      504 |     await submit.click();
+    > 505 |     await expect(page.getByTestId("state")).toHaveText("incierto");
+          |                                             ^
+      506 |     await expect(page.getByTestId("discard")).toHaveText("true");
+      507 |     expect(JSON.parse((await saved(page))!)).toMatchObject({url:"/api/sales",payload:JSON.parse(requests[0].body),outcomeUncertain:false});
+      508 |     await submit.click();
+        at C:\Users\franj\AppData\Local\Temp\kybo-pos-ux-ui-api\tests\e2e\pos-operation.spec.ts:505:45
+
+    Error Context: test-results\pos-operation-retries-the--20da8-09-and-failed-local-cleanup\error-context.md
+
+  3) tests\e2e\pos-surface.spec.ts:3374:5 ΓÇ║ shell catalogue has a physical product target at 320 with delivery 
+
+    Error: 44 consecutive product pixels must receive pointer input inside the actual shell
+
+    expect(received).toBeTruthy()
+
+    Received: null
+
+      3390 |       await product.evaluate(node=>node.scrollIntoView({block:"center"}));
+      3391 |       const tap = await visibleTouchPoint(product);
+    > 3392 |       expect(tap, "44 consecutive product pixels must receive pointer input inside the actual shell").toBeTruthy();
+           |                                                                                                       ^
+      3393 |       await page.mouse.click(tap!.x,tap!.y);
+      3394 |       await expect(page.getByTestId("cart-line")).toHaveCount(1);
+      3395 |       await expect(page.getByTestId("cart-line")).toContainText("Cappuccino");
+        at C:\Users\franj\AppData\Local\Temp\kybo-pos-ux-ui-api\tests\e2e\pos-surface.spec.ts:3392:103
+
+    Error Context: test-results\pos-surface-shell-catalogu-213ee-target-at-320-with-delivery\error-context.md
+
+    Error Context: test-results\pos-surface-shell-catalogu-213ee-target-at-320-with-delivery\error-context.md
+
+  4) tests\e2e\pos-surface.spec.ts:3374:5 ΓÇ║ shell catalogue has a physical product target at 320 with receipt 
+
+    Error: 44 consecutive product pixels must receive pointer input inside the actual shell
+
+    expect(received).toBeTruthy()
+
+    Received: null
+
+      3390 |       await product.evaluate(node=>node.scrollIntoView({block:"center"}));
+      3391 |       const tap = await visibleTouchPoint(product);
+    > 3392 |       expect(tap, "44 consecutive product pixels must receive pointer input inside the actual shell").toBeTruthy();
+           |                                                                                                       ^
+      3393 |       await page.mouse.click(tap!.x,tap!.y);
+      3394 |       await expect(page.getByTestId("cart-line")).toHaveCount(1);
+      3395 |       await expect(page.getByTestId("cart-line")).toContainText("Cappuccino");
+        at C:\Users\franj\AppData\Local\Temp\kybo-pos-ux-ui-api\tests\e2e\pos-surface.spec.ts:3392:103
+
+    Error Context: test-results\pos-surface-shell-catalogu-a1bc7--target-at-320-with-receipt\error-context.md
+
+    Error Context: test-results\pos-surface-shell-catalogu-a1bc7--target-at-320-with-receipt\error-context.md
+
+  5) tests\e2e\pos-surface.spec.ts:3374:5 ΓÇ║ shell catalogue has a physical product target at 360 with delivery 
+
+    Error: 44 consecutive product pixels must receive pointer input inside the actual shell
+
+    expect(received).toBeTruthy()
+
+    Received: null
+
+      3390 |       await product.evaluate(node=>node.scrollIntoView({block:"center"}));
+      3391 |       const tap = await visibleTouchPoint(product);
+    > 3392 |       expect(tap, "44 consecutive product pixels must receive pointer input inside the actual shell").toBeTruthy();
+           |                                                                                                       ^
+      3393 |       await page.mouse.click(tap!.x,tap!.y);
+      3394 |       await expect(page.getByTestId("cart-line")).toHaveCount(1);
+      3395 |       await expect(page.getByTestId("cart-line")).toContainText("Cappuccino");
+        at C:\Users\franj\AppData\Local\Temp\kybo-pos-ux-ui-api\tests\e2e\pos-surface.spec.ts:3392:103
+
+    Error Context: test-results\pos-surface-shell-catalogu-0050f-target-at-360-with-delivery\error-context.md
+
+    Error Context: test-results\pos-surface-shell-catalogu-0050f-target-at-360-with-delivery\error-context.md
+
+  6) tests\e2e\pos-surface.spec.ts:3374:5 ΓÇ║ shell catalogue has a physical product target at 360 with receipt 
+
+    Error: 44 consecutive product pixels must receive pointer input inside the actual shell
+
+    expect(received).toBeTruthy()
+
+    Received: null
+
+      3390 |       await product.evaluate(node=>node.scrollIntoView({block:"center"}));
+      3391 |       const tap = await visibleTouchPoint(product);
+    > 3392 |       expect(tap, "44 consecutive product pixels must receive pointer input inside the actual shell").toBeTruthy();
+           |                                                                                                       ^
+      3393 |       await page.mouse.click(tap!.x,tap!.y);
+      3394 |       await expect(page.getByTestId("cart-line")).toHaveCount(1);
+      3395 |       await expect(page.getByTestId("cart-line")).toContainText("Cappuccino");
+        at C:\Users\franj\AppData\Local\Temp\kybo-pos-ux-ui-api\tests\e2e\pos-surface.spec.ts:3392:103
+
+    Error Context: test-results\pos-surface-shell-catalogu-f1b03--target-at-360-with-receipt\error-context.md
+
+    Error Context: test-results\pos-surface-shell-catalogu-f1b03--target-at-360-with-receipt\error-context.md
+
+  7) tests\e2e\pos-surface.spec.ts:3374:5 ΓÇ║ shell catalogue has a physical product target at 390 with delivery 
+
+    Error: 44 consecutive product pixels must receive pointer input inside the actual shell
+
+    expect(received).toBeTruthy()
+
+    Received: null
+
+      3390 |       await product.evaluate(node=>node.scrollIntoView({block:"center"}));
+      3391 |       const tap = await visibleTouchPoint(product);
+    > 3392 |       expect(tap, "44 consecutive product pixels must receive pointer input inside the actual shell").toBeTruthy();
+           |                                                                                                       ^
+      3393 |       await page.mouse.click(tap!.x,tap!.y);
+      3394 |       await expect(page.getByTestId("cart-line")).toHaveCount(1);
+      3395 |       await expect(page.getByTestId("cart-line")).toContainText("Cappuccino");
+        at C:\Users\franj\AppData\Local\Temp\kybo-pos-ux-ui-api\tests\e2e\pos-surface.spec.ts:3392:103
+
+    Error Context: test-results\pos-surface-shell-catalogu-27db4-target-at-390-with-delivery\error-context.md
+
+    Error Context: test-results\pos-surface-shell-catalogu-27db4-target-at-390-with-delivery\error-context.md
+
+  8) tests\e2e\pos-surface.spec.ts:3405:1 ΓÇ║ cancel permission rejection releases sale detail and retains the new draft 
+
+    Error: expect(locator).toBeEnabled() failed
+
+    Locator: getByRole('dialog', { name: 'Anular venta #73' }).getByRole('button', { name: 'Descartar env├¡o rechazado' })
+    Expected: enabled
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeEnabled" getByRole('dialog', { name: 'Anular venta #73' }).getByRole('button', { name: 'Descartar env├¡o rechazado' }) with timeout 5000ms
+      - waiting for getByRole('dialog', { name: 'Anular venta #73' }).getByRole('button', { name: 'Descartar env├¡o rechazado' })
+
+
+      3423 |   await expect(sameCommand(cancellation)).toBeEnabled();
+      3424 |   await page.keyboard.press("Escape");
+    > 3425 |   await expect(rejectedDiscard(cancellation)).toBeEnabled();
+           |                                               ^
+      3426 |   await rejectedDiscard(cancellation).click();
+      3427 |   await page.keyboard.press("Escape");
+      3428 |   await expect(cancellation).toHaveCount(0);
+        at C:\Users\franj\AppData\Local\Temp\kybo-pos-ux-ui-api\tests\e2e\pos-surface.spec.ts:3425:47
+
+    Error Context: test-results\pos-surface-cancel-permiss-0bfb2-l-and-retains-the-new-draft\error-context.md
+
+    Error Context: test-results\pos-surface-cancel-permiss-0bfb2-l-and-retains-the-new-draft\error-context.md
+
+  9) tests\e2e\pos-surface.spec.ts:3437:3 ΓÇ║ account deep link preserves the discard policy for a saved command (uncertain=false) 
+
+    TimeoutError: locator.click: Timeout 5000ms exceeded.
+    Call log:
+      - waiting for locator('[data-sale-detail]').getByRole('button', { name: 'Descartar env├¡o rechazado' })
+
+
+      3459 |       await expect(detail).toBeVisible();
+      3460 |     } else {
+    > 3461 |       await rejectedDiscard(detail).click({timeout:5000});
+           |                                     ^
+      3462 |       await detail.getByRole("button",{name:"Cerrar detalle de venta"}).click();
+      3463 |       await expect(detail).toHaveCount(0);
+      3464 |     }
+        at C:\Users\franj\AppData\Local\Temp\kybo-pos-ux-ui-api\tests\e2e\pos-surface.spec.ts:3461:37
+
+    Error Context: test-results\pos-surface-account-deep-l-796e0-ed-command-uncertain-false-\error-context.md
+
+    Error Context: test-results\pos-surface-account-deep-l-796e0-ed-command-uncertain-false-\error-context.md
+
+  10) tests\e2e\pos-surface.spec.ts:3469:1 ΓÇ║ price refresh sends the current revision and preserves the edited line 
+
+    Error: locator.fill: Error: strict mode violation: getByRole('dialog').getByRole('textbox') resolved to 3 elements:
+        1) <input required="" value="3500" data-slot="input" inputmode="decimal" aria-label="Precio de Cappuccino" class="h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none selection:bg-primary selection:text-primary-foreground file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowedΓÇª/> aka getByRole('textbox', { name: 'Precio de Cappuccino' })
+        2) <input value="" maxlength="240" data-slot="input" placeholder="Obligatorio si cambi├ís el precio" class="h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none selection:bg-primary selection:text-primary-foreground file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disablΓÇª/> aka getByRole('textbox', { name: 'Motivo del cambio de precio' })
+        3) <input value="" maxlength="500" data-slot="input" aria-label="Observaciones de Cappuccino" placeholder="Sin hielo, para compartirΓÇª" class="h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none selection:bg-primary selection:text-primary-foreground file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground disabled:pointer-events-noneΓÇª/> aka getByRole('textbox', { name: 'Observaciones de Cappuccino' })
+
+    Call log:
+      - waiting for getByRole('dialog').getByRole('textbox')
+
+
+      3473 |   await line.getByRole("button",{name:"Aumentar Cappuccino"}).click();
+      3474 |   await line.getByRole("button",{name:"Editar observaciones de Cappuccino"}).click();
+    > 3475 |   await page.getByRole("dialog").getByRole("textbox").fill("Sin az├║car");
+           |                                                       ^
+      3476 |   await page.getByRole("dialog").getByRole("button",{name:"Guardar cambios"}).click();
+      3477 |   const payment=await openCashCheckout(page);
+      3478 |   const received=payment.getByRole("textbox",{name:"Efectivo recibido 1"});
+        at C:\Users\franj\AppData\Local\Temp\kybo-pos-ux-ui-api\tests\e2e\pos-surface.spec.ts:3475:55
+
+    Error Context: test-results\pos-surface-price-refresh--4d986-d-preserves-the-edited-line\error-context.md
+
+    Error Context: test-results\pos-surface-price-refresh--4d986-d-preserves-the-edited-line\error-context.md
+
+  11) tests\e2e\pos-surface.spec.ts:3500:1 ΓÇ║ checkout can safely discard after a stock rejection and failed local cleanup 
+
+    Error: expect(locator).toBeEnabled() failed
+
+    Locator: getByRole('dialog').getByRole('button', { name: 'Reintentar mismo env├¡o' })
+    Expected: enabled
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeEnabled" getByRole('dialog').getByRole('button', { name: 'Reintentar mismo env├¡o' }) with timeout 5000ms
+      - waiting for getByRole('dialog').getByRole('button', { name: 'Reintentar mismo env├¡o' })
+
+
+      3504 |   const payment=await openCashCheckout(page);
+      3505 |   await failSaleCleanupOnce(page);
+    > 3506 |   await confirmCheckout(payment).click();
+           |                                      ^
+      3507 |   await expect(sameCommand(payment)).toBeEnabled();
+      3508 |   await expect(confirmCheckout(payment)).toBeDisabled();
+      3509 |   await expect(payment.getByRole("textbox",{name:"Efectivo recibido 1"})).toHaveValue("5000");
+        at C:\Users\franj\AppData\Local\Temp\kybo-pos-ux-ui-api\tests\e2e\pos-surface.spec.ts:3506:38
+
+    Error Context: test-results\pos-surface-checkout-can-s-49389-on-and-failed-local-cleanup\error-context.md
+
+    Error Context: test-results\pos-surface-checkout-can-s-49389-on-and-failed-local-cleanup\error-context.md
+
+  11 failed
+    tests\e2e\pos-operation.spec.ts:496:3 ΓÇ║ retries the identical command after 400 and failed local cleanup 
+    tests\e2e\pos-operation.spec.ts:496:3 ΓÇ║ retries the identical command after 409 and failed local cleanup 
+    tests\e2e\pos-surface.spec.ts:3374:5 ΓÇ║ shell catalogue has a physical product target at 320 with delivery 
+    tests\e2e\pos-surface.spec.ts:3374:5 ΓÇ║ shell catalogue has a physical product target at 320 with receipt 
+    tests\e2e\pos-surface.spec.ts:3374:5 ΓÇ║ shell catalogue has a physical product target at 360 with delivery 
+    tests\e2e\pos-surface.spec.ts:3374:5 ΓÇ║ shell catalogue has a physical product target at 360 with receipt 
+    tests\e2e\pos-surface.spec.ts:3374:5 ΓÇ║ shell catalogue has a physical product target at 390 with delivery 
+    tests\e2e\pos-surface.spec.ts:3405:1 ΓÇ║ cancel permission rejection releases sale detail and retains the new draft 
+    tests\e2e\pos-surface.spec.ts:3437:3 ΓÇ║ account deep link preserves the discard policy for a saved command (uncertain=false) 
+    tests\e2e\pos-surface.spec.ts:3469:1 ΓÇ║ price refresh sends the current revision and preserves the edited line 
+    tests\e2e\pos-surface.spec.ts:3500:1 ΓÇ║ checkout can safely discard after a stock rejection and failed local cleanup 
+  2 passed (2.1m)

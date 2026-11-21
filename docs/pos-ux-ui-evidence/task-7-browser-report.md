@@ -17,7 +17,9 @@ El RED completo de los cuatro primeros casos dio 3 fallos y 1 caso correcto en 2
 
 La ejecución enfocada de las seis comprobaciones finales y los tres recorridos de perfil superó **9/9 en 26,0 s**. La primera ejecución completa de superficie y operaciones superó 69/70. El único fallo fue el selector de Cancelar del caso de teclado, corregido para la ejecución enfocada.
 
-La ejecución final completa pasó **86/86 en 2,2 min** con código 0. Incluye 52 casos de superficie POS, 18 de operaciones y 16 del diálogo de cobro. Registro: task7-browser-final.log.
+Antes de la corrección de la revisión global, la ejecución completa en c6c295f pasó **86/86 en 2,2 min**, con 52 casos de superficie POS, 18 de operaciones y 16 del diálogo de cobro. Registro: task7-browser-final.log.
+
+Después de la corrección, la ejecución completa de be21941 pasó **99/99 en 2,4 min**. Incluye 63 casos de superficie POS, 20 de operaciones y 16 del diálogo de cobro. Entre ellos hay seis con AppShell real que verifican el acceso físico al catálogo para Delivery y al crear un pedido bajo el recibo anterior, a 320 × 720, 360 × 740 y 390 × 844. Esa ejecución también cubre descarte tras rechazo definitivo, revisión de precio actualizada en el payload y recuperación tras un fallo de limpieza local. Evidencia: final-fix-report.md y final-fix-browser.log.
 
 ## Comparación visual
 
@@ -29,17 +31,21 @@ Auditoría visual: task-7-product-visuals-audit.md. [Catálogo Figma de escritor
 
 ## Perfil comparable
 
-La medición conserva los nueve productos ilustrativos con sus IDs, respuestas, precios y recorrido originales, sin fotos. La prueba canónica es independiente y no altera este perfil. Fuentes: baseline/metrics.json y task7-profile/metrics.json. El perfil final de esta etapa convivió con Vitest en el host.
+La medición conserva los nueve productos ilustrativos con sus IDs, respuestas, precios y recorrido originales, sin fotos. La prueba canónica es independiente y no altera este perfil. Fuentes de la comparación final: baseline/metrics.json y final-clean-profile/metrics.json. El perfil final corrió sobre be21941, después de terminar Vitest y la compilación Webpack. Pasaron los tres recorridos en 15,2 s, código 0. AppShell se verifica en el escenario separado de regresión. El perfil mantiene el host aislado original para que ambas mediciones usen la misma altura y los mismos fixtures.
 
 En los tres tamaños se mantuvieron **15 GET** por recorrido: 1 de estado de caja, 1 de retiro, 1 de medios de pago, 1 de catálogo, 1 de reposición, 1 de clientes y 9 de configuraciones. Filtrar, cambiar de tamaño y editar no generaron una nueva consulta de catálogo o configuración. Los tres anchos mantuvieron cuatro commits React para búsqueda y filtros. La edición consumió diez commits donde era posible. A 390 px la versión anterior omitía la edición porque la altura disponible para las líneas era cero.
 
 | Tamaño | Catálogo listo, ms | Configuración lista, ms | Commits totales | Tiempo React, ms | Altura de líneas, px |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| 1280 × 800 | 627,1 → 560,6 | 118,9 → 123,4 | 40 → 40 | 146,1 → 143,4 | 307,9 → 340,1 |
-| 768 × 1024 | 562,9 → 534,4 | 125,3 → 108,7 | 41 → 41 | 135,1 → 128,6 | 379,9 → 425,9 |
-| 390 × 844 | 537,2 → 542,3 | 107,9 → 109,0 | 31 → 41 | 114,8 → 136,5 | 0 → 189,9 |
+| 1280 × 800 | 627,1 → 566,3 | 118,9 → 84,5 | 40 → 40 | 146,1 → 118,2 | 307,9 → 340,1 |
+| 768 × 1024 | 562,9 → 495,7 | 125,3 → 112,5 | 41 → 41 | 135,1 → 143,0 | 379,9 → 425,9 |
+| 390 × 844 | 537,2 → 504,6 | 107,9 → 103,1 | 31 → 41 | 114,8 → 118,8 | 0 → 189,9 |
 
-El script de profiling sin comprimir pasó de 2.771.954 a 2.799.558 bytes (+27.604, +1,0%). Las cuatro variantes Barlow TTF suman 424.172 bytes de archivos originales. La medición de script excluye recursos de fuente. Los tiempos describen una ejecución local de Chrome con respuestas interceptadas y pueden variar según la carga del host. Falta medir transferencia real de fuentes e imágenes, tiempos de red y tamaño del bundle optimizado por Next.
+El conjunto de rutas y métodos HTTP coincide exactamente entre línea base y versión final en los tres tamaños. Las duraciones React de búsqueda y filtros pasaron de 4,1/3,0/4,1 ms a 3,4/4,7/3,2 ms. La edición pasó de 14,6/14,7/sin edición a 13,2/14,6/12,8 ms. Los diez commits adicionales a 390 px corresponden al recorrido de edición que ahora se puede ejecutar.
+
+El script de profiling sin comprimir pasó de 2.771.954 a 2.799.946 bytes (+27.992, +1,01%). Las cuatro variantes Barlow TTF suman 424.172 bytes de archivos originales. La medición de script excluye recursos de fuente. Los tiempos describen una ejecución local de Chrome con respuestas interceptadas y pueden variar según la carga del host. Falta medir transferencia real de fuentes e imágenes, tiempos de red y tamaño del bundle optimizado por Next.
+
+El perfil anterior en task7-profile/metrics.json se tomó mientras Vitest usaba el host. Midió catálogo listo a 560,6/534,4/542,3 ms, configuración lista a 123,4/108,7/109,0 ms y 2.799.558 bytes de script. Se conserva como registro de la etapa previa.
 
 ## Reproducción y capturas
 
@@ -58,6 +64,13 @@ $env:POS_SURFACE_REPORT_DIR='.superpowers/sdd/2026-11-20-ux-ui-pos-improvements/
 .\node_modules\.bin\playwright.cmd test tests/e2e/pos-surface.spec.ts tests/e2e/pos-operation.spec.ts tests/e2e/payment-receipt.spec.ts --reporter=line
 ~~~
 
-Evidencia: task7-browser-final.log, task7-browser-red.log, task7-browser-red/mobile-confirmation-and-first-product.png, task7-browser-profile.log, task7-profile/metrics.json y las capturas en task7-browser/ y task7-profile/. Las pruebas administradas de Next para touch-pos, pos-options-cache y los recorridos de retiro quedan fuera del alcance de la interceptación. Se necesitan un servidor, una base de pruebas habilitada y un dispositivo real para confirmar sus recorridos, el teclado nativo y la entrega de fotos privadas.
+Perfil final sobre be21941:
+
+~~~powershell
+$env:POS_SURFACE_REPORT_DIR='.superpowers/sdd/2026-11-20-ux-ui-pos-improvements/final-clean-profile'
+.\node_modules\.bin\playwright.cmd test tests/e2e/pos-surface.spec.ts --reporter=line --grep 'POS baseline preserves'
+~~~
+
+Evidencia: final-clean-profile.log, final-clean-profile/metrics.json, final-fix-browser.log, task7-browser-final.log, task7-browser-red.log, task7-browser-red/mobile-confirmation-and-first-product.png, task7-browser-profile.log, task7-profile/metrics.json y las capturas en task7-browser/ y task7-profile/. Las pruebas administradas de Next para touch-pos, pos-options-cache y los recorridos de retiro quedan fuera del alcance de la interceptación. Se necesitan un servidor, una base de pruebas habilitada y un dispositivo real para confirmar sus recorridos, el teclado nativo y la entrega de fotos privadas.
 
 Archivos de pruebas del cambio: tests/e2e/pos-surface.spec.ts y tests/helpers/pos-surface-next-image.ts.

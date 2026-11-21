@@ -80,6 +80,39 @@ Se completaron las nueve paletas canónicas por ID, el área táctil del enlace 
 
 Las capturas y datos se conservan en [evidencia](pos-ux-ui-evidence/README.md). Se verificaron 1280×800, 768×1024, 390×844, anchos 320/360/1024, 390×640, foco, nombres largos y viewport reducido de teclado. Una tarjeta visible admite iniciar el siguiente pedido mientras se muestra el recibo anterior; se conserva el desplazamiento. Las nueve paletas usan identificadores reales en un escenario de pruebas separado del recorrido comparable.
 
-El recorrido mantuvo 15 GET por ancho, incluidos 1 catálogo, 9 configuraciones y 1 consulta compartida de retiro. Buscar conserva cuatro commits React y editar diez. El script de profiling creció 27.604 bytes (+1,0 %); no es el bundle optimizado de Next. El carrito móvil pasó de 0 a 189,875 px de área de líneas. No se agregaron memoizaciones, endpoints ni cachés. Los tiempos locales se documentan con su entorno y no prueban una mejora de latencia productiva.
+El recorrido mantuvo 15 GET por ancho, incluidos 1 catálogo, 9 configuraciones y 1 consulta compartida de retiro. Buscar conserva cuatro commits React y editar diez. El perfil limpio final de `be21941` creció 27.992 bytes (+1,01 %); no es el bundle optimizado de Next. En el fixture comparable, el carrito móvil pasó de 0 a 189,875 px de área de líneas. No se agregaron memoizaciones, endpoints ni cachés. Los tiempos locales se documentan con su entorno y no prueban una mejora de latencia productiva.
 
-La suite global, el build final y la revisión independiente de toda la rama están en ejecución. El runner `pnpm test:e2e` volvió a detenerse en `scripts/migrate.ts` antes de Next por la protección de transición del modelo de datos; no se eludió. Los resultados finales se registrarán a continuación.
+La revisión independiente de toda la rama encontró cuatro fallas de recuperación/layout, documentadas por separado. Los resultados globales siguientes corresponden al código de aplicación `6052754`; las correcciones posteriores requieren sus regresiones focalizadas y el build final.
+
+## Comprobaciones globales
+
+| Comando | Resultado observado |
+| --- | --- |
+| `pnpm typecheck` | Pasó sobre los archivos finales de Task7. |
+| `pnpm lint` | Pasó sobre los archivos finales de Task7. |
+| `pnpm test` | Salió con código 1 en 947,94 s: 204 archivos pasaron, 13 fallaron y 2 se omitieron (219); 1.175 pruebas pasaron, 6 fallaron y 86 se omitieron (1.267). |
+| `pnpm build` | Turbopack no avanzó de Creating an optimized production build. Se interrumpió exclusivamente su sesión tras más de seis minutos sin salida adicional. No se considera aprobado. El baseline había fallado en la conexión con el proceso de PostCSS. |
+| `pnpm build --webpack` | Pasó después de las correcciones finales: compilación, TypeScript, generación y enumeración de rutas. No prueba un runtime autenticado configurado; el entorno no tenía credenciales de DB/auth. |
+| `pnpm test:e2e` | Código 1 antes de Next: scripts/migrate.ts exige el runner revisado de transición y deshabilita la migración genérica. No se anuló. |
+
+Los ocho fixtures históricos de catálogo, inventario, modificadores/schema, preparación, producción, recetas y ventas fallaron al preparar la transición explícita. El noveno fallo de preparación corresponde a PostgreSQL dedicado sin KYBO_TEST_DATABASE_URL. Una prueba no pudo crear una junction por EPERM; cuatro casos de navegador recibieron ERR_NETWORK_ACCESS_DENIED al usar localhost.
+
+El sexto fallo de aserción fue `checkout-performance.integration.test.ts`: 52 consultas ante un límite de 50. Se reprodujo en un snapshot exacto de `b594631` con sus 1.025 archivos verificados contra Git y dependencias compartidas: cinco casos pasaron y ese mismo límite falló en 10,62 s. Todas las comprobaciones de pagos, reservas y stock anteriores a la aserción pasaron; la rama también ejecuta 52 consultas, delta 0. No se cambió el límite ni el servicio para ocultarlo. [Log de base](pos-ux-ui-evidence/logs/final-checkout-base-b594631.log).
+
+La suite se ejecutó con NODE_ENV=test, KYBO_ALLOW_TEST_MIGRATIONS=disposable-only y sin DATABASE_URL, KYBO_TEST_DATABASE_URL, KYBO_LOCAL_DB ni KYBO_TRANSITION_DATABASE_URL. Los [logs](pos-ux-ui-evidence/logs/) conservan las causas. Estos resultados no equivalen a una suite global verde.
+
+## Corrección y revisión final
+
+La revisión completa reprodujo cuatro fallas: la cabecera real del AppShell dejaba sin tarjetas tocables al catálogo móvil; dos avisos de detalle/anulación omitían el descarte seguro de rechazos; actualizar el precio simple conservaba su revisión anterior; y una falla al limpiar sessionStorage después de un 4xx dejaba un botón de confirmar sin efecto. Se corrigieron juntas en `be21941`, después de reproducir los cuatro defectos.
+
+La regresión final pasó 99/99 casos de navegador (63 superficie, 20 operaciones, 16 cobro), 88/88 casos Vitest focalizados, TypeScript, ESLint, Prettier y el build Webpack. Las pruebas de shell verifican físicamente 44 píxeles consecutivos y clics normales a 320/360/390 px, en delivery y en el pedido siguiente al recibo. Se mantiene un único pedido/catálogo. Las pruebas de recuperación conservan URL, requestId y bytes del comando, evitan reenviar al descartar y conservan cantidades, notas y efectivo ingresado. La prueba de precios envía revisión 2 después de refrescar la revisión 1.
+
+La única revisión acotada posterior aprobó los cuatro hallazgos, sin nueva rotura: [informe final](pos-ux-ui-evidence/reviews/final-fix-review.md). Queda una observación menor de copy: el configurador conserva “Agregar al pedido/Agregar combo” al editar una línea, aunque guarda correctamente una sola línea. No bloquea la revisión funcional.
+
+Después del build se repitieron tres recorridos comparables sin otros checks intensivos. Pasaron 3/3 en 15,2 s. Catálogo listo: 566,3/495,7/504,6 ms a 1280/768/390; configuración: 84,5/112,5/103,1 ms. Son respuestas interceptadas y muestras locales, sin conclusión sobre latencia productiva. Las capturas del perfil son del fixture original sin shell; los seis casos del shell real se verifican por separado.
+
+## Entrega
+
+Rama local `feature/ux-ui-pos-improvements`, con commits por etapa y evidencia incluida. Se conserva el trabajo del checkout original. [Descripción de PR preparada](pos-ux-ui-pr.md). No se mergeó a main ni se desplegó en producción.
+
+La publicación remota completa queda pendiente: la revisión automática rechazó cargar una captura al repositorio público FranJarma/kybo-backoffice sin autorización explícita de ese contenido. Se detuvieron esas cargas; no se creó ni movió la referencia remota de la feature. La entrega local incluye una copia Git autosuficiente, verificada sin alternates, con el mismo commit y árbol. La historia es shallow en el commit base documentado; contiene todos los objetos necesarios para revisar y continuar esta rama.

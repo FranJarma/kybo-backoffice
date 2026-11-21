@@ -1,0 +1,10 @@
+
+> kybo-operations-next@0.6.0-rc.1 build C:\Users\franj\AppData\Local\Temp\kybo-pos-ux-ui-api
+> next build
+
+[1m[38;2;173;127;168mΓû▓ Next.js 16.3.6[39m[22m (Turbopack)
+[32m[1mΓ£ô[22m[39m Running next.config.ts took 1177ms
+
+[37m[1m [22m[39m Creating an optimized production build ...
+
+Controller stopped only owned build session 4147 after more than six minutes with no output beyond Creating an optimized production build. Exit1 after interrupt; no successful Turbopack build claimed. A fresh Webpack build is scheduled after the review corrections.

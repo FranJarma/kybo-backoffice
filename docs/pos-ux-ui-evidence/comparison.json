@@ -1,10 +1,12 @@
 {
   "baseline": "SalesManager isolated browser fixture; mocked API, no DB; production profiling build",
   "final": "SalesManager isolated browser fixture; mocked API, no DB; production profiling build",
+  "finalCodeCommit": "be21941c921a788c1c8124386eb8c3fa349863fd",
+  "conditions": "Clean final profile after all heavy checks; mocked HTTP and original standalone nine-product journey; real AppShell covered separately by six browser regressions",
   "script": {
     "before": 2771954,
-    "after": 2799558,
-    "delta": 27604
+    "after": 2799946,
+    "delta": 27992
   },
   "runs": [
     {
@@ -23,8 +25,8 @@
       },
       "after": {
         "calls": 15,
-        "catalogueReadyMs": 560.6178,
-        "configurationReadyMs": 123.35740000000078,
+        "catalogueReadyMs": 566.2973000000002,
+        "configurationReadyMs": 84.52160000000003,
         "commits": 40,
         "searchCommits": 4,
         "editCommits": 10,
@@ -47,8 +49,8 @@
       },
       "after": {
         "calls": 15,
-        "catalogueReadyMs": 534.4279999999999,
-        "configurationReadyMs": 108.72639999999956,
+        "catalogueReadyMs": 495.7044999999998,
+        "configurationReadyMs": 112.46609999999964,
         "commits": 41,
         "searchCommits": 4,
         "editCommits": 10,
@@ -71,8 +73,8 @@
       },
       "after": {
         "calls": 15,
-        "catalogueReadyMs": 542.2871999999988,
-        "configurationReadyMs": 108.99079999999958,
+        "catalogueReadyMs": 504.6095999999998,
+        "configurationReadyMs": 103.12589999999909,
         "commits": 41,
         "searchCommits": 4,
         "editCommits": 10,
