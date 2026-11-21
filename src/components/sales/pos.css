@@ -409,9 +409,6 @@
   scroll-padding: 4px;
 }
 .pos-order-undo {
-  position: sticky;
-  z-index: 1;
-  top: 0;
   display: flex;
   min-height: 44px;
   align-items: center;

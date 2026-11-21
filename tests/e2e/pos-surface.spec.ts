@@ -921,6 +921,61 @@ test("order line edits, notes, removal and undo retain the configured draft on m
   expect(app.errors).toEqual([]);
 });
 
+for (const viewport of [
+  { width: 320, height: 720 },
+  { width: 390, height: 640 },
+])
+  test(`order line removal leaves surviving actions usable at ${viewport.width}x${viewport.height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    const app = await mount(page);
+    for (const name of ["Shake Oreo", "Cappuccino", "Soft Frutilla"])
+      await page
+        .getByRole("button", { name: `Agregar ${name}`, exact: true })
+        .click();
+
+    const order = await showOrder(page);
+    const lines = order.getByTestId("cart-line");
+    const total = order.getByTestId("cart-total");
+    await expect(lines).toHaveCount(3);
+    await order
+      .getByRole("button", { name: "Quitar Shake Oreo", exact: true })
+      .click();
+    await expect(lines).toHaveCount(2);
+    await expect(total).toHaveText(/7[.]000/);
+
+    await order
+      .getByRole("button", { name: "Aumentar Cappuccino", exact: true })
+      .click({ timeout: 5000 });
+    await expect(total).toHaveText(/10[.]500/);
+    await order
+      .getByRole("button", {
+        name: "Editar observaciones de Cappuccino",
+        exact: true,
+      })
+      .click({ timeout: 5000 });
+    const editor = page.getByRole("dialog");
+    await editor
+      .getByRole("textbox", {
+        name: "Observaciones de Cappuccino",
+        exact: true,
+      })
+      .fill("Bien caliente");
+    await editor
+      .getByRole("button", { name: "Guardar cambios", exact: true })
+      .click();
+
+    await order.getByRole("button", { name: "Deshacer", exact: true }).click();
+    await expect(lines).toHaveCount(3);
+    await expect(lines.filter({ hasText: "Shake Oreo" })).toHaveCount(1);
+    await expect(lines.filter({ hasText: "Cappuccino" })).toContainText(
+      "Bien caliente",
+    );
+    await expect(total).toHaveText(/18[.]400/);
+    expect(app.errors).toEqual([]);
+  });
+
 test("order draft retains customer, locator, notes and quantities through history detail and breakpoints", async ({
   page,
 }) => {
