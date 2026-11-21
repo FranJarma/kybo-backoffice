@@ -765,6 +765,7 @@ export function SalesManager({
   for (const line of lines)
     quantities[line.productId] =
       (quantities[line.productId] ?? 0) + line.quantity;
+  const surfaceClassName = `pos-surface ${fontClassName}`;
   const orderActions = (
     <>
       {!isAppend && (
@@ -783,6 +784,7 @@ export function SalesManager({
         />
       )}
       <LocatorPicker
+        surfaceClassName={surfaceClassName}
         value={displayedLocator}
         automatic={locatorMode === "automatic"}
         onAutomatic={() => setLocatorMode("automatic")}
@@ -800,7 +802,7 @@ export function SalesManager({
     <div
       data-pos
       data-pos-active-panel={showCart ? tabletPanel : undefined}
-      className={`pos-surface ${fontClassName} flex h-full min-h-0 flex-col gap-2 [&>div:not([data-pos-workspace])]:shrink-0`}
+      className={`${surfaceClassName} flex h-full min-h-0 flex-col gap-2 [&>div:not([data-pos-workspace])]:shrink-0`}
     >
       <CashStatusGate
         key={branchId}
@@ -1231,7 +1233,7 @@ export function SalesManager({
         )}
       </div>
       <Dialog open={stockHelpOpen} onOpenChange={setStockHelpOpen}>
-        <DialogContent showCloseButton={false}>
+        <DialogContent showCloseButton={false} className={surfaceClassName}>
           <DialogHeader>
             <DialogTitle>Stock y preparación</DialogTitle>
             <DialogDescription>
@@ -1254,10 +1256,7 @@ export function SalesManager({
           if (!locked) setOrderNoteOpen(open);
         }}
       >
-        <DialogContent
-          showCloseButton={false}
-          className={`pos-surface ${fontClassName}`}
-        >
+        <DialogContent showCloseButton={false} className={surfaceClassName}>
           <DialogHeader>
             <DialogTitle>Observaciones del pedido</DialogTitle>
             <DialogDescription>
@@ -1303,7 +1302,7 @@ export function SalesManager({
         </DialogContent>
       </Dialog>
       <Dialog open={clearOpen} onOpenChange={setClearOpen}>
-        <DialogContent className={`pos-surface ${fontClassName}`}>
+        <DialogContent showCloseButton={false} className={surfaceClassName}>
           <DialogHeader>
             <DialogTitle>¿Vaciar el pedido?</DialogTitle>
             <DialogDescription>
@@ -1347,6 +1346,7 @@ export function SalesManager({
       )}
       {view === "detail" && (
         <SaleDetailDialog
+          surfaceClassName={surfaceClassName}
           actorId={actorId}
           sale={detail}
           loading={detailLoading}
@@ -1481,7 +1481,10 @@ export function SalesManager({
             if (!v && !operation.locked) setCancelOpen(false);
           }}
         >
-          <DialogContent showCloseButton={!operation.locked}>
+          <DialogContent
+            showCloseButton={!operation.locked}
+            className={surfaceClassName}
+          >
             <DialogHeader>
               <DialogTitle>Anular venta #{detail.number}</DialogTitle>
               <DialogDescription>

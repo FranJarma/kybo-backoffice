@@ -47,16 +47,39 @@ describe("POS product presentation", () => {
       expect(html).toContain(message);
     },
   );
-  it("uses explicit stable-ID metadata rather than the visible name", () => {
-    const appearance = {
-      stripes: ["#E9CEAE", "#D2A775", "#A87345", "#68432F"] as const,
-    };
-    expect(
-      productAppearance("stable-tea", { "stable-tea": appearance }),
-    ).toEqual(appearance);
-    expect(
-      productAppearance("another-id", { "stable-tea": appearance }),
-    ).not.toEqual(appearance);
+  it("preserves the approved palette if the product is renamed", () => {
+    const id = "d8667694-d0b4-49ff-90cb-e72f3cc6aa17";
+    const name = "Oreo Iced Latte";
+    const approved = productCardModel(row({ id, name }));
+    const renamed = productCardModel(row({ id, name: "Latte actualizado" }));
+    const sameName = productCardModel(row({ name }));
+
+    expect(renamed.appearance).toEqual(approved.appearance);
+    expect(sameName.appearance).toEqual(productAppearance("unknown"));
+    expect(approved.appearance).not.toEqual(sameName.appearance);
+  });
+  it("uses a neutral palette for catalogue products without an approved design", () => {
+    const neutral = productAppearance("unknown");
+    for (const id of [
+      "c8f9f85d-fe9b-4b2b-9acc-11df3e7ad4a8", // Taro Iced Latte
+      "9bb0cebb-c87b-48ce-8e17-d596ef1ec71c", // Matcha Iced Latte
+      "4690a82f-c39d-4b89-9f0b-b386c727d8f9", // Kybo Tea
+      "constructor",
+    ]) {
+      expect(productAppearance(id)).toEqual(neutral);
+    }
+  });
+  it("renders the approved top and bottom bands without repeating the gradient", () => {
+    const product = productCardModel(
+      row({ id: "d8667694-d0b4-49ff-90cb-e72f3cc6aa17" }),
+    );
+    const html = renderToStaticMarkup(
+      createElement(ProductCard, { product, onSelect: () => {} }),
+    );
+
+    expect(html).toContain("linear-gradient(to bottom, #E9CEAE 0");
+    expect(html).toContain("#68432F 75% 87.5%, #352B26 87.5% 100%)");
+    expect(html).not.toContain("repeating-linear-gradient");
   });
   it("shows the quantity from the actual order and the persisted photo without fetching business data", () => {
     const html = renderToStaticMarkup(

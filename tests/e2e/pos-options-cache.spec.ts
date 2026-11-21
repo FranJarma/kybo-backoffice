@@ -83,10 +83,27 @@ test("preloads beyond the first eight products and reuses options when editing",
   });
   expect(selected.ok()).toBe(true);
   await page.goto("/sales");
-  await page.evaluate(async () => {
-    await document.fonts.ready;
-  });
-  await expect(page.locator("[data-pos]")).toHaveCSS("font-family", /barlow/i);
+  const { activeFamily, posFamily, loaded } = await page
+    .locator("[data-pos]")
+    .evaluate(async (surface) => {
+      const firstFamily = (value: string) =>
+        value
+          .split(",")[0]
+          .trim()
+          .replace(/^['"]|['"]$/g, "");
+      const style = getComputedStyle(surface);
+      const activeFamily = firstFamily(style.fontFamily);
+      const posFamily = firstFamily(style.getPropertyValue("--font-pos"));
+      await document.fonts.ready;
+      const loaded = Array.from(document.fonts).some(
+        (face) =>
+          firstFamily(face.family) === activeFamily && face.status === "loaded",
+      );
+      return { activeFamily, posFamily, loaded };
+    });
+  expect(posFamily).toBeTruthy();
+  expect(activeFamily).toBe(posFamily);
+  expect(loaded).toBe(true);
   await expect.poll(() => calls.get("tea-11"), { timeout: 10000 }).toBe(1);
   const photoProduct = page.getByRole("button", {
     name: "Agregar Tea 11",

@@ -69,6 +69,120 @@ const rows = [
   pricingRevision: 1,
   fulfillmentVersionId: id(100 + Number(row.id.slice(-3))),
 }));
+const canonicalProducts = [
+  {
+    id: "d8667694-d0b4-49ff-90cb-e72f3cc6aa17",
+    name: "Oreo Iced Latte",
+    categoryId: "lattes",
+    bands: [
+      ["E9CEAE", 2],
+      ["D2A775", 2],
+      ["A87345", 2],
+      ["68432F", 1],
+      ["352B26", 1],
+    ],
+  },
+  {
+    id: "36145bed-d3f4-4ddc-9289-1097992cd692",
+    name: "Kybo Shake",
+    categoryId: "shakes",
+    bands: [
+      ["F6E3BF", 2],
+      ["EDD0A0", 3],
+      ["DAB57F", 2],
+      ["C29560", 1],
+    ],
+  },
+  {
+    id: "a83e25f6-8b50-493f-a9fe-57ba74a03533",
+    name: "Kybo Shake Oreo",
+    categoryId: "shakes",
+    bands: [
+      ["F1E4D1", 2],
+      ["DAC4AA", 3],
+      ["9F7C60", 1],
+      ["614A3B", 1],
+      ["342C27", 1],
+    ],
+  },
+  {
+    id: "d47f268b-2d57-4642-a9ff-5695aa0c2ce7",
+    name: "Kybo Shake Taro",
+    categoryId: "shakes",
+    bands: [
+      ["E7DAF0", 2],
+      ["C4A4E4", 3],
+      ["A67ACB", 2],
+      ["71518D", 1],
+    ],
+  },
+  {
+    id: "30a9fd90-2f51-41b1-839c-8760f54b20a6",
+    name: "Kybo Frozen",
+    categoryId: "shakes",
+    bands: [
+      ["FFE29A", 2],
+      ["FFC14A", 3],
+      ["FFA329", 1],
+      ["E87325", 1],
+      ["DC4C36", 1],
+    ],
+  },
+  {
+    id: "35f4099a-a0d5-4f0d-afa5-ab5dfff9b1c9",
+    name: "Kybo Soft Sundae Chocolate",
+    categoryId: "soft",
+    bands: [
+      ["F0D4BA", 2],
+      ["B98666", 3],
+      ["956043", 1],
+      ["69422D", 1],
+      ["493026", 1],
+    ],
+  },
+  {
+    id: "1685d383-5581-459f-a5c4-2777331c243e",
+    name: "Kybo Soft Sundae Frutilla",
+    categoryId: "soft",
+    bands: [
+      ["FFE0DF", 2],
+      ["F6B1BC", 3],
+      ["ED849C", 1],
+      ["D95776", 1],
+      ["B53859", 1],
+    ],
+  },
+  {
+    id: "1bee7489-5ee8-4e93-a586-d85629cef23f",
+    name: "Kybo Soft Sundae Frutos rojos",
+    categoryId: "soft",
+    bands: [
+      ["F1D4E4", 2],
+      ["D99DB8", 3],
+      ["B66794", 1],
+      ["914468", 1],
+      ["693950", 1],
+    ],
+  },
+  {
+    id: "3efc7be3-52af-402e-9990-350d0f1599f4",
+    name: "Cappuccino",
+    categoryId: "lattes",
+    bands: [
+      ["F6E1BE", 2],
+      ["E8BE8F", 3],
+      ["C38D5B", 1],
+      ["A26B43", 1],
+      ["795037", 1],
+    ],
+  },
+] as const;
+// Diagnostic 2 × 4 RGBA PNG used only in the canonical catalogue scenario.
+const fixtureThumbnail = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAIAAAAECAYAAACk7+45AAAAFElEQVR4nGP438DwnyG98z8DbgYAPhURtRUA6msAAAAASUVORK5CYII=",
+  "base64",
+);
+
 const categories = [
   { id: "lattes", name: "Lattes" },
   { id: "shakes", name: "Shakes" },
@@ -455,7 +569,13 @@ test.beforeAll(async () => {
     bundle: true,
     platform: "browser",
     jsx: "automatic",
-    alias: { "react-dom/client": "react-dom/profiling" },
+    alias: {
+      "react-dom/client": "react-dom/profiling",
+      "next/image": join(
+        process.cwd(),
+        "tests/helpers/pos-surface-next-image.ts",
+      ),
+    },
     define: {
       "process.env.NODE_ENV": '"production"',
       "process.env": '{"NODE_ENV":"production"}',
@@ -492,6 +612,8 @@ type SurfaceFixtureOptions = {
   cashOpen?: boolean;
   freeCappuccino?: boolean;
   tables?: boolean;
+  tableAccount?: SaleDetail;
+  canonicalCatalogue?: boolean;
 };
 async function mount(page: Page, options: SurfaceFixtureOptions = {}) {
   const {
@@ -502,6 +624,8 @@ async function mount(page: Page, options: SurfaceFixtureOptions = {}) {
     cashOpen = true,
     freeCappuccino = false,
     tables = false,
+    tableAccount,
+    canonicalCatalogue = false,
   } = options;
   const calls: Call[] = [],
     errors: string[] = [];
@@ -572,17 +696,27 @@ async function mount(page: Page, options: SurfaceFixtureOptions = {}) {
         return route.fulfill({
           json: {
             rows: [
-              ...(edgeCases
-                ? rows.map((row, index) =>
-                    index === rows.length - 1
-                      ? { ...row, name: longProductName, imageAssetId: null }
-                      : row,
+              ...(canonicalCatalogue
+                ? canonicalProducts.map(
+                    ({ id: productId, name, categoryId }, index) => ({
+                      ...rows[index],
+                      id: productId,
+                      name,
+                      categoryId,
+                      imageAssetId: index < 2 ? id(981 + index) : null,
+                    }),
                   )
-                : rows.map((row) =>
-                    freeCappuccino && row.id === id(8)
-                      ? { ...row, price: "0.00" }
-                      : row,
-                  )),
+                : edgeCases
+                  ? rows.map((row, index) =>
+                      index === rows.length - 1
+                        ? { ...row, name: longProductName, imageAssetId: null }
+                        : row,
+                    )
+                  : rows.map((row) =>
+                      freeCappuccino && row.id === id(8)
+                        ? { ...row, price: "0.00" }
+                        : row,
+                    )),
               ...(combos ? [comboRow] : []),
             ],
             categories: edgeCases
@@ -630,10 +764,10 @@ async function mount(page: Page, options: SurfaceFixtureOptions = {}) {
             y: 0,
             revision: 1,
             archived: false,
-            saleId: null,
-            saleNumber: null,
-            balanceDue: null,
-            orderCount: 0,
+            saleId: tableAccount?.id ?? null,
+            saleNumber: tableAccount?.number ?? null,
+            balanceDue: tableAccount?.balanceDue ?? null,
+            orderCount: tableAccount?.orderCount ?? 0,
           },
         ],
       });
@@ -681,7 +815,13 @@ async function mount(page: Page, options: SurfaceFixtureOptions = {}) {
       /^\/api\/sales\/products\/([^/]+)\/configuration$/,
     );
     if (config) {
-      const result = configuration(config[1], modifiers);
+      const canonicalIndex = canonicalCatalogue
+        ? canonicalProducts.findIndex((product) => product.id === config[1])
+        : -1;
+      const result = configuration(
+        rows[canonicalIndex]?.id ?? config[1],
+        modifiers,
+      );
       return route.fulfill({
         json:
           freeCappuccino && config[1] === id(8)
@@ -689,6 +829,11 @@ async function mount(page: Page, options: SurfaceFixtureOptions = {}) {
             : result,
       });
     }
+    if (canonicalCatalogue && url.pathname === "/api/media/" + id(981))
+      return route.fulfill({
+        contentType: "image/png",
+        body: fixtureThumbnail,
+      });
     if (url.pathname.startsWith("/api/media/"))
       return route.fulfill({ status: 404, body: "Missing fixture photo" });
     // The fixture has no external transport: unneeded read endpoints remain empty.
@@ -1202,6 +1347,329 @@ test("checkout confirmation lists each split payment and known cash change", asy
     },
   ]);
   await captureCheckout(page, "confirmed-split");
+  expect(app.errors).toEqual([]);
+});
+
+async function measureTouchTarget(target: Locator) {
+  await expect(target).toBeVisible();
+  const box = await target.boundingBox();
+  expect.soft(box?.width).toBeGreaterThanOrEqual(44);
+  expect.soft(box?.height).toBeGreaterThanOrEqual(44);
+}
+
+async function expectLoadedPosFont(page: Page, target: Locator) {
+  await expect(target).toBeVisible();
+  const posFamily = await page
+    .locator("[data-pos]")
+    .evaluate((node) =>
+      getComputedStyle(node)
+        .fontFamily.split(",")[0]
+        .trim()
+        .replace(/["']/g, ""),
+    );
+  const actual = await target.evaluate(async (node) => {
+    await document.fonts.ready;
+    const family = getComputedStyle(node)
+      .fontFamily.split(",")[0]
+      .trim()
+      .replace(/["']/g, "");
+    return {
+      family,
+      loaded: Array.from(document.fonts).some(
+        (face) =>
+          face.family.replace(/["']/g, "") === family &&
+          face.status === "loaded",
+      ),
+    };
+  });
+  expect.soft(actual).toEqual({ family: posFamily, loaded: true });
+}
+
+async function visibleTouchPoint(target: Locator) {
+  return target.evaluate((node) => {
+    const rect = node.getBoundingClientRect();
+    const x = (rect.left + rect.right) / 2;
+    let hittable = 0;
+    for (
+      let y = Math.max(0, Math.ceil(rect.top));
+      y < Math.min(innerHeight, rect.bottom);
+      y++
+    ) {
+      if (node.contains(document.elementFromPoint(x, y))) {
+        hittable++;
+        if (hittable === 44) return { x, y: y - 21 };
+      } else hittable = 0;
+    }
+    return null;
+  });
+}
+
+test("Task 7 keeps a catalogue product physically reachable after mobile payment", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const app = await mountCheckout(page);
+  await prepareCappuccino(page);
+  await confirmCheckout(await openCashCheckout(page)).click();
+  await expect(confirmationRegion(page)).toContainText(/Venta cobrada.*#73/);
+  const product = page.getByRole("button", {
+    name: "Agregar Cappuccino",
+    exact: true,
+  });
+  await expect(product).toBeEnabled();
+  await captureCheckout(page, "mobile-confirmation-catalogue");
+  const tap = await visibleTouchPoint(product);
+  if (!tap)
+    throw new Error(
+      "A visible product needs 44 contiguous hittable pixels while the receipt is present.",
+    );
+  await page.mouse.click(tap.x, tap.y);
+  await expect(page.getByTestId("cart-line")).toContainText("Cappuccino");
+  expect(app.submissions).toHaveLength(1);
+  expect(app.errors).toEqual([]);
+});
+
+test("Task 7 keeps the existing table account link touch-sized with a native destination", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 720 });
+  const sale = confirmedFixtureSale("pending-table");
+  const app = await mountCheckout(page, {
+    sale,
+    tables: true,
+    tableAccount: sale,
+  });
+  await page.getByRole("button", { name: "Mesa", exact: true }).click();
+  await page.getByRole("combobox", { name: /^Mesa/ }).selectOption(id(950));
+  const account = page.getByRole("link", {
+    name: "Abrir venta #73",
+    exact: true,
+  });
+  await expect(account).toHaveAttribute("href", "/sales?account=" + sale.id);
+  await measureTouchTarget(account);
+  await captureCheckout(page, "320-table-account-link");
+  await account.click();
+  await expect(
+    page
+      .getByRole("dialog")
+      .getByRole("heading", { name: "Venta #73", exact: true }),
+  ).toBeVisible();
+  expect(app.submissions).toHaveLength(0);
+  expect(app.errors).toEqual([]);
+});
+
+test("Task 7 keeps clear-order cancellation reachable by touch and restores focus", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 720 });
+  const app = await mountCheckout(page);
+  await prepareCappuccino(page);
+  const clear = page.getByRole("button", {
+    name: "Vaciar pedido",
+    exact: true,
+  });
+  await clear.click();
+  const dialog = page.getByRole("dialog");
+  await expect(
+    dialog.getByRole("heading", { name: "¿Vaciar el pedido?", exact: true }),
+  ).toBeVisible();
+  const keep = dialog.getByRole("button", {
+    name: "Conservar pedido",
+    exact: true,
+  });
+  await measureTouchTarget(keep);
+  await measureTouchTarget(
+    dialog.getByRole("button", { name: "Vaciar pedido", exact: true }),
+  );
+  const iconClose = dialog.getByRole("button", {
+    name: "Cerrar formulario",
+    exact: true,
+  });
+  if (await iconClose.isVisible()) await measureTouchTarget(iconClose);
+  await captureCheckout(page, "320-clear-order");
+  await keep.click();
+  await expect(dialog).toBeHidden();
+  await expect(clear).toBeFocused();
+  await expect(page.getByTestId("cart-line")).toHaveCount(1);
+  expect(app.submissions).toHaveLength(0);
+  expect(app.errors).toEqual([]);
+});
+
+test("Task 7 uses the loaded POS font and touch targets in locator and sale detail portals", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 720 });
+  const sale = confirmedFixtureSale("pending-table");
+  const app = await mountCheckout(page, {
+    sale,
+    tables: true,
+    tableAccount: sale,
+  });
+  const locator = page.getByRole("button", { name: /^Localizador 1\b/ });
+  await locator.click();
+  const dialog = page.getByRole("dialog");
+  const locatorTitle = dialog.getByRole("heading", {
+    name: "Localizador del pedido",
+    exact: true,
+  });
+  await expectLoadedPosFont(page, locatorTitle);
+  const locatorClose = dialog.getByRole("button", {
+    name: /^Cerrar(?: formulario)?$/,
+  });
+  await measureTouchTarget(locatorClose);
+  await captureCheckout(page, "320-locator");
+  await locatorClose.click();
+  await expect(dialog).toBeHidden();
+  await expect(locator).toBeFocused();
+
+  await page.getByRole("button", { name: "Mesa", exact: true }).click();
+  await page.getByRole("combobox", { name: /^Mesa/ }).selectOption(id(950));
+  await page
+    .getByRole("link", { name: "Abrir venta #73", exact: true })
+    .click();
+  const detailTitle = dialog.getByRole("heading", {
+    name: "Venta #73",
+    exact: true,
+  });
+  await expectLoadedPosFont(page, detailTitle);
+  const detailClose = dialog.getByRole("button", {
+    name: "Cerrar detalle de venta",
+    exact: true,
+  });
+  await measureTouchTarget(detailClose);
+  await captureCheckout(page, "320-sale-detail");
+  await detailClose.click();
+  await expect(dialog).toBeHidden();
+  expect(app.errors).toEqual([]);
+});
+
+test("Task 7 keeps cash actions usable after a keyboard-sized viewport reduction", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const app = await mountCheckout(page);
+  await prepareCappuccino(page);
+  const payment = await openCashCheckout(page);
+  const received = payment.getByRole("textbox", {
+    name: "Efectivo recibido 1",
+    exact: true,
+  });
+  await received.fill("");
+  await expect(received).toBeFocused();
+  await page.setViewportSize({ width: 390, height: 540 });
+  await received.pressSequentially("5000");
+  await expect(received).toHaveValue("5000");
+  expect(await visibleTouchPoint(received)).not.toBeNull();
+  const submit = confirmCheckout(payment);
+  const back = payment.getByRole("button", {
+    name: /^(Volver al pedido|Cancelar)$/,
+  });
+  await expect(submit).toBeEnabled();
+  expect(await visibleTouchPoint(submit)).not.toBeNull();
+  expect(await visibleTouchPoint(back)).not.toBeNull();
+  await measureTouchTarget(submit);
+  await measureTouchTarget(back);
+  await captureCheckout(page, "390-payment-keyboard-equivalent");
+  await back.click();
+  await expect(page.getByTestId("cart-line")).toHaveCount(1);
+  expect(app.submissions).toHaveLength(0);
+  expect(app.errors).toEqual([]);
+});
+
+test("Task 7 renders canonical product bands and actual Next thumbnail fallback", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const app = await mount(page, { canonicalCatalogue: true });
+  for (const product of canonicalProducts) {
+    const stripe = page
+      .getByRole("button", { name: "Agregar " + product.name, exact: true })
+      .locator(".pos-product-stripes");
+    const actual = await stripe.evaluate((element) => {
+      const { width, height, backgroundImage } = getComputedStyle(element);
+      // Chromium serializes hard stops either as a two-position color or two equal colors.
+      const stops = Array.from(
+        backgroundImage.matchAll(
+          /rgb\((\d+), (\d+), (\d+)\) ([\d.]+)%(?: ([\d.]+)%)?/g,
+        ),
+        ([, red, green, blue, from, to]) => ({
+          color: [red, green, blue]
+            .map((value) => Number(value).toString(16).padStart(2, "0"))
+            .join("")
+            .toUpperCase(),
+          from: Number(from),
+          to: Number(to),
+        }),
+      );
+      const bands = Array.from({ length: 8 }, (_, row) => {
+        const position = (row + 0.5) * 12.5;
+        return stops.find(
+          ({ from, to }, index) =>
+            from <= position &&
+            position <
+              (Number.isNaN(to) ? (stops[index + 1]?.from ?? 100) : to),
+        )?.color;
+      });
+      return {
+        width,
+        height,
+        repeats: backgroundImage.startsWith("repeating-"),
+        bands,
+      };
+    });
+    expect.soft(actual, product.name).toEqual({
+      width: "152px",
+      height: "152px",
+      repeats: false,
+      bands: product.bands.flatMap(([color, count]) =>
+        Array<string>(count).fill(color),
+      ),
+    });
+  }
+  const loaded = page
+    .getByRole("button", { name: "Agregar Oreo Iced Latte", exact: true })
+    .getByRole("img", { name: "Oreo Iced Latte", exact: true });
+  await expect
+    .poll(() =>
+      loaded.evaluate((image: HTMLImageElement) => [
+        image.naturalWidth,
+        image.naturalHeight,
+      ]),
+    )
+    .toEqual([2, 4]);
+  await expect(loaded).toHaveCSS("object-fit", "contain");
+  await expect(
+    page
+      .getByRole("button", { name: "Agregar Kybo Shake", exact: true })
+      .getByLabel("Sin foto"),
+  ).toBeVisible();
+  const media = () =>
+    app.calls
+      .filter(({ path }) => path.startsWith("/api/media/"))
+      .map(({ path }) => path)
+      .sort();
+  const mediaRequests = [id(981), id(982)]
+    .map((asset) => "/api/media/" + asset + "?size=thumbnail")
+    .sort();
+  expect(media()).toEqual(mediaRequests);
+  for (const viewport of [
+    { width: 1280, height: 800 },
+    { width: 1024, height: 768 },
+    { width: 768, height: 1024 },
+    { width: 390, height: 844 },
+    { width: 360, height: 740 },
+    { width: 320, height: 720 },
+  ]) {
+    await page.setViewportSize(viewport);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBeLessThanOrEqual(viewport.width);
+    await captureCheckout(page, "canonical-catalogue-" + viewport.width);
+  }
+  expect(media()).toEqual(mediaRequests);
+  expect(
+    app.calls.filter(({ path }) => path.includes("kind=products")),
+  ).toHaveLength(1);
   expect(app.errors).toEqual([]);
 });
 
@@ -2554,6 +3022,7 @@ test("catalogue handles an empty category and a long product name with a missing
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth),
   ).toBeLessThanOrEqual(320);
+  await captureCheckout(page, "320-long-name");
   const before = app.calls.filter((call) =>
     call.path.includes("kind=products"),
   ).length;

@@ -200,7 +200,7 @@ export function OrderFulfillmentFields({
         <p className="text-sm text-amber-800 sm:col-span-2">
           Esta mesa ya tiene una cuenta.{" "}
           <Link
-            className="font-bold underline"
+            className="inline-flex min-h-11 min-w-11 items-center rounded-sm font-bold underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             href={`/sales?account=${accountId}`}
             onClick={(event) => {
               if (

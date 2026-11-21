@@ -15,7 +15,11 @@ export function ProductCard({
   locked?: boolean;
   onSelect: () => void;
 }) {
-  const stripes = product.appearance.stripes;
+  const stripeHeight = 100 / product.appearance.stripes.length;
+  const stripeStops = product.appearance.stripes.map(
+    (color, index) =>
+      `${color} ${index * stripeHeight}% ${(index + 1) * stripeHeight}%`,
+  );
   return (
     <Button
       type="button"
@@ -40,7 +44,7 @@ export function ProductCard({
         className="pos-product-stripes"
         aria-hidden="true"
         style={{
-          background: `repeating-linear-gradient(to bottom, ${stripes[0]} 0 16px, ${stripes[1]} 16px 32px, ${stripes[2]} 32px 48px, ${stripes[3]} 48px 64px)`,
+          background: `linear-gradient(to bottom, ${stripeStops.join(", ")})`,
         }}
       />
       <span className="pos-product-photo">

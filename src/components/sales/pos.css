@@ -520,15 +520,15 @@
     [data-pos-workspace]:has([data-pos-order-pending]) {
     min-height: calc(432px + max(0px, env(safe-area-inset-bottom) - 10px));
   }
-  .pos-surface[data-pos-active-panel="order"] [data-pos-order-setup] {
+  .pos-surface [data-pos-order-setup] {
     grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
     gap: 6px 8px;
     padding: 8px;
   }
-  .pos-surface[data-pos-active-panel="order"] .pos-order-setup-actions {
+  .pos-surface .pos-order-setup-actions {
     grid-column: 1 / -1;
   }
-  .pos-surface[data-pos-active-panel="order"] .pos-order-setup-actions legend {
+  .pos-surface .pos-order-setup-actions legend {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -536,16 +536,16 @@
     clip-path: inset(50%);
     white-space: nowrap;
   }
-  .pos-surface[data-pos-active-panel="order"] .pos-order-setup-action-grid {
+  .pos-surface .pos-order-setup-action-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
   }
 }
 @media (max-width: 520px) {
-  .pos-surface[data-pos-active-panel="order"] .pos-order-setup-choices > div {
+  .pos-surface .pos-order-setup-choices > div {
     gap: 4px;
   }
-  .pos-surface[data-pos-active-panel="order"] .pos-order-setup-choices button {
+  .pos-surface .pos-order-setup-choices button {
     flex-direction: column;
     gap: 2px;
     padding: 3px;
@@ -553,7 +553,7 @@
     font-size: 11px;
     line-height: 1.1;
   }
-  .pos-surface[data-pos-active-panel="order"] .pos-order-setup-choices svg {
+  .pos-surface .pos-order-setup-choices svg {
     width: 14px;
     height: 14px;
   }

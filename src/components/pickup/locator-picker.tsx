@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FieldCaption } from "@/components/ui/field-caption";
+import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -21,6 +22,7 @@ export function LocatorPicker({
   issue,
   automatic = false,
   onAutomatic,
+  surfaceClassName,
 }: {
   value: number | null;
   onChange: (number: number | null) => void;
@@ -29,6 +31,7 @@ export function LocatorPicker({
   issue: string;
   automatic?: boolean;
   onAutomatic?: () => void;
+  surfaceClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -95,6 +98,7 @@ export function LocatorPicker({
       )}
       {open && (
         <PickerDialog
+          surfaceClassName={surfaceClassName}
           value={value}
           fleet={fleet}
           issue={issue}
@@ -125,6 +129,7 @@ function PickerDialog({
   onChange,
   automatic,
   onAutomatic,
+  surfaceClassName,
 }: {
   value: number | null;
   fleet?: LocatorFleet;
@@ -133,6 +138,7 @@ function PickerDialog({
   onChange: (number: number | null) => void;
   automatic: boolean;
   onAutomatic?: () => void;
+  surfaceClassName?: string;
 }) {
   return (
     <Dialog
@@ -143,7 +149,10 @@ function PickerDialog({
     >
       <DialogContent
         data-pickup-controls
-        className="max-h-[90dvh] overflow-y-auto sm:max-w-md"
+        className={cn(
+          "max-h-[90dvh] overflow-y-auto sm:max-w-md",
+          surfaceClassName,
+        )}
       >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
