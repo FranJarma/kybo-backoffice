@@ -3,14 +3,25 @@ import { createRoot } from "react-dom/client";
 import { validSaleResult } from "@/components/sales/sale-result";
 import { useOperation } from "@/components/inventory/shared";
 
-function OperationFixture() {
+function OperationFixture({
+  scope,
+  cash,
+  onConfirmation,
+}: {
+  scope: string;
+  cash: boolean;
+  onConfirmation: () => void;
+}) {
   const [confirmed, setConfirmed] = useState(0);
   const operation = useOperation(
     "cashier",
-    "sale",
-    () => setConfirmed((n) => n + 1),
-    "branch",
-    validSaleResult,
+    cash ? "cash" : "sale",
+    () => {
+      setConfirmed((n) => n + 1);
+      onConfirmation();
+    },
+    scope,
+    cash ? undefined : validSaleResult,
   );
   const retained = useRef<{
     submit: () => void;
@@ -18,6 +29,13 @@ function OperationFixture() {
     discard: () => void;
   } | null>(null);
   function submit() {
+    if (cash) {
+      operation.submit("/api/cash", {
+        requestId: crypto.randomUUID(),
+        command: { action: "close" },
+      });
+      return;
+    }
     operation.submit("/api/sales", {
       requestId: crypto.randomUUID(),
       notes: "sin azúcar",
@@ -89,4 +107,33 @@ function OperationFixture() {
   );
 }
 
-createRoot(document.getElementById("fixture")!).render(<OperationFixture />);
+function Harness() {
+  const [instance, setInstance] = useState(0);
+  const [scope, setScope] = useState("branch");
+  const [cash, setCash] = useState(false);
+  const [confirmed, setConfirmed] = useState<number[]>([]);
+  return (
+    <>
+      <button onClick={() => setInstance((n) => n + 1)}>
+        Reabrir terminal
+      </button>
+      <button onClick={() => setScope(scope === "branch" ? "other" : "branch")}>
+        Cambiar sucursal
+      </button>
+      <button onClick={() => setCash(true)}>Probar cierre</button>
+      <output data-testid="callbacks">{confirmed.join(",")}</output>
+      <OperationFixture
+        key={instance}
+        scope={scope}
+        cash={cash}
+        onConfirmation={() => {
+          const url = new URL(window.location.href);
+          url.searchParams.set("confirmedBy", String(instance));
+          window.history.replaceState(null, "", url);
+          setConfirmed((previous) => [...previous, instance]);
+        }}
+      />
+    </>
+  );
+}
+createRoot(document.getElementById("fixture")!).render(<Harness />);

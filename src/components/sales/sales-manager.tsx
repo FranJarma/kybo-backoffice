@@ -241,7 +241,13 @@ export function SalesManager({
     activeDetailId.current = id;
     try {
       const sale = await getJson<SaleDetail>(`/api/sales/${id}`);
-      if (detailRequest.current.revision === request) setDetail(sale);
+      if (detailRequest.current.revision !== request) return;
+      setDetail(sale);
+      setConfirmation((previous) =>
+        previous?.sale.id === sale.id && previous.sale.revision < sale.revision
+          ? null
+          : previous,
+      );
     } catch (error) {
       if (detailRequest.current.revision === request)
         setDetailError(

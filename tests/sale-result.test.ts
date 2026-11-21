@@ -43,6 +43,20 @@ it("accepts a historical refund with signed totals only for the submitted sale",
       },
     ],
   };
+  const legacy = {
+    ...result,
+    payments: [
+      {
+        ...result.payments[0],
+        commissionPercent: null,
+        commissionAmount: null,
+        settlementNet: null,
+      },
+    ],
+  };
+  expect(validSaleResult(legacy, { url: `/api/sales/${id}/cancel` })).toBe(
+    true,
+  );
   expect(validSaleResult(result, { url: `/api/sales/${id}/cancel` })).toBe(
     true,
   );

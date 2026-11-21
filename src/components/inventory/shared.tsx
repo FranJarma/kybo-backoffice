@@ -3,7 +3,7 @@ import {
   canDiscardRejectedOperation,
   discardRejectedOperation,
 } from "./operation-recovery";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useId, useLayoutEffect, useRef, useState } from "react";
 import type { CatalogRow, Entity, ListResult } from "@/modules/catalog/types";
 import { SearchCombobox } from "@/components/ui/search-combobox";
 import { FieldCaption } from "@/components/ui/field-caption";
@@ -179,7 +179,7 @@ export function useOperation<T>(
   validateResult?: (result: unknown, operation: Pending<T>) => boolean,
 ) {
   const branchId = explicitBranchId ?? currentBranchId();
-  const sending = useRef(false);
+  const activeAttempt = useRef<symbol | null>(null);
   const storageKey = `kybo:pending:${actorId}:${branchId}:${kind}`;
   const [snapshot, setSnapshot] = useState<{
     storageKey: string;
@@ -203,8 +203,10 @@ export function useOperation<T>(
   const [error, setError, errorAttempt] = useErrorFeedback();
   const [status, setStatus] = useState<number | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const timer = setTimeout(() => {
+      setBusy(false);
+      setError("");
       try {
         const saved = sessionStorage.getItem(storageKey);
         let restored: Pending<T> | null = null;
@@ -237,10 +239,12 @@ export function useOperation<T>(
     return () => {
       clearTimeout(timer);
       currentSnapshot.current = null;
+      activeAttempt.current = null;
     };
   }, [storageKey, kind, setError, setPending]);
   const send = useCallback(
-    async (operation: Pending<T>) => {
+    async (operation: Pending<T>, attempt: symbol) => {
+      const isCurrent = () => activeAttempt.current === attempt;
       if (!validPending<T>(kind, operation)) {
         setError(
           "No se puede reintentar esta operación porque el destino es inválido.",
@@ -261,6 +265,7 @@ export function useOperation<T>(
         try {
           const { operationConfirmation } =
             await import("@/components/identity/client");
+          if (!isCurrent()) return;
           const id = productionStart
             ? operation.url.split("/").at(-1)!
             : undefined;
@@ -273,13 +278,23 @@ export function useOperation<T>(
             binding,
             branchId,
           );
+          if (!isCurrent()) return;
           payload = {
             ...data,
             ...(verificationId ? { verificationId } : {}),
           } as T;
         } catch (error) {
+          if (!isCurrent()) return;
           if (!uncertain) {
-            sessionStorage.removeItem(storageKey);
+            try {
+              sessionStorage.removeItem(storageKey);
+            } catch {
+              setUncertain(true);
+              setError(
+                "No se envió la operación. No pudimos borrar la copia local. Reintentá el mismo envío cuando esté disponible la verificación.",
+              );
+              return;
+            }
             setPending(null);
           }
           setError(
@@ -288,7 +303,6 @@ export function useOperation<T>(
                 ? " El envío anterior sigue pendiente de confirmar."
                 : " No se envió la operación."),
           );
-          setBusy(false);
           return;
         }
       }
@@ -307,16 +321,18 @@ export function useOperation<T>(
           body: JSON.stringify(payload),
         });
       } catch {
+        if (!isCurrent()) return;
         setPending(inFlight);
         setUncertain(true);
         setError(
           "No pudimos confirmar el resultado. Reintentá el mismo envío; no vuelvas a cargar la operación.",
         );
-        setBusy(false);
         return;
       }
+      if (!isCurrent()) return;
       if (!response.ok) {
         const { message, code } = await errorDetails(response);
+        if (!isCurrent()) return;
         setErrorCode(code);
         setStatus(response.status);
         if (
@@ -330,7 +346,6 @@ export function useOperation<T>(
             setError(
               "No pudimos limpiar la operación local. Recargá antes de una nueva carga.",
             );
-            setBusy(false);
             return;
           }
           setPending(null);
@@ -351,12 +366,12 @@ export function useOperation<T>(
           setUncertain(true);
         }
         setError(message);
-        setBusy(false);
         return;
       }
       let result: unknown;
       try {
         result = await response.json();
+        if (!isCurrent()) return;
         if (validateResult && !validateResult(result, operation))
           throw Error("La respuesta no confirma la operación.");
         if (
@@ -371,19 +386,18 @@ export function useOperation<T>(
           throw Error("La respuesta no confirma la operación de Caja.");
         sessionStorage.removeItem(storageKey);
       } catch {
+        if (!isCurrent()) return;
         setPending(inFlight);
         setUncertain(true);
         setError(
           "El servidor respondió, pero no pudimos confirmar el resultado. Reintentá el mismo envío.",
         );
-        setBusy(false);
         return;
       }
       setPending(null);
       setUncertain(false);
       setStatus(null);
       setErrorCode(null);
-      setBusy(false);
       onSuccess(result, operation);
     },
     [
@@ -397,17 +411,25 @@ export function useOperation<T>(
       setPending,
     ],
   );
+  const dispatch = (operation: Pending<T>, attempt: symbol) => {
+    void send(operation, attempt).finally(() => {
+      if (activeAttempt.current !== attempt) return;
+      activeAttempt.current = null;
+      setBusy(false);
+    });
+  };
   const submit = (url: string, payload: T) => {
     if (
       !ready ||
       currentSnapshot.current !== snapshot ||
       pending ||
       busy ||
-      sending.current ||
+      activeAttempt.current ||
       !urlFor(kind, url)
     )
       return false;
-    sending.current = true;
+    const attempt = Symbol();
+    activeAttempt.current = attempt;
     const operation = { url, payload, outcomeUncertain: false };
     try {
       sessionStorage.setItem(storageKey, JSON.stringify(operation));
@@ -415,13 +437,11 @@ export function useOperation<T>(
       setError(
         "No pudimos asegurar el reintento en esta pestaña. No se envió la operación.",
       );
-      sending.current = false;
+      activeAttempt.current = null;
       return false;
     }
     setPending(operation);
-    void send(operation).finally(() => {
-      sending.current = false;
-    });
+    dispatch(operation, attempt);
     return true;
   };
   return {
@@ -431,14 +451,13 @@ export function useOperation<T>(
         !pending ||
         currentSnapshot.current !== snapshot ||
         busy ||
-        sending.current
+        activeAttempt.current
       )
         return;
-      sending.current = true;
+      const attempt = Symbol();
+      activeAttempt.current = attempt;
       setPending(pending);
-      void send(pending).finally(() => {
-        sending.current = false;
-      });
+      dispatch(pending, attempt);
     },
     canDiscard: canDiscardRejectedOperation({
       pending: !!pending,
@@ -447,7 +466,8 @@ export function useOperation<T>(
       outcomeUncertain: pending?.outcomeUncertain,
     }),
     discardRejected: () => {
-      if (currentSnapshot.current !== snapshot || sending.current) return false;
+      if (currentSnapshot.current !== snapshot || activeAttempt.current)
+        return false;
       try {
         if (
           !discardRejectedOperation(sessionStorage, storageKey, {

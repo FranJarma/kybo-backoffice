@@ -882,6 +882,7 @@ async function mountCheckout(
   const submissions: CapturedSubmission[] = [];
   const printingSubmissions: CapturedSubmission[] = [];
   const cashStatusReads: boolean[] = [];
+  let detailSale = sale;
   let cashIsOpen = surface.cashOpen ?? true;
   let releaseSlow = () => {};
   const slowResponse = new Promise<void>((resolve) => {
@@ -949,7 +950,7 @@ async function mountCheckout(
     return route.fulfill({ json: sale });
   });
   await page.route(`**/api/sales/${sale.id}`, (route) =>
-    route.fulfill({ json: sale }),
+    route.fulfill({ json: detailSale }),
   );
   await page.route("**/api/fulfillment/state**", (route) =>
     route.fulfill({
@@ -1049,6 +1050,9 @@ async function mountCheckout(
     printingSubmissions,
     cashStatusReads,
     releaseSlow,
+    setDetailSale: (next: SaleDetail) => {
+      detailSale = next;
+    },
   };
 }
 async function prepareCappuccino(page: Page) {
@@ -1199,6 +1203,144 @@ test("checkout confirmation lists each split payment and known cash change", asy
   ]);
   await captureCheckout(page, "confirmed-split");
   expect(app.errors).toEqual([]);
+});
+
+for (const change of ["table-paid", "paid-cancelled"] as const)
+  test(`checkout expires the previous confirmation after a newer ${change} revision`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const previous = confirmedFixtureSale(
+      change === "table-paid" ? "pending-table" : "paid",
+    );
+    const app = await mountCheckout(page, { sale: previous, tables: true });
+    if (change === "table-paid") {
+      await page.getByRole("button", { name: "Mesa", exact: true }).click();
+      await page.getByRole("combobox", { name: /^Mesa/ }).selectOption(id(950));
+    }
+    await prepareCappuccino(page);
+    if (change === "table-paid") {
+      await page
+        .getByRole("button", { name: "Abrir cuenta", exact: true })
+        .click();
+      await expect(confirmationRegion(page)).toContainText(
+        "Venta pendiente de cobro",
+      );
+      await page
+        .getByRole("button", { name: "Cerrar detalle de venta", exact: true })
+        .click();
+    } else {
+      const payment = await openCashCheckout(page);
+      await confirmCheckout(payment).click();
+      await expect(confirmationRegion(page)).toContainText(
+        /Recibido.*5[.]000.*Vuelto.*1[.]500/,
+      );
+    }
+    const current: SaleDetail =
+      change === "table-paid"
+        ? {
+            ...previous,
+            revision: 2,
+            status: "closed",
+            paidAmount: "3500.00",
+            balanceDue: "0.00",
+            localCollected: "3500.00",
+            closedAt: "2026-11-20T17:05:00.000Z",
+            payments: confirmedFixtureSale().payments,
+          }
+        : {
+            ...previous,
+            revision: 2,
+            status: "cancelled",
+            paidAmount: "0.00",
+            balanceDue: "0.00",
+            localCollected: "0.00",
+            cancelReason: "Anulada desde otra caja",
+            payments: [
+              ...previous.payments,
+              {
+                ...previous.payments[0],
+                id: id(905),
+                kind: "refund",
+                originalPaymentId: previous.payments[0].id,
+                createdAt: "2026-11-20T17:05:00.000Z",
+              },
+            ],
+          };
+    app.setDetailSale(current);
+    await page
+      .getByRole("button", { name: "Última venta #73", exact: true })
+      .click();
+    const detail = page.getByRole("dialog");
+    await expect(
+      detail.getByRole("heading", { name: "Venta #73", exact: true }),
+    ).toBeVisible();
+    await expect(
+      detail.getByText(change === "table-paid" ? "Cobrada" : "Anulada", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await captureCheckout(page, `revision-${change}-detail`);
+    await expect.soft(confirmationRegion(page)).toHaveCount(0);
+    await expect.soft(detail).not.toContainText(/Recibido|Vuelto/);
+    await detail
+      .getByRole("button", { name: "Cerrar detalle de venta", exact: true })
+      .click();
+    await captureCheckout(page, `revision-${change}-return`);
+    await expect.soft(confirmationRegion(page)).toHaveCount(0);
+    expect(app.submissions).toHaveLength(1);
+    expect(app.errors).toEqual([]);
+  });
+
+test("checkout renders accepted admin commission and VAT decimal fields without errors", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const sale = confirmedFixtureSale();
+  sale.payments[0] = {
+    ...sale.payments[0],
+    methodName: "Débito",
+    methodKind: "card",
+    reference: "000073",
+    commissionPercent: "2.50",
+    commissionAmount: "87.50",
+    settlementNet: "3412.50",
+  };
+  sale.orders[0].lines[0] = {
+    ...sale.orders[0].lines[0],
+    vatRate: "21.00",
+    netTotal: "2892.56",
+    vatTotal: "607.44",
+  };
+  const app = await mountCheckout(page, { sale });
+  await prepareCappuccino(page);
+  await page
+    .getByRole("button", { name: "Continuar al cobro", exact: true })
+    .click();
+  const payment = page.getByRole("dialog");
+  await payment.getByRole("button", { name: "Débito", exact: true }).click();
+  await payment
+    .getByRole("textbox", { name: "Número de comprobante", exact: true })
+    .fill("000073");
+  await confirmCheckout(payment).click();
+  await expect(confirmationRegion(page)).toContainText(/Venta cobrada.*#73/);
+  await expect(confirmationRegion(page)).toContainText(/Débito.*3[.]500/);
+  await page
+    .getByRole("button", { name: "Última venta #73", exact: true })
+    .click();
+  const detail = page.getByRole("dialog");
+  await detail.getByText("Comisiones e impuestos", { exact: true }).click();
+  const costs = detail
+    .locator("details")
+    .filter({ hasText: "Comisiones e impuestos" });
+  await expect(costs).toContainText(
+    /comisión 2,5%:.*87,50.*Neto estimado:.*3[.]412,50/,
+  );
+  await expect(costs).toContainText(/Neto:.*2[.]892,56.*IVA 21%:.*607,44/);
+  await expect(detail).not.toContainText("NaN");
+  expect(app.submissions).toHaveLength(1);
+  expect(app.errors).toEqual([]);
+  await captureCheckout(page, "admin-commission-vat");
 });
 
 for (const origin of ["table", "delivery"] as const)

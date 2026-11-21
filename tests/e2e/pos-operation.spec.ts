@@ -49,7 +49,11 @@ async function fixture(page: Page, respond: (route: Route) => Promise<void>) {
         contentType: "text/javascript; charset=utf-8",
         body: script,
       });
-    if (path === "/api/sales" && route.request().method() === "POST")
+    if (
+      path === "/api/identity/policy" ||
+      (["/api/sales", "/api/cash"].includes(path) &&
+        route.request().method() === "POST")
+    )
       return respond(route);
     return route.abort();
   });
@@ -212,6 +216,33 @@ test("blocks discard immediately when retry begins", async ({ page }) => {
 });
 
 for (const [label, json] of Object.entries({
+  commission: {
+    ...confirmedSale,
+    payments: [
+      {
+        ...confirmedSale.payments[0],
+        commissionAmount: "1.00",
+        settlementNet: "149.00",
+        commissionPercent: { toString: null },
+      },
+    ],
+  },
+  vat: {
+    ...confirmedSale,
+    orders: [
+      {
+        ...confirmedSale.orders[0],
+        lines: [
+          {
+            ...confirmedSale.orders[0].lines[0],
+            vatRate: "invalid",
+            netTotal: "125.00",
+            vatTotal: "25.00",
+          },
+        ],
+      },
+    ],
+  },
   empty: {},
   order: { ...confirmedSale, orders: [{}] },
   line: {
@@ -311,4 +342,151 @@ test("rejects a retained permission discard after an uncertain retry", async ({
   await page.getByRole("button", { name: "Descartar anterior" }).click();
   expect(await saved(page)).toBe(pending);
   await expect(page.getByTestId("state")).toHaveText("incierto");
+});
+
+for (const status of [200, 503]) {
+  test(`keeps the new terminal's command through a late ${status} and reload`, async ({
+    page,
+  }) => {
+    const bodies: string[] = [];
+    let first!: Route, third!: Route;
+    await fixture(page, async (route) => {
+      bodies.push(route.request().postData()!);
+      switch (bodies.length) {
+        case 1:
+          first = route;
+          return;
+        case 3:
+          third = route;
+          return;
+        default:
+          return confirm(route);
+      }
+    });
+    await page.getByRole("button", { name: "Enviar", exact: true }).click();
+    await expect.poll(() => bodies.length).toBe(1);
+    await page.getByRole("button", { name: "Reabrir terminal" }).click();
+    await expect(page.getByTestId("state")).toHaveText("incierto");
+    await page.getByRole("button", { name: "Reintentar", exact: true }).click();
+    await expect(page.getByTestId("callbacks")).toHaveText("1");
+    await page.getByRole("button", { name: "Enviar", exact: true }).click();
+    await expect(page.getByTestId("state")).toHaveText("enviando");
+    await expect.poll(() => bodies.length).toBe(3);
+    expect(bodies[0]).toBe(bodies[1]);
+    expect(bodies[2]).not.toBe(bodies[0]);
+    const newPending = await saved(page);
+    expect(JSON.parse(newPending!).payload).toEqual(JSON.parse(bodies[2]));
+    const late = page.waitForResponse((r) => r.url().endsWith("/api/sales"));
+    if (status === 200) await confirm(first);
+    else await first.fulfill({ status, json: { error: "Temporal" } });
+    await (await late).finished();
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
+    expect(await saved(page)).toBe(newPending);
+    await expect(page.getByTestId("callbacks")).toHaveText("1");
+    expect(new URL(page.url()).searchParams.get("confirmedBy")).toBe("1");
+    await expect(page.getByTestId("state")).toHaveText("enviando");
+    await third.abort();
+    await expect(page.getByTestId("state")).toHaveText("incierto");
+    expect(await saved(page)).toBe(newPending);
+    await page.reload();
+    await expect(page.getByTestId("state")).toHaveText("incierto");
+    await page.getByRole("button", { name: "Reintentar", exact: true }).click();
+    await expect(page.getByTestId("confirmed")).toHaveText("1");
+    expect(bodies).toEqual([bodies[0], bodies[0], bodies[2], bodies[2]]);
+  });
+}
+
+test("recovers from failed verification when storage cleanup also fails", async ({
+  page,
+}) => {
+  let policies = 0,
+    posts = 0;
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await fixture(page, async (route) => {
+    if (new URL(route.request().url()).pathname === "/api/identity/policy") {
+      return ++policies === 1
+        ? route.fulfill({
+            status: 503,
+            json: { error: "Identidad no disponible" },
+          })
+        : route.fulfill({ json: { required: false } });
+    }
+    posts++;
+    return route.fulfill({
+      json: { branchId: "branch", totals: {}, capabilities: {} },
+    });
+  });
+  await page.getByRole("button", { name: "Probar cierre" }).click();
+  const submit = page.getByRole("button", { name: "Enviar", exact: true });
+  await expect(submit).toBeEnabled();
+  await page.evaluate(() => {
+    const remove = Storage.prototype.removeItem;
+    Storage.prototype.removeItem = function (key) {
+      if (key.endsWith(":cash")) {
+        Storage.prototype.removeItem = remove;
+        throw new DOMException("Storage unavailable", "SecurityError");
+      }
+      return remove.call(this, key);
+    };
+  });
+  await submit.click();
+  await expect.poll(() => policies).toBe(1);
+  await expect(page.getByText(/No se envi[oó].*reintent/i)).toBeVisible({
+    timeout: 1800,
+  });
+  await expect(page.getByTestId("state")).not.toHaveText("enviando");
+  expect(posts).toBe(0);
+  const savedCash = await page.evaluate(() =>
+    JSON.parse(sessionStorage.getItem("kybo:pending:cashier:branch:cash")!),
+  );
+  expect(savedCash.outcomeUncertain).toBe(false);
+  await page.getByRole("button", { name: "Reintentar", exact: true }).click();
+  await expect(page.getByTestId("confirmed")).toHaveText("1");
+  expect(posts).toBe(1);
+  expect(errors).toEqual([]);
+});
+
+test("does not dispatch a verified command after switching its branch", async ({
+  page,
+}) => {
+  let policy: Route | undefined;
+  let posts = 0;
+  await fixture(page, async (route) => {
+    if (new URL(route.request().url()).pathname === "/api/identity/policy") {
+      policy = route;
+      return;
+    }
+    posts++;
+    return route.fulfill({
+      json: { branchId: "branch", totals: {}, capabilities: {} },
+    });
+  });
+  await page.getByRole("button", { name: "Probar cierre" }).click();
+  await page.getByRole("button", { name: "Enviar", exact: true }).click();
+  await expect.poll(() => !!policy).toBe(true);
+  await page.getByRole("button", { name: "Cambiar sucursal" }).click();
+  const complete = page.waitForResponse((r) =>
+    r.url().endsWith("/api/identity/policy"),
+  );
+  await policy!.fulfill({ json: { required: false } });
+  await (await complete).finished();
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
+  expect(posts).toBe(0);
+  await expect(page.getByTestId("state")).toHaveText("edición");
+  expect(
+    await page.evaluate(() =>
+      sessionStorage.getItem("kybo:pending:cashier:branch:cash"),
+    ),
+  ).not.toBeNull();
 });

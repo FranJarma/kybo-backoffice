@@ -7,6 +7,10 @@ const text = (value: unknown) => typeof value === "string";
 const optionalText = (value: unknown) => value == null || text(value);
 const amount = (value: unknown) =>
   typeof value === "string" && /^-?\d+\.\d{2}$/.test(value);
+const percentage = (value: unknown) =>
+  typeof value === "string" &&
+  /^-?\d+(?:\.\d+)?$/.test(value) &&
+  Number.isFinite(Number(value));
 const date = (value: unknown) =>
   typeof value === "string" && Number.isFinite(Date.parse(value));
 
@@ -22,7 +26,9 @@ function validLine(line: unknown) {
     optionalText(line.notes) &&
     optionalText(line.priceReason) &&
     (line.vatRate == null ||
-      (text(line.vatRate) && amount(line.netTotal) && amount(line.vatTotal))) &&
+      (percentage(line.vatRate) &&
+        amount(line.netTotal) &&
+        amount(line.vatTotal))) &&
     (line.modifiers == null ||
       (Array.isArray(line.modifiers) &&
         line.modifiers.every(
@@ -55,7 +61,9 @@ function validPayment(payment: unknown) {
     optionalText(payment.methodName) &&
     optionalText(payment.reference) &&
     (payment.commissionAmount == null ||
-      (amount(payment.commissionAmount) && amount(payment.settlementNet)))
+      (percentage(payment.commissionPercent) &&
+        amount(payment.commissionAmount) &&
+        amount(payment.settlementNet)))
   );
 }
 
