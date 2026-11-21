@@ -16,7 +16,7 @@
 
 **Proyecto de ChatGPT:** Sistema de Gestión de Kybo.
 
-**Estado de esta entrega:** handoff preparado; no se creó la rama, no se modificó código de la aplicación ni se ejecutaron sus tests en este chat. La implementación comienza en un nuevo chat con este archivo y acceso al repositorio.
+**Estado de esta entrega:** implementación en curso en la feature branch, con contratos concretos en sección12 y evidencia actualizada en docs/pos-ux-ui-verification.md.
 
 ## Global Constraints
 
@@ -255,12 +255,12 @@ Son responsabilidades objetivo, no una orden de crear todos esos archivos si ya 
 
 **Interfaces:** consumes PublicConfiguration y restricciones reales; produces selección confirmada compatible con el contrato actual de ProductConfigurator y CartLine. Cancelar no modifica la línea guardada.
 
-- [ ] Agregar casos de selección simple y múltiple, mínimos/máximos, defaults por producto, opción no disponible, cancelar y reabrir en `tests/e2e/modifiers.spec.ts` y `tests/pos-configuration.integration.test.ts`.
-- [ ] Verificar los nuevos fallos y luego separar el borrador de presentación y las validaciones del grupo sin replicar reglas del servidor en cada opción.
-- [ ] Implementar círculo de 48 px, sabor, señales de selección, leyenda de receta y X de Sin perlas. Mantener grupos de múltiples opciones funcionales.
-- [ ] Guardar opciones actualiza precio, descripción e inventario según los contratos existentes; la UI no sustituye la configuración real por el ejemplo Chocolate/Caramelo.
-- [ ] Pasar pruebas y revisar las tres distribuciones, incluido scroll del grupo con acciones accesibles.
-- [ ] Commit de configuración y pruebas.
+- [x] Agregar casos de selección simple y múltiple, mínimos/máximos, defaults por producto, opción no disponible, cancelar y reabrir en `tests/e2e/modifiers.spec.ts` y `tests/pos-configuration.integration.test.ts`.
+- [x] Verificar los nuevos fallos y luego separar el borrador de presentación y las validaciones del grupo sin replicar reglas del servidor en cada opción.
+- [x] Implementar círculo de 48 px, sabor, señales de selección, leyenda de receta y X de Sin perlas. Mantener grupos de múltiples opciones funcionales.
+- [x] Guardar opciones actualiza precio, descripción e inventario según los contratos existentes; la UI no sustituye la configuración real por el ejemplo Chocolate/Caramelo.
+- [x] Pasar pruebas y revisar las tres distribuciones, incluido scroll del grupo con acciones accesibles.
+- [x] Commit de configuración y pruebas.
 
 ### Task 4: Revisión y edición del pedido
 

@@ -29,3 +29,9 @@ El gate aislado ampliado pasó 4/4 casos y los unitarios 34/34. Verifica resize 
 `pnpm build --webpack` pasó completo, con TypeScript y todas las rutas. El primer intento del runner E2E managed con fallback Webpack se detuvo antes del servidor porque scripts/migrate.ts deshabilita la migración genérica durante la transición del modelo de datos. No se modificó ni se anuló ese bloqueo. La ejecución real de /sales requiere el bootstrap descartable revisado del repositorio; permanece pendiente, no aprobada.
 
 
+
+## Task 3: modificadores
+
+RED de implementación: 9 fallos esperados por metadata/copy/identidad visual; después se reprodujo y corrigió maxCount=0. GREEN final: 75 casos en 7 archivos, typecheck, ESLint y Prettier. Browser: 5 casos sobre componentes reales pasaron en 1280/768/390; defaults por producto, receta independiente de selección/precio cero, simple/múltiple, límites, disponibilidad, cancelar/reabrir y edición conservando cantidad/notas con precio recalculado. La apariencia usa key persistida con fallback neutro; no se alteran IDs de binding ni consultas adicionales. Se revisaron capturas de los tres tamaños y el pie del modal conserva acciones visibles.
+
+El bootstrap alternativo del helper de tests se completó con PGlite nueva y usuarios descartables; el E2E integrado quedó bloqueado por permisos de socket a 127.0.0.1:3017. No se ejecutaron casos ni se anuló esa restricción.

@@ -14,6 +14,7 @@ import type { SaleChannel } from "../src/modules/sales/types";
 let c: Awaited<ReturnType<typeof createDataModelTestContext>>;
 const actor: Actor = { id: "pos-options", role: "admin" };
 let productId: string, versionId: string;
+let defaultBindingId: string;
 beforeAll(async () => {
   c = await createDataModelTestContext();
   actor.branchId = c.mapping.initialBranch.id;
@@ -77,8 +78,8 @@ beforeAll(async () => {
       .insert(s.modifierOptions)
       .values({
         groupVersionId: gv.id,
-        key: mode,
-        name: mode,
+        key: mode === "override" ? "mango" : mode,
+        name: mode === "override" ? "Mango de temporada" : mode,
         kind: mode === "instruction" ? "instruction" : "composition",
         position,
       })
@@ -91,11 +92,12 @@ beforeAll(async () => {
         groupVersionId: gv.id,
         optionId: o.id,
         enabled: mode !== "disabled",
-        defaultCount: 0,
+        defaultCount: mode === "override" ? 1 : 0,
         maxCount: 3,
         mode: mode === "override" ? "override" : "inherit",
       })
       .returning();
+    if (mode === "override") defaultBindingId = b.id;
     // Overrides must ignore an invalid inherited component; instructions have none.
     if (mode !== "instruction")
       await c.db.insert(s.modifierOptionComponents).values({
@@ -134,6 +136,7 @@ async function expected(channel: SaleChannel) {
       .filter((o) => o.enabled)
       .map((o) => ({
         id: o.id,
+        key: o.key,
         name: o.name,
         defaultCount: o.defaultCount,
         maxCount: o.maxCount,
@@ -164,6 +167,25 @@ it("loads the sale options in at most two reads without loading the recipe graph
   expect(result.basePrice).toBe("5000.00");
   expect(reads.length).toBeGreaterThan(0);
   expect(reads.length).toBeLessThanOrEqual(2);
+});
+it("exposes the stable modifier key alongside the product recipe default and binding ID", async () => {
+  const result = await getProductConfiguration(
+    c.db,
+    actor,
+    productId,
+    "pedidosya",
+  );
+  expect(
+    result.groups[0].options.find((o) => o.id === defaultBindingId),
+  ).toEqual({
+    id: defaultBindingId,
+    key: "mango",
+    name: "Mango de temporada",
+    defaultCount: 1,
+    maxCount: 3,
+    price: "100.00",
+    available: true,
+  });
 });
 it("preserves channel prices, inherited/override availability and stock-free instructions", async () => {
   expect(

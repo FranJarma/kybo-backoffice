@@ -72,8 +72,127 @@ const categories = [
   { id: "soft", name: "Soft" },
   { id: "salados", name: "Salados" },
 ];
-function configuration(productId: string) {
+function configuration(productId: string, modifierScenario = false) {
   const product = rows.find((row) => row.id === productId)!;
+  if (modifierScenario && [id(1), id(2)].includes(productId)) {
+    const firstProduct = productId === id(1);
+    return {
+      basePrice: product.price,
+      catalogBasePrice: product.price,
+      vatRate: "0.00",
+      fulfillmentVersionId: product.fulfillmentVersionId,
+      recipeVersionId: firstProduct ? id(300) : id(301),
+      pricingRevision: 1,
+      model: "configurable",
+      groups: [
+        {
+          id: id(400),
+          name: "Perlas",
+          min: 1,
+          max: 1,
+          options: [
+            {
+              id: id(401),
+              key: "chocolate",
+              name: "Chocolate",
+              defaultCount: firstProduct ? 1 : 0,
+              maxCount: 1,
+              price: "0.00",
+              available: true,
+            },
+            {
+              id: id(402),
+              key: "mango",
+              name: "Mango",
+              defaultCount: firstProduct ? 0 : 1,
+              maxCount: 1,
+              price: "0.00",
+              available: true,
+            },
+            {
+              id: id(403),
+              key: "no-pearls",
+              name: "Sin perlas",
+              defaultCount: 0,
+              maxCount: 1,
+              price: "0.00",
+              available: true,
+            },
+            {
+              id: id(404),
+              key: "blackberry",
+              name: "Mora",
+              defaultCount: 0,
+              maxCount: 1,
+              price: "0.00",
+              available: false,
+            },
+          ],
+        },
+        {
+          id: id(420),
+          name: "Toppings",
+          min: 1,
+          max: 3,
+          options: [
+            {
+              id: id(421),
+              key: "crumbles",
+              name: "Crocantes",
+              defaultCount: 1,
+              maxCount: 2,
+              price: "100.00",
+              available: true,
+            },
+            {
+              id: id(422),
+              key: "coconut",
+              name: "Coco",
+              defaultCount: 0,
+              maxCount: 2,
+              price: "200.00",
+              available: true,
+            },
+            {
+              id: id(423),
+              key: "sprinkles",
+              name: "Sprinkles",
+              defaultCount: 0,
+              maxCount: 3,
+              price: "0.00",
+              available: true,
+            },
+          ],
+        },
+        {
+          id: id(410),
+          name: "Salsas",
+          min: 0,
+          max: 2,
+          options: [
+            {
+              id: id(411),
+              key: "caramel",
+              name: "Caramelo",
+              defaultCount: 0,
+              maxCount: 1,
+              price: "100.00",
+              available: true,
+            },
+            {
+              id: id(412),
+              key: "strawberry",
+              name: "Frutilla",
+              defaultCount: 0,
+              maxCount: 1,
+              price: "0.00",
+              available: true,
+            },
+          ],
+        },
+      ],
+    };
+  }
   return {
     basePrice: product.price,
     catalogBasePrice: product.price,
@@ -197,7 +316,9 @@ type Call = { method: string; path: string; elapsedMs: number };
 const longProductName =
   "Waffle de chipá con jamón, queso y una descripción extendida para comprobar el ajuste de nombres " +
   "superextensosininterrupciones".repeat(3);
-async function mount(page: Page, edgeCases = false) {
+type SurfaceFixtureOptions = { edgeCases?: boolean; modifiers?: boolean };
+async function mount(page: Page, options: SurfaceFixtureOptions = {}) {
+  const { edgeCases = false, modifiers = false } = options;
   const calls: Call[] = [],
     errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -297,7 +418,8 @@ async function mount(page: Page, edgeCases = false) {
     const config = url.pathname.match(
       /^\/api\/sales\/products\/([^/]+)\/configuration$/,
     );
-    if (config) return route.fulfill({ json: configuration(config[1]) });
+    if (config)
+      return route.fulfill({ json: configuration(config[1], modifiers) });
     if (url.pathname.startsWith("/api/media/"))
       return route.fulfill({ status: 404, body: "Missing fixture photo" });
     // The fixture has no external transport: unneeded read endpoints remain empty.
@@ -324,6 +446,226 @@ async function mount(page: Page, edgeCases = false) {
   return { calls, errors, catalogueReadyMs };
 }
 const profiles: unknown[] = [];
+const modifierRadio = (dialog: Locator, name: string) =>
+  dialog.getByRole("radio", { name: new RegExp("^" + name) });
+const modifierLabel = (dialog: Locator, name: string) =>
+  modifierRadio(dialog, name).locator("xpath=ancestor::label[1]");
+async function openProductOptions(page: Page, name = "Oreo Iced Latte") {
+  await page
+    .getByRole("button", { name: `Agregar ${name}`, exact: true })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+for (const viewport of [
+  { width: 1280, height: 800 },
+  { width: 768, height: 1024 },
+  { width: 390, height: 844 },
+])
+  test(`modifiers preserve product defaults, recipe membership and accessible actions at ${viewport.width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    const app = await mount(page, { modifiers: true });
+    let dialog = await openProductOptions(page);
+    await expect(modifierRadio(dialog, "Chocolate")).toBeChecked();
+    await expect(modifierRadio(dialog, "Mango")).not.toBeChecked();
+    await expect(modifierRadio(dialog, "Mora")).toBeDisabled();
+    await expect(
+      modifierLabel(dialog, "Chocolate").getByText(
+        "Viene incluida en la receta",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await expect(
+      modifierLabel(dialog, "Mango").getByText("Viene incluida en la receta", {
+        exact: true,
+      }),
+    ).toHaveCount(0);
+    await modifierLabel(dialog, "Mango").click();
+    await expect(modifierRadio(dialog, "Mango")).toBeChecked();
+    await expect(modifierRadio(dialog, "Chocolate")).not.toBeChecked();
+    await expect(
+      modifierLabel(dialog, "Chocolate").getByText(
+        "Viene incluida en la receta",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await expect(
+      modifierLabel(dialog, "Mango").getByText("Viene incluida en la receta", {
+        exact: true,
+      }),
+    ).toHaveCount(0);
+    const confirm = dialog.getByRole("button", {
+      name: "Agregar al pedido",
+      exact: true,
+    });
+    await confirm.scrollIntoViewIfNeeded();
+    await expect(confirm).toBeEnabled();
+    const bounds = await confirm.boundingBox();
+    expect(bounds!.height).toBeGreaterThanOrEqual(44);
+    expect(bounds!.y).toBeGreaterThanOrEqual(0);
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(viewport.height);
+    if (reportDirectory) {
+      await mkdir(reportDirectory, { recursive: true });
+      await page.screenshot({
+        path: join(reportDirectory, `modifiers-${viewport.width}.png`),
+      });
+    }
+    await dialog.getByRole("button", { name: "Cancelar", exact: true }).click();
+    dialog = await openProductOptions(page);
+    await expect(modifierRadio(dialog, "Chocolate")).toBeChecked();
+    await expect(modifierRadio(dialog, "Mango")).not.toBeChecked();
+    await dialog.getByRole("button", { name: "Cancelar", exact: true }).click();
+    dialog = await openProductOptions(page, "Shake Oreo");
+    await expect(modifierRadio(dialog, "Mango")).toBeChecked();
+    await expect(modifierRadio(dialog, "Chocolate")).not.toBeChecked();
+    await expect(
+      modifierLabel(dialog, "Mango").getByText("Viene incluida en la receta", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(
+      modifierLabel(dialog, "Chocolate").getByText(
+        "Viene incluida en la receta",
+        { exact: true },
+      ),
+    ).toHaveCount(0);
+    await dialog.getByRole("button", { name: "Cancelar", exact: true }).click();
+    await expect(page.getByTestId("cart-line")).toHaveCount(0);
+    expect(app.errors).toEqual([]);
+  });
+
+test("modifiers enforce multiple selection, per-option maxima and group minimum and maximum", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const app = await mount(page, { modifiers: true });
+  const dialog = await openProductOptions(page);
+  const confirm = dialog.getByRole("button", {
+    name: "Agregar al pedido",
+    exact: true,
+  });
+  const quantity = (name: string) =>
+    dialog.getByLabel(`Cantidad ${name}`, { exact: true });
+  const add = (name: string) =>
+    dialog.getByRole("button", { name: `Aumentar ${name}`, exact: true });
+  const remove = (name: string) =>
+    dialog.getByRole("button", { name: `Disminuir ${name}`, exact: true });
+  await expect(quantity("Crocantes")).toHaveText("1");
+  await expect(quantity("Coco")).toHaveText("0");
+  await add("Crocantes").click();
+  await expect(quantity("Crocantes")).toHaveText("2");
+  await expect(add("Crocantes")).toBeDisabled();
+  await add("Coco").click();
+  await expect(quantity("Crocantes")).toHaveText("2");
+  await expect(quantity("Coco")).toHaveText("1");
+  await expect(add("Coco")).toBeDisabled();
+  await expect(add("Sprinkles")).toBeDisabled();
+  await remove("Crocantes").click();
+  await add("Coco").click();
+  await expect(quantity("Crocantes")).toHaveText("1");
+  await expect(quantity("Coco")).toHaveText("2");
+  await expect(confirm).toBeEnabled();
+  await remove("Crocantes").click();
+  await remove("Coco").click();
+  await remove("Coco").click();
+  await expect(quantity("Crocantes")).toHaveText("0");
+  await expect(quantity("Coco")).toHaveText("0");
+  await expect(confirm).toBeDisabled();
+  await add("Sprinkles").click();
+  await expect(confirm).toBeEnabled();
+  const optionalGroup = dialog.locator("details").filter({ hasText: "Salsas" });
+  if (await optionalGroup.count())
+    await optionalGroup.locator("summary").click();
+  await add("Caramelo").click();
+  await add("Frutilla").click();
+  await expect(quantity("Caramelo")).toHaveText("1");
+  await expect(quantity("Frutilla")).toHaveText("1");
+  await remove("Caramelo").click();
+  await remove("Frutilla").click();
+  await expect(confirm).toBeEnabled();
+  await dialog.getByRole("button", { name: "Cancelar", exact: true }).click();
+  await expect(page.getByTestId("cart-line")).toHaveCount(0);
+  expect(app.errors).toEqual([]);
+});
+
+test("modifiers keep confirmed quantity and notes through cancellation and update price and labels only when saved", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const app = await mount(page, { modifiers: true });
+  for (let index = 0; index < 2; index++) {
+    const options = await openProductOptions(page);
+    await options
+      .getByRole("button", { name: "Agregar al pedido", exact: true })
+      .click();
+  }
+  const line = page.getByTestId("cart-line");
+  await expect(line).toHaveCount(1);
+  await expect(page.getByTestId("cart-total")).toHaveText(/15[.]200/);
+  await line
+    .getByRole("button", {
+      name: "Editar observaciones de Oreo Iced Latte",
+      exact: true,
+    })
+    .click();
+  const note = page.getByRole("dialog");
+  await note
+    .getByRole("textbox", {
+      name: "Observaciones de Oreo Iced Latte",
+      exact: true,
+    })
+    .fill("Sin hielo");
+  await note
+    .getByRole("button", { name: "Guardar cambios", exact: true })
+    .click();
+  const edit = line.getByRole("button", {
+    name: "Editar opciones de Oreo Iced Latte",
+    exact: true,
+  });
+  await edit.click();
+  let options = page.getByRole("dialog");
+  await modifierLabel(options, "Mango").click();
+  await options
+    .getByRole("button", { name: "Aumentar Coco", exact: true })
+    .click();
+  await options.getByRole("button", { name: "Cancelar", exact: true }).click();
+  await expect(page.getByTestId("cart-total")).toHaveText(/15[.]200/);
+  await expect(line).toContainText(/1 [x×] Chocolate/);
+  await expect(line).not.toContainText(/1 [x×] Mango/);
+  await expect(line).toContainText("Sin hielo");
+  await edit.click();
+  options = page.getByRole("dialog");
+  await expect(modifierRadio(options, "Chocolate")).toBeChecked();
+  await expect(
+    options.getByLabel("Cantidad Crocantes", { exact: true }),
+  ).toHaveText("1");
+  await expect(options.getByLabel("Cantidad Coco", { exact: true })).toHaveText(
+    "0",
+  );
+  await modifierLabel(options, "Mango").click();
+  await options
+    .getByRole("button", { name: "Aumentar Coco", exact: true })
+    .click();
+  await options
+    .getByRole("button", { name: "Agregar al pedido", exact: true })
+    .click();
+  await expect(page.getByTestId("cart-total")).toHaveText(/15[.]600/);
+  await expect(line).toHaveCount(1);
+  await expect(line).toContainText(/1 [x×] Mango/);
+  await expect(line).toContainText(/1 [x×] Crocantes/);
+  await expect(line).toContainText(/1 [x×] Coco/);
+  await expect(line).not.toContainText(/1 [x×] Chocolate/);
+  await expect(line).toContainText("Sin hielo");
+  await expect(
+    page
+      .getByRole("button", { name: "Agregar Oreo Iced Latte", exact: true })
+      .getByText("2 en pedido", { exact: true }),
+  ).toBeVisible();
+  expect(app.errors).toEqual([]);
+});
 async function expectUnclippedKeyboardFocus(button: Locator) {
   await expect(button).toBeFocused();
   const focus = await button.evaluate((element) => {
@@ -428,7 +770,7 @@ test("catalogue handles an empty category and a long product name with a missing
   page,
 }) => {
   await page.setViewportSize({ width: 320, height: 720 });
-  const app = await mount(page, true);
+  const app = await mount(page, { edgeCases: true });
   const catalogue = page.locator("[data-pos-catalogue]");
   const longCard = catalogue.getByRole("button", {
     name: `Agregar ${longProductName}`,

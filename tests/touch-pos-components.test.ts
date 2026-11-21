@@ -170,6 +170,113 @@ it("shows required groups before collapsed optional groups with touch counters",
   expect(html).toMatch(/<details[^>]*>[\s\S]*Endulzante/);
   expect(html).toContain('aria-label="Aumentar Azúcar"');
 });
+describe("modifier rows", () => {
+  type Option = PublicConfiguration["groups"][number]["options"][number];
+  const option = (extra: Partial<Option> = {}): Option => ({
+    id: "binding",
+    name: "Chocolate",
+    defaultCount: 0,
+    maxCount: 1,
+    available: true,
+    price: "0.00",
+    ...extra,
+  });
+  const renderOptions = (
+    options: Option[],
+    props: Partial<React.ComponentProps<typeof ProductConfigurator>> = {},
+    limits = { min: 1, max: 1 },
+  ) =>
+    renderToStaticMarkup(
+      React.createElement(ProductConfigurator, {
+        config: config([{ id: "group", name: "Perlas", ...limits, options }]),
+        onCancel: vi.fn(),
+        onConfirm: vi.fn(),
+        ...props,
+      }),
+    );
+
+  it("continues labeling a recipe default after it is deselected", () => {
+    const html = renderOptions([option({ defaultCount: 1 })], {
+      initialSelection: [],
+    });
+    expect(html).toContain("Viene incluida en la receta");
+    expect(html).not.toContain('checked=""');
+    expect(html).toContain("Perlas: elegí entre 1 y 1.");
+  });
+
+  it("labels and prices a paid recipe default and shows native checked state", () => {
+    const html = renderOptions([option({ defaultCount: 1, price: "200.00" })]);
+    expect(html).toContain("Viene incluida en la receta");
+    expect(html).toMatch(/\+ [^<]*200,00/);
+    expect(html).toContain('checked=""');
+  });
+
+  it("describes a free nondefault option without claiming recipe membership", () => {
+    const html = renderOptions([option()]);
+    expect(html).toContain("Sin cargo");
+    expect(html).not.toContain("Viene incluida en la receta");
+  });
+
+  it("uses the persisted flavor key regardless of the option name", () => {
+    expect(
+      renderOptions([option({ key: "chocolate", name: "Cacao intenso" })]),
+    ).toContain("background-color:#956545");
+    const unknown = renderOptions([option({ key: "seasonal" })]);
+    expect(unknown).toContain('data-modifier-visual="swatch"');
+    expect(unknown).not.toContain("background-color:#956545");
+  });
+
+  it("uses an X for the no-pearls key only", () => {
+    expect(
+      renderOptions([option({ key: "no-pearls", name: "Sin perlas" })]),
+    ).toContain('data-modifier-visual="no-pearls"');
+    expect(
+      renderOptions([option({ key: "no-sauce", name: "Sin salsa" })]),
+    ).toContain('data-modifier-visual="swatch"');
+  });
+
+  it("keeps unavailable options visible and their single-choice controls disabled", () => {
+    const html = renderOptions([option({ available: false })]);
+    expect(html).toContain("No disponible");
+    expect(html).toMatch(
+      /<input[^>]*(?:type="radio"[^>]*disabled|disabled[^>]*type="radio")/,
+    );
+  });
+
+  it("disables a radio when the option limit allows zero selections", () => {
+    const html = renderOptions([option({ maxCount: 0 })]);
+    expect(html).toMatch(
+      /<input[^>]*(?:type="radio"[^>]*disabled|disabled[^>]*type="radio")/,
+    );
+  });
+
+  it("preserves initial counts and prevents increments at the option and group limits", () => {
+    const options = [
+      option({ id: "cocoa", defaultCount: 0 }),
+      option({ id: "mango", name: "Mango", maxCount: 3 }),
+    ];
+    const atOptionLimit = renderOptions(
+      options,
+      { initialSelection: [{ recipeModifierOptionId: "cocoa", count: 1 }] },
+      { min: 2, max: 3 },
+    );
+    expect(atOptionLimit).toContain("Perlas: elegí entre 2 y 3.");
+    expect(atOptionLimit).toMatch(
+      /aria-label="Cantidad Chocolate"[^>]*>1<\/output>/,
+    );
+    expect(atOptionLimit).toMatch(/aria-label="Aumentar Chocolate" disabled/);
+    expect(atOptionLimit).not.toMatch(/aria-label="Aumentar Mango" disabled/);
+
+    const atGroupLimit = renderOptions(
+      options,
+      { initialSelection: [{ recipeModifierOptionId: "mango", count: 3 }] },
+      { min: 2, max: 3 },
+    );
+    expect(atGroupLimit).toMatch(/aria-label="Aumentar Chocolate" disabled/);
+    expect(atGroupLimit).toMatch(/aria-label="Aumentar Mango" disabled/);
+  });
+});
+
 it("commits a simple combo component immediately with published versions and no surcharge", () => {
   expect(
     simpleComboSelection("group", "option", {

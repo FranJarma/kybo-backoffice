@@ -1,12 +1,171 @@
 "use client";
-import { useState } from "react";
+import { useState, type Dispatch, type SetStateAction } from "react";
 import { Button } from "@/components/ui/button";
-import { Minus, Plus } from "lucide-react";
 import { money } from "@/components/inventory/shared";
 import { cents, integer } from "@/modules/inventory/decimal";
 import type { PublicConfiguration } from "@/modules/recipes/configuration";
 import type { Selection } from "@/modules/modifiers/types";
 import { catalogFinalPrice } from "@/modules/pricing/amounts";
+import { ModifierOption } from "./modifier-option";
+import { modifierAppearance } from "./modifier-presentation";
+
+type ModifierGroup = PublicConfiguration["groups"][number];
+type Choices = Record<string, number>;
+
+function validateGroup(group: ModifierGroup, choices: Choices) {
+  let count = 0;
+  const problems: string[] = [];
+  for (const option of group.options) {
+    const selected = choices[option.id] ?? 0;
+    count += selected;
+    if (
+      !Number.isInteger(selected) ||
+      selected < 0 ||
+      selected > option.maxCount
+    )
+      problems.push(`Revisá ${option.name}.`);
+    if (selected && (!option.available || option.price == null))
+      problems.push(
+        `${option.name}: ${option.available ? "sin precio" : "no disponible"}.`,
+      );
+  }
+  if (count < group.min || count > group.max)
+    problems.push(`${group.name}: elegí entre ${group.min} y ${group.max}.`);
+  return { count, problems };
+}
+
+function ModifierGroupControls({
+  group,
+  choices,
+  count,
+  vatRate,
+  setChoices,
+}: {
+  group: ModifierGroup;
+  choices: Choices;
+  count: number;
+  vatRate: PublicConfiguration["vatRate"];
+  setChoices: Dispatch<SetStateAction<Choices>>;
+}) {
+  const chooseOnly = (optionId?: string) =>
+    setChoices((current) => ({
+      ...current,
+      ...Object.fromEntries(
+        group.options.map((option) => [
+          option.id,
+          Number(option.id === optionId),
+        ]),
+      ),
+    }));
+  const content = (
+    <div className="space-y-3">
+      <p className="text-xs text-muted">
+        {group.max === 1
+          ? group.min > 0
+            ? "Elegí una opción"
+            : "Podés elegir una opción"
+          : group.min > 0
+            ? `Entre ${group.min} y ${group.max} elecciones · ${count} seleccionadas`
+            : `Hasta ${group.max} elecciones · ${count} seleccionadas`}
+      </p>
+      <div className="pos-modifier-options">
+        {group.options.map((option) => {
+          const selected = choices[option.id] ?? 0;
+          const includedInRecipe = option.defaultCount > 0;
+          let displayPrice = option.price;
+          try {
+            if (displayPrice !== null && vatRate)
+              displayPrice = catalogFinalPrice(displayPrice, vatRate);
+          } catch {
+            displayPrice = null;
+          }
+          const available = option.available && option.maxCount > 0;
+          const unavailable = !available || displayPrice == null;
+          const description = !available
+            ? "No disponible"
+            : displayPrice == null
+              ? "Revisar precio"
+              : integer(displayPrice) === 0n
+                ? includedInRecipe
+                  ? null
+                  : "Sin cargo"
+                : `+ ${money(displayPrice)}`;
+          return (
+            <ModifierOption
+              key={option.id}
+              name={option.name}
+              includedInRecipe={includedInRecipe}
+              description={description}
+              appearance={modifierAppearance(option.key)}
+              unavailable={unavailable}
+              controls={
+                group.max === 1
+                  ? {
+                      type: "radio",
+                      groupName: group.id,
+                      required: group.min > 0,
+                      checked: selected === 1,
+                      onSelect: () => chooseOnly(option.id),
+                    }
+                  : {
+                      type: "counter",
+                      count: selected,
+                      increaseDisabled:
+                        unavailable ||
+                        selected >= option.maxCount ||
+                        count >= group.max,
+                      onDecrease: () =>
+                        setChoices((current) => ({
+                          ...current,
+                          [option.id]: Math.max(
+                            0,
+                            (current[option.id] ?? 0) - 1,
+                          ),
+                        })),
+                      onIncrease: () =>
+                        setChoices((current) => ({
+                          ...current,
+                          [option.id]: (current[option.id] ?? 0) + 1,
+                        })),
+                    }
+              }
+            />
+          );
+        })}
+      </div>
+      {group.min === 0 && (
+        <Button
+          type="button"
+          className="min-h-12"
+          variant="ghost"
+          onClick={() => chooseOnly()}
+        >
+          Sin selección
+        </Button>
+      )}
+    </div>
+  );
+
+  return group.min > 0 ? (
+    <fieldset className="pos-modifier-group space-y-2">
+      <legend className="text-base font-bold text-brand">
+        {group.name} · obligatorio
+      </legend>
+      {content}
+    </fieldset>
+  ) : (
+    <details className="pos-modifier-group border-t border-line">
+      <summary className="flex min-h-14 cursor-pointer items-center justify-between gap-3 text-sm font-bold text-brand">
+        <span>{group.name} · opcional</span>
+        <span className="text-xs font-normal text-muted">
+          {count} seleccionadas · +
+        </span>
+      </summary>
+      <div className="pb-4">{content}</div>
+    </details>
+  );
+}
+
 export function ProductConfigurator({
   config,
   initialSelection,
@@ -26,7 +185,7 @@ export function ProductConfigurator({
   }) => void;
   onCancel: () => void;
 }) {
-  const [choices, setChoices] = useState<Record<string, number>>(() =>
+  const [choices, setChoices] = useState<Choices>(() =>
     Object.fromEntries(
       config.groups.flatMap((g) =>
         g.options.map((o) => [
@@ -45,18 +204,14 @@ export function ProductConfigurator({
       : config.catalogBasePrice;
   let amount = finalBase == null ? null : integer(finalBase);
   let surcharge = 0n;
-  const problems: string[] = [];
+  const groups = config.groups.map((group) => ({
+    group,
+    ...validateGroup(group, choices),
+  }));
+  const problems = groups.flatMap((group) => group.problems);
   for (const g of config.groups) {
-    let count = 0;
     for (const o of g.options) {
       const n = choices[o.id] ?? 0;
-      count += n;
-      if (!Number.isInteger(n) || n < 0 || n > o.maxCount)
-        problems.push(`Revisá ${o.name}.`);
-      if (n && (!o.available || o.price == null))
-        problems.push(
-          `${o.name}: ${o.available ? "sin precio" : "no disponible"}.`,
-        );
       if (
         amount !== null &&
         o.price != null &&
@@ -68,8 +223,6 @@ export function ProductConfigurator({
         surcharge += extra;
       }
     }
-    if (count < g.min || count > g.max)
-      problems.push(`${g.name}: elegí entre ${g.min} y ${g.max}.`);
   }
   if (amount !== null && config.vatRate !== undefined) {
     try {
@@ -84,170 +237,35 @@ export function ProductConfigurator({
   }
   if (amount === null)
     problems.push("El producto no tiene precio en este canal.");
-  const renderGroup = (g: PublicConfiguration["groups"][number]) => {
-    const count = g.options.reduce((n, o) => n + (choices[o.id] ?? 0), 0);
-    return (
-      <div className="space-y-3">
-        <p className="text-xs text-muted">
-          {g.max === 1
-            ? g.min > 0
-              ? "Elegí una opción"
-              : "Podés elegir una opción"
-            : g.min > 0
-              ? `Entre ${g.min} y ${g.max} elecciones · ${count} seleccionadas`
-              : `Hasta ${g.max} elecciones · ${count} seleccionadas`}
-        </p>
-        <div className="grid gap-2 sm:grid-cols-2">
-          {g.options.map((o) => {
-            const selected = choices[o.id] ?? 0;
-            let displayPrice = o.price;
-            try {
-              if (displayPrice !== null && config.vatRate)
-                displayPrice = catalogFinalPrice(displayPrice, config.vatRate);
-            } catch {
-              displayPrice = null;
-            }
-            const unavailable = !o.available || displayPrice == null;
-            const description = !o.available
-              ? "No disponible"
-              : displayPrice == null
-                ? "Revisar precio"
-                : integer(displayPrice) === 0n
-                  ? "Incluido"
-                  : `+ ${money(displayPrice)}`;
-            const text = (
-              <span className="min-w-0">
-                <span className="block text-sm font-semibold">{o.name}</span>
-                <span className="mt-1 block text-xs text-muted">
-                  {description}
-                </span>
-              </span>
-            );
-            const style = `flex min-h-14 items-center justify-between gap-3 rounded-lg border p-3 ${selected > 0 ? "border-blue bg-blue/5" : "border-line"} ${unavailable ? "opacity-50" : ""}`;
-            return g.max === 1 ? (
-              <label key={o.id} className={`${style} cursor-pointer`}>
-                <span className="flex min-w-0 items-center gap-3">
-                  <input
-                    className="size-5 shrink-0 accent-blue"
-                    type="radio"
-                    name={g.id}
-                    required={g.min > 0}
-                    checked={selected === 1}
-                    disabled={unavailable}
-                    onChange={() =>
-                      setChoices((current) => ({
-                        ...current,
-                        ...Object.fromEntries(
-                          g.options.map((x) => [x.id, x.id === o.id ? 1 : 0]),
-                        ),
-                      }))
-                    }
-                  />
-                  {text}
-                </span>
-              </label>
-            ) : (
-              <div key={o.id} className={style}>
-                {text}
-                <div className="flex shrink-0 items-center rounded-lg border border-line bg-white">
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    className="min-h-12 min-w-12"
-                    aria-label={`Disminuir ${o.name}`}
-                    disabled={selected <= 0}
-                    onClick={() =>
-                      setChoices((current) => ({
-                        ...current,
-                        [o.id]: Math.max(0, (current[o.id] ?? 0) - 1),
-                      }))
-                    }
-                  >
-                    <Minus size={18} />
-                  </Button>
-                  <output
-                    aria-label={`Cantidad ${o.name}`}
-                    className="min-w-6 text-center font-semibold tabular-nums"
-                  >
-                    {selected}
-                  </output>
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    className="min-h-12 min-w-12"
-                    aria-label={`Aumentar ${o.name}`}
-                    disabled={
-                      unavailable || selected >= o.maxCount || count >= g.max
-                    }
-                    onClick={() =>
-                      setChoices((current) => ({
-                        ...current,
-                        [o.id]: (current[o.id] ?? 0) + 1,
-                      }))
-                    }
-                  >
-                    <Plus size={18} />
-                  </Button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        {g.min === 0 && (
-          <Button
-            type="button"
-            className="min-h-12"
-            variant="ghost"
-            onClick={() =>
-              setChoices((current) => ({
-                ...current,
-                ...Object.fromEntries(g.options.map((o) => [o.id, 0])),
-              }))
-            }
-          >
-            Sin selección
-          </Button>
-        )}
-      </div>
-    );
-  };
   return (
-    <div className="space-y-4">
-      {[...config.groups]
-        .sort((a, b) => Number(b.min > 0) - Number(a.min > 0))
-        .map((g) =>
-          g.min > 0 ? (
-            <fieldset key={g.id} className="rounded-xl border border-line p-4">
-              <legend className="px-2 text-sm font-bold text-brand">
-                {g.name} · obligatorio
-              </legend>
-              {renderGroup(g)}
-            </fieldset>
-          ) : (
-            <details key={g.id} className="rounded-xl border border-line px-4">
-              <summary className="flex min-h-14 cursor-pointer items-center justify-between gap-3 text-sm font-bold text-brand">
-                <span>{g.name} · opcional</span>
-                <span className="text-xs font-normal text-muted">
-                  {g.options.reduce((n, o) => n + (choices[o.id] ?? 0), 0)}{" "}
-                  seleccionadas · +
-                </span>
-              </summary>
-              <div className="pb-4">{renderGroup(g)}</div>
-            </details>
-          ),
+    <div className="pos-product-configurator">
+      <div className="pos-modifier-groups">
+        {groups
+          .sort((a, b) => Number(b.group.min > 0) - Number(a.group.min > 0))
+          .map(({ group, count }) => (
+            <ModifierGroupControls
+              key={group.id}
+              group={group}
+              choices={choices}
+              count={count}
+              vatRate={config.vatRate}
+              setChoices={setChoices}
+            />
+          ))}
+      </div>
+      <div className="pos-modifier-footer">
+        {problems.length > 0 && (
+          <p
+            role="status"
+            className="pos-modifier-status text-sm text-amber-800"
+          >
+            {problems[0]}
+          </p>
         )}
-      {problems.length > 0 && (
-        <p role="status" className="text-sm text-amber-800">
-          {problems[0]}
-        </p>
-      )}
-      <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-line bg-white py-4">
         <strong className="text-xl text-brand">
           {amount === null ? "Sin precio" : money(cents(amount))}
         </strong>
-        <div className="flex gap-2">
+        <div className="pos-modifier-actions">
           <Button
             type="button"
             className="min-h-12"

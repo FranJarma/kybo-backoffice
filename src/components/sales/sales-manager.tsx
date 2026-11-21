@@ -758,9 +758,9 @@ export function SalesManager({
         }}
       >
         <DialogContent
-          className={`pos-surface ${fontClassName} max-h-[94dvh] overflow-y-auto sm:max-w-4xl [&_[data-slot=dialog-close]]:flex [&_[data-slot=dialog-close]]:min-h-12 [&_[data-slot=dialog-close]]:min-w-12 [&_[data-slot=dialog-close]]:items-center [&_[data-slot=dialog-close]]:justify-center`}
+          className={`pos-surface pos-configuration-dialog ${fontClassName} ${configuring && "definition" in configuring.config ? "pos-configuration-dialog--combo" : ""} [&_[data-slot=dialog-close]]:flex [&_[data-slot=dialog-close]]:min-h-12 [&_[data-slot=dialog-close]]:min-w-12 [&_[data-slot=dialog-close]]:items-center [&_[data-slot=dialog-close]]:justify-center`}
         >
-          <DialogHeader>
+          <DialogHeader className="pos-configuration-header">
             <DialogTitle>{configuring?.row.name}</DialogTitle>
             <DialogDescription>
               Elegí las opciones de este producto.
