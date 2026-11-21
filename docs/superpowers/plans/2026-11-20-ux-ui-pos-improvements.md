@@ -223,13 +223,13 @@ Son responsabilidades objetivo, no una orden de crear todos esos archivos si ya 
 
 **Interfaces:** consumes contratos actuales de SalesManager, CartLine, PaymentDraft y PublicConfiguration; produce un mapa de archivos existente/nuevo, firmas preservadas y baseline reproducible antes de editar lógica.
 
-- [ ] Inspeccionar estado Git, instrucciones aplicables y rama base actualizada. Preservar cambios ajenos. Crear o reutilizar `feature/ux-ui-pos-improvements`; si ya existe, revisar su estado en lugar de resetearla.
-- [ ] Si se requiere aislamiento, usar `using-git-worktrees`; no duplicar un worktree ya aislado. No crear una segunda implementación ni una rama con otro nombre.
-- [ ] Instalar con el packageManager/lockfile existentes; leer las guías locales de la versión de Next.js antes de escribir código.
-- [ ] Leer los contratos y tests relevantes. Completar en este plan los paths/firma exactos para las extracciones propuestas; no inventar tipos incompatibles con el checkout.
-- [ ] Registrar baseline de checks, capturas, peticiones del recorrido y perfilado pertinente. Separar fallas preexistentes de nuevas.
-- [ ] Documentar la excepción visual del POS frente a DESIGN.md sin modificar el tema global. Anotar cualquier conflicto operativo que impida implementar una decisión del diseño.
-- [ ] Commit acotado de documentación y caracterización si hubo cambios.
+- [x] Inspeccionar estado Git, instrucciones aplicables y rama base actualizada. Preservar cambios ajenos. Crear o reutilizar `feature/ux-ui-pos-improvements`; si ya existe, revisar su estado en lugar de resetearla.
+- [x] Si se requiere aislamiento, usar `using-git-worktrees`; no duplicar un worktree ya aislado. No crear una segunda implementación ni una rama con otro nombre.
+- [x] Instalar con el packageManager/lockfile existentes; leer las guías locales de la versión de Next.js antes de escribir código.
+- [x] Leer los contratos y tests relevantes. Completar en este plan los paths/firma exactos para las extracciones propuestas; no inventar tipos incompatibles con el checkout.
+- [x] Registrar baseline de checks, capturas, peticiones del recorrido y perfilado pertinente. Separar fallas preexistentes de nuevas.
+- [x] Documentar la excepción visual del POS frente a DESIGN.md sin modificar el tema global. Anotar cualquier conflicto operativo que impida implementar una decisión del diseño.
+- [x] Commit acotado de documentación y caracterización si hubo cambios.
 
 **Verification:** los scripts y pruebas seleccionadas arrancan con la configuración de test del repositorio; no se usa DB productiva. El baseline declara qué pasó, qué falló y qué no pudo ejecutarse.
 
@@ -239,13 +239,13 @@ Son responsabilidades objetivo, no una orden de crear todos esos archivos si ya 
 
 **Interfaces:** consumes el catálogo real, callbacks y precios existentes; produces tarjetas/listado presentacionales sin solicitudes propias, integrados al mismo estado del pedido.
 
-- [ ] Ampliar primero `tests/pos-catalogue-loading.test.ts`, `tests/pos-request-cache.test.ts` y `tests/e2e/pos-options-cache.spec.ts` para fijar ausencia de refetch por filtros/viewport y uso de caché al reabrir opciones.
-- [ ] Ejecutar esas pruebas y confirmar que cualquier nuevo caso falla por el comportamiento que se va a cambiar, no por un entorno roto.
-- [ ] Separar la presentación del catálogo de la coordinación del manager conservando carga, cacheado y precios actuales.
-- [ ] Incorporar fotos aprobadas, franjas, estado activo de categorías y fallback de imagen/color. Asociar metadatos a identificadores estables; reutilizar assets exactos si ya existen.
-- [ ] Implementar 3/2/1 columnas según el espacio disponible; mantener el mismo pedido y evitar montajes duplicados por breakpoint.
-- [ ] Comprobar teclado, foco, nombres largos, productos sin foto y categorías vacías. Actualizar tests/capturas afectados sin aceptar regresiones ciegamente.
-- [ ] Commit de catálogo y pruebas.
+- [x] Ampliar primero `tests/pos-catalogue-loading.test.ts`, `tests/pos-request-cache.test.ts` y `tests/e2e/pos-options-cache.spec.ts` para fijar ausencia de refetch por filtros/viewport y uso de caché al reabrir opciones.
+- [x] Ejecutar esas pruebas y confirmar que cualquier nuevo caso falla por el comportamiento que se va a cambiar, no por un entorno roto.
+- [x] Separar la presentación del catálogo de la coordinación del manager conservando carga, cacheado y precios actuales.
+- [x] Incorporar fotos aprobadas, franjas, estado activo de categorías y fallback de imagen/color. Asociar metadatos a identificadores estables; reutilizar assets exactos si ya existen.
+- [x] Implementar 3/2/1 columnas según el espacio disponible; mantener el mismo pedido y evitar montajes duplicados por breakpoint.
+- [x] Comprobar teclado, foco, nombres largos, productos sin foto y categorías vacías. Actualizar tests/capturas afectados sin aceptar regresiones ciegamente.
+- [x] Commit de catálogo y pruebas.
 
 **Verification:** `pnpm exec vitest run tests/pos-catalogue-loading.test.ts tests/pos-request-cache.test.ts`; ejecutar los E2E pertinentes a través del runner y preparación de datos que use el proyecto.
 

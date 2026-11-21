@@ -93,6 +93,7 @@ export function SalesManager({
   branchId,
   role,
   accountKind = "personal",
+  fontClassName = "",
   initialAccount,
   initialTable,
 }: {
@@ -100,6 +101,7 @@ export function SalesManager({
   branchId: string;
   role: Actor["role"];
   accountKind?: Actor["accountKind"];
+  fontClassName?: string;
   initialAccount?: string;
   initialTable?: string;
 }) {
@@ -708,6 +710,10 @@ export function SalesManager({
     }
   }
   const showCart = workspaceView === "new" || workspaceView === "append";
+  const quantities: Record<string, number> = {};
+  for (const line of lines)
+    quantities[line.productId] =
+      (quantities[line.productId] ?? 0) + line.quantity;
   const orderActions = (
     <>
       {!isAppend && (
@@ -742,7 +748,7 @@ export function SalesManager({
   const workspace = (
     <div
       data-pos
-      className="flex h-full min-h-0 flex-col gap-2 [&>div:not([data-pos-workspace])]:shrink-0"
+      className={`pos-surface ${fontClassName} flex h-full min-h-0 flex-col gap-2 [&>div:not([data-pos-workspace])]:shrink-0`}
     >
       <CashStatusGate key={branchId} branchId={branchId} actorId={actorId} />
       <Dialog
@@ -751,7 +757,9 @@ export function SalesManager({
           if (!open) setConfiguring(null);
         }}
       >
-        <DialogContent className="max-h-[94dvh] overflow-y-auto sm:max-w-4xl [&_[data-slot=dialog-close]]:flex [&_[data-slot=dialog-close]]:min-h-12 [&_[data-slot=dialog-close]]:min-w-12 [&_[data-slot=dialog-close]]:items-center [&_[data-slot=dialog-close]]:justify-center">
+        <DialogContent
+          className={`pos-surface ${fontClassName} max-h-[94dvh] overflow-y-auto sm:max-w-4xl [&_[data-slot=dialog-close]]:flex [&_[data-slot=dialog-close]]:min-h-12 [&_[data-slot=dialog-close]]:min-w-12 [&_[data-slot=dialog-close]]:items-center [&_[data-slot=dialog-close]]:justify-center`}
+        >
           <DialogHeader>
             <DialogTitle>{configuring?.row.name}</DialogTitle>
             <DialogDescription>
@@ -1149,6 +1157,7 @@ export function SalesManager({
               onAdd={configure}
               refresh={catalogueRefresh}
               onCatalogueLoaded={warmConfigurations}
+              quantities={quantities}
             />
           </div>
           <div
@@ -1483,6 +1492,7 @@ export function SalesManager({
       )}
       {paymentOpen && (
         <PaymentDialog
+          fontClassName={fontClassName}
           eventKey={operation.errorAttempt}
           methods={paymentMethods}
           methodsError={methodsError}

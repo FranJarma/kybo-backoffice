@@ -58,6 +58,7 @@ export function PaymentDialog({
   canManageMethods = false,
   onRefreshMethods,
   checkoutIssue = "",
+  fontClassName = "",
 }: {
   amount: string;
   delivery: boolean;
@@ -78,6 +79,7 @@ export function PaymentDialog({
   canManageMethods?: boolean;
   onRefreshMethods: () => void;
   checkoutIssue?: string;
+  fontClassName?: string;
 }) {
   const [received, setReceived] = useState<Record<string, string>>({});
   const [rows, setRows] = useState<(PaymentDraft & { key: string })[]>([
@@ -158,7 +160,7 @@ export function PaymentDialog({
     >
       <DialogContent
         data-pos-payment
-        className="flex max-h-[94dvh] flex-col gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-3xl [&_input]:min-h-12 [&_select]:min-h-12 [&_[data-slot=dialog-close]]:flex [&_[data-slot=dialog-close]]:min-h-12 [&_[data-slot=dialog-close]]:min-w-12 [&_[data-slot=dialog-close]]:items-center [&_[data-slot=dialog-close]]:justify-center"
+        className={`pos-surface ${fontClassName} flex max-h-[94dvh] flex-col gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-3xl [&_input]:min-h-12 [&_select]:min-h-12 [&_[data-slot=dialog-close]]:flex [&_[data-slot=dialog-close]]:min-h-12 [&_[data-slot=dialog-close]]:min-w-12 [&_[data-slot=dialog-close]]:items-center [&_[data-slot=dialog-close]]:justify-center`}
         showCloseButton={!locked}
         onInteractOutside={(e) => {
           if (locked) e.preventDefault();

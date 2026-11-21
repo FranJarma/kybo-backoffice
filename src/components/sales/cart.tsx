@@ -1,13 +1,13 @@
 "use client";
 import { OperationAlert } from "@/components/ui/operation-alert";
-import { ProductPhoto } from "@/components/products/photo";
+import { ProductCard } from "./product-card";
+import { productCardModel } from "./pos-presentation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { filterCatalogue } from "./touch-selection";
 export { appendCartLine } from "./touch-selection";
-import { Coffee, Plus, Search } from "lucide-react";
+import { Coffee, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { money } from "@/components/inventory/shared";
 import { createCatalogueLoader, emptyCatalogue } from "./catalogue-loader";
 import { inputDecimal } from "@/components/recipes/shared";
 import { cents, decimal, integer } from "@/modules/inventory/decimal";
@@ -48,12 +48,14 @@ export function ProductPicker({
   onAdd,
   refresh,
   onCatalogueLoaded,
+  quantities = {},
 }: {
   channel: SaleChannel;
   locked: boolean;
   onAdd: (row: SaleLookup["rows"][number]) => void;
   refresh: number;
   onCatalogueLoaded?: (rows: SaleLookup["rows"]) => void;
+  quantities?: Readonly<Record<string, number>>;
 }) {
   const [category, setCategory] = useState("");
   const [q, setQ] = useState("");
@@ -84,8 +86,8 @@ export function ProductPicker({
     [data.rows, q, category],
   );
   return (
-    <section className="surface-panel flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="shrink-0 space-y-2 border-b border-line p-3">
+    <section className="pos-catalog flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="pos-catalog-header shrink-0 space-y-3">
         <div className="flex items-center gap-3">
           <div className="relative min-w-0 flex-1">
             <Search
@@ -100,14 +102,12 @@ export function ProductPicker({
               onChange={(e) => setQ(e.target.value)}
             />
           </div>
-          <span className="shrink-0 text-xs text-muted">
-            {rows.length} productos
-          </span>
+          <span className="sr-only">{rows.length} productos</span>
         </div>
         <div
           role="group"
           aria-label="Categorías de productos"
-          className="flex gap-2 overflow-x-auto"
+          className="pos-category-filter flex gap-2 overflow-x-auto pb-1"
         >
           {[
             { id: "", name: "Todas" },
@@ -119,7 +119,7 @@ export function ProductPicker({
               type="button"
               aria-pressed={category === c.id}
               variant={category === c.id ? "secondary" : "outline"}
-              className={`min-h-12 shrink-0 px-4 ${category === c.id ? "border border-blue/30 bg-blue/10 text-blue" : ""}`}
+              className="shrink-0 px-4"
               onClick={() => setCategory(c.id)}
             >
               {c.name}
@@ -127,7 +127,7 @@ export function ProductPicker({
           ))}
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pt-3">
         {error && (
           <div className="space-y-3 pb-4 text-sm">
             <OperationAlert
@@ -179,53 +179,15 @@ export function ProductPicker({
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-3 2xl:grid-cols-4">
+          <div className="pos-product-grid">
             {rows.map((row) => (
-              <button
+              <ProductCard
                 key={row.id}
-                type="button"
-                disabled={
-                  locked ||
-                  !!row.temporarilySoldOut ||
-                  !!row.vatPending ||
-                  row.configured === false
-                }
-                aria-label={`Agregar ${row.name}`}
-                onClick={() => onAdd(row)}
-                className="flex min-h-36 min-w-0 touch-manipulation flex-col items-start rounded-xl border border-line bg-white p-3 text-left transition-colors active:border-orange-500 active:bg-orange-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue disabled:opacity-50 lg:min-h-32"
-              >
-                <span className="mb-2 flex w-full items-start justify-between gap-2 lg:mb-1">
-                  <span className="block w-20 shrink-0 lg:w-12">
-                    <ProductPhoto id={row.imageAssetId} name={row.name} />
-                  </span>
-                  <Plus size={20} className="mt-1 shrink-0 text-orange-600" />
-                </span>
-                <span className="text-base font-bold leading-snug text-brand lg:text-sm">
-                  {row.name}
-                </span>
-                {row.temporarilySoldOut ? (
-                  <span className="mt-1 text-xs font-bold text-amber-700">
-                    Agotado temporalmente
-                  </span>
-                ) : row.vatPending ? (
-                  <span className="mt-1 text-xs font-bold text-amber-700">
-                    Configurá el IVA del producto
-                  </span>
-                ) : row.configured === false ? (
-                  <span className="mt-1 text-xs font-bold text-amber-700">
-                    Falta completar la ficha
-                  </span>
-                ) : null}
-                <span
-                  className={`mt-auto pt-2 text-base font-extrabold tabular-nums lg:pt-1 lg:text-sm ${row.price == null ? "text-amber-700" : "text-brand"}`}
-                >
-                  {row.vatPending
-                    ? "IVA pendiente"
-                    : row.price == null
-                      ? "Sin precio"
-                      : money(row.price)}
-                </span>
-              </button>
+                product={productCardModel(row)}
+                quantity={quantities[row.id] ?? 0}
+                locked={locked}
+                onSelect={() => onAdd(row)}
+              />
             ))}
           </div>
         )}
