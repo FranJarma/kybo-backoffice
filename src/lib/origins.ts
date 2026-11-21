@@ -5,6 +5,24 @@ export function trustedOrigins(
 ): string[] {
   const canonical = new URL(baseURL);
   const values = [canonical.origin, ...additional];
+  // Use deployment metadata, never Origin/Host headers, to authorize a preview.
+  if (process.env.VERCEL === "1" && process.env.VERCEL_ENV === "preview") {
+    for (const host of [
+      process.env.VERCEL_URL,
+      process.env.VERCEL_BRANCH_URL,
+    ]) {
+      if (!host) continue;
+      if (
+        host !== host.trim() ||
+        !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.vercel\.app$/.test(host)
+      ) {
+        throw new Error(
+          "Vercel preview hosts must be exact deployment hostnames.",
+        );
+      }
+      values.push(`https://${host}`);
+    }
+  }
   // Next sets PORT to its actual listening port, including a CLI port change.
   // Only infer this exact local origin in development; never trust request headers.
   const port = process.env.PORT ?? "";
