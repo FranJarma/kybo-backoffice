@@ -414,14 +414,50 @@ test("desktop cash checkout fits the approved two-column layout", async ({
   const dialog = page.getByRole("dialog");
   const panel = (await dialog.boundingBox())!;
   const method = (await dialog.locator(".pos-payment-choice").boundingBox())!;
-  const cash = (await dialog.locator(".pos-payment-cash").boundingBox())!;
+  const cash = (await dialog
+    .locator(".pos-payment-columns > .pos-payment-fields")
+    .boundingBox())!;
   expect(panel.width).toBe(900);
+  expect(panel.height).toBeCloseTo(520, 0);
+  expect(panel.y).toBeCloseTo(140, 0);
+  expect(Math.abs(cash.height - 266)).toBeLessThan(2);
+  expect(cash.height).toBeCloseTo(method.height, 0);
+  const body = dialog.locator(".pos-payment-body");
+  expect(
+    await body.evaluate((node) => node.scrollHeight - node.clientHeight),
+  ).toBe(0);
+  const reference = dialog.getByText("Referencia (opcional)", {
+    exact: true,
+  });
+  await expect(reference).toBeInViewport({ ratio: 1 });
+  expect((await reference.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   expect(panel.x).toBe(190);
   expect(cash.x).toBeGreaterThan(method.x + method.width);
   expect(cash.width).toBeCloseTo(method.width, 0);
   expect(cash.y).toBeCloseTo(method.y, 0);
   await expect(confirm(page)).toBeInViewport();
   await page.screenshot({ path: ".next-e2e/payment-cash-desktop.png" });
+
+  await page.setViewportSize({ width: 1280, height: 540 });
+  await reference.click();
+  await dialog
+    .getByRole("textbox", { name: "Referencia 1", exact: true })
+    .fill("0001");
+  expect(
+    await body.evaluate((node) => node.scrollHeight - node.clientHeight),
+  ).toBeGreaterThan(0);
+  await expect(confirm(page)).toBeInViewport({ ratio: 1 });
+  await confirm(page).click();
+  await expect(page.locator("[data-payments-json]")).toHaveText(
+    JSON.stringify([
+      {
+        collector: "local",
+        methodId: "cash",
+        amount: "18900",
+        reference: "0001",
+      },
+    ]),
+  );
 });
 
 test("cash actions stay visible when the visual viewport shrinks for the keyboard", async ({
@@ -475,4 +511,86 @@ test("cash actions stay visible when the visual viewport shrinks for the keyboar
   await page.getByRole("button", { name: "$ 20.000", exact: true }).click();
   await expect(confirm(page)).toBeInViewport();
   await page.screenshot({ path: ".next-e2e/payment-cash-mobile.png" });
+});
+
+async function prepareSplitCardCheckout(page: Page, query: string) {
+  await page.setViewportSize({ width: 390, height: 640 });
+  await mount(page, query);
+  await page
+    .getByRole("button", { name: "Tarjeta débito", exact: true })
+    .click();
+  await page
+    .getByRole("textbox", { name: "Número de comprobante", exact: true })
+    .fill("00001");
+  await page
+    .getByRole("button", { name: "Dividir cobro", exact: true })
+    .click();
+  await page
+    .getByRole("textbox", { name: "Importe 1", exact: true })
+    .fill("50");
+  await page
+    .getByRole("textbox", { name: "Importe 2", exact: true })
+    .fill("50");
+  await page
+    .getByRole("combobox", { name: "Medio de pago 2", exact: true })
+    .selectOption("card-2");
+  const receipt = page.getByRole("textbox", {
+    name: "Número de comprobante del pago 2",
+    exact: true,
+  });
+  await receipt.fill("00002");
+  return {
+    receipt,
+    body: page.locator(".pos-payment-body"),
+    notice: page.locator(".pos-payment-notices").getByRole("alert"),
+  };
+}
+
+test("a repeated checkout error is visible from the last split payment", async ({
+  page,
+}) => {
+  const { body, notice, receipt } = await prepareSplitCardCheckout(
+    page,
+    "?error=1",
+  );
+  for (const expectedAttempts of ["1", "2"]) {
+    await receipt.scrollIntoViewIfNeeded();
+    expect(await body.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+    await confirm(page).click();
+    await expect(page.locator("[data-attempts]")).toHaveText(expectedAttempts);
+    await expect(notice).toBeInViewport({ ratio: 1 });
+    await expect(receipt).toHaveValue("00002");
+  }
+});
+
+test("uncertain checkout shows retry and discard from the last split payment", async ({
+  page,
+}) => {
+  const { body, notice, receipt } = await prepareSplitCardCheckout(
+    page,
+    "?uncertain=1",
+  );
+  expect(await body.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+  await confirm(page).click();
+  await expect(notice).toBeInViewport({ ratio: 1 });
+  const retry = page.getByRole("button", {
+    name: "Reintentar mismo envío",
+    exact: true,
+  });
+  const discard = page.getByRole("button", {
+    name: "Descartar envío rechazado",
+    exact: true,
+  });
+  await expect(retry).toBeInViewport({ ratio: 1 });
+  await expect(discard).toBeInViewport({ ratio: 1 });
+  await expect(confirm(page)).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "Cancelar", exact: true }),
+  ).toBeDisabled();
+  await retry.click();
+  await expect(page.locator("[data-retries]")).toHaveText("1");
+  await discard.click();
+  await expect(notice).toHaveCount(0);
+  await expect(confirm(page)).toBeEnabled();
+  await expect(receipt).toHaveValue("00002");
 });

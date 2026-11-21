@@ -18,6 +18,9 @@ function Fixture() {
   const [payments, setPayments] = useState<PaymentDraft[] | null>(null);
   const [cash, setCash] = useState<unknown>(null);
   const [error, setError] = useState("");
+  const [attempts, setAttempts] = useState(0);
+  const [retries, setRetries] = useState(0);
+  const [uncertain, setUncertain] = useState(false);
   return (
     <>
       <button hidden={open} onClick={() => setOpen(true)}>
@@ -28,16 +31,24 @@ function Fixture() {
           amount={params.has("example") ? "18900.00" : "100.00"}
           delivery={params.has("delivery")}
           exact={!params.has("partial")}
-          locked={false}
+          locked={uncertain}
           busy={false}
           error={error}
-          uncertain={false}
-          onRetry={() => {}}
+          eventKey={attempts}
+          uncertain={uncertain}
+          canDiscard={uncertain}
+          onRetry={() => setRetries((count) => count + 1)}
+          onDiscard={() => {
+            setUncertain(false);
+            setError("");
+          }}
           onClose={() => setOpen(false)}
           onConfirm={(rows, ...summary) => {
             setPayments(rows);
             setCash(summary[0] ?? null);
-            if (params.has("error"))
+            setAttempts((count) => count + 1);
+            if (params.has("uncertain")) setUncertain(true);
+            if (params.has("error") || params.has("uncertain"))
               setError("No se pudo registrar la venta. Volvé a intentar.");
           }}
           methods={methods}
@@ -49,6 +60,12 @@ function Fixture() {
       <pre hidden data-payments-json>
         {JSON.stringify(payments)}
       </pre>
+      <output hidden data-attempts>
+        {attempts}
+      </output>
+      <output hidden data-retries>
+        {retries}
+      </output>
       <pre hidden data-cash-json>
         {JSON.stringify(cash)}
       </pre>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Banknote,
@@ -343,6 +343,14 @@ export function PaymentDialog({
     .map(({ row }) => row);
   const cash = cashPaymentSummary(cashRows);
   const panel = useRef<HTMLDivElement>(null);
+  const body = useRef<HTMLDivElement>(null);
+  const notice = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (!error && !uncertain) return;
+    body.current?.scrollTo(0, 0);
+    notice.current?.focus({ preventScroll: true });
+  }, [error, uncertain, eventKey, canDiscard]);
 
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -470,9 +478,18 @@ export function PaymentDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="pos-payment-body min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <div
+          ref={body}
+          className="pos-payment-body min-h-0 flex-1 overflow-y-auto overscroll-contain"
+        >
           {(error || uncertain) && (
-            <div className="pos-payment-notices">
+            <div
+              ref={notice}
+              className="pos-payment-notices"
+              tabIndex={-1}
+              role="group"
+              aria-label="Estado del cobro"
+            >
               <OperationNotice
                 persistentError
                 canDiscard={canDiscard}
@@ -495,6 +512,7 @@ export function PaymentDialog({
               methodStatus}
             {prepared.map(({ row, method, reference }, index) => {
               const position = index + 1;
+              const cashOnly = !split && exact && method?.kind === "cash";
               const setReference = (value: string) =>
                 editRow(row.key, { reference: value, verifiedAmount: null });
               return (
@@ -516,7 +534,13 @@ export function PaymentDialog({
                       </Button>
                     </div>
                   )}
-                  <div className="pos-payment-columns">
+                  <div
+                    className={
+                      cashOnly
+                        ? "pos-payment-columns pos-payment-single-cash"
+                        : "pos-payment-columns"
+                    }
+                  >
                     <div className="pos-payment-choice">
                       {delivery && (
                         <Control label={`Cobrado por ${position}`} required>
@@ -580,6 +604,8 @@ export function PaymentDialog({
                           received={row.received}
                           position={position}
                           split={split}
+                          reference={row.reference}
+                          onReference={setReference}
                           onReceived={(received) =>
                             editRow(row.key, { received })
                           }
@@ -619,6 +645,7 @@ export function PaymentDialog({
                       {(row.collector === "platform" ||
                         (method &&
                           method.kind !== "card" &&
+                          method.kind !== "cash" &&
                           method.kind !== "transfer")) && (
                         <OptionalPaymentReference
                           position={position}

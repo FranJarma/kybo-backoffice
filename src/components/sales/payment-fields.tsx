@@ -22,13 +22,17 @@ export function CashPaymentFields({
   position,
   split,
   received,
+  reference,
   onReceived,
+  onReference,
 }: {
   amount: string;
   position: number;
   split: boolean;
   received: string;
+  reference: string;
   onReceived: (value: string) => void;
+  onReference: (value: string) => void;
 }) {
   const messageId = useId();
   const change = cashChange(received, amount);
@@ -92,10 +96,17 @@ export function CashPaymentFields({
           $ 50.000
         </Button>
       </div>
-      <p className="pos-payment-change" aria-live="polite">
-        Vuelto:
-        <strong>{change.change === null ? "—" : money(change.change)}</strong>
-      </p>
+      <div className="pos-payment-cash-result">
+        <p className="pos-payment-change" aria-live="polite">
+          Vuelto:
+          <strong>{change.change === null ? "—" : money(change.change)}</strong>
+        </p>
+        <OptionalPaymentReference
+          position={position}
+          reference={reference}
+          onReference={onReference}
+        />
+      </div>
     </div>
   );
 }
@@ -205,7 +216,7 @@ export function OptionalPaymentReference({
     <details className="pos-payment-reference">
       <summary>
         <ChevronRight size={16} aria-hidden="true" />
-        Agregar referencia (opcional)
+        Referencia (opcional)
       </summary>
       <Control label={`Referencia ${position}`} optional>
         <Input
