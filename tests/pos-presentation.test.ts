@@ -68,7 +68,7 @@ describe("POS product presentation", () => {
     );
     expect(html).toContain("3 en pedido");
     expect(html).toContain('aria-label="Agregar Té con un nombre largo"');
-    expect(html).toContain("/api/media/approved-photo?size=preview");
+    expect(html).toContain("/api/media/approved-photo?size=thumbnail");
     expect(html).not.toContain("figma.com");
   });
 });

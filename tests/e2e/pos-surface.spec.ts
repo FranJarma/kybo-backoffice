@@ -1,4 +1,10 @@
-import { test, expect, type Page, type Route } from "@playwright/test";
+import {
+  test,
+  expect,
+  type Locator,
+  type Page,
+  type Route,
+} from "@playwright/test";
 import { createRequire } from "node:module";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -188,7 +194,10 @@ test.beforeAll(async () => {
     css += "\n" + (await readFile("src/components/sales/pos.css", "utf8"));
 });
 type Call = { method: string; path: string; elapsedMs: number };
-async function mount(page: Page) {
+const longProductName =
+  "Waffle de chipá con jamón, queso y una descripción extendida para comprobar el ajuste de nombres " +
+  "superextensosininterrupciones".repeat(3);
+async function mount(page: Page, edgeCases = false) {
   const calls: Call[] = [],
     errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -256,7 +265,20 @@ async function mount(page: Page) {
       const kind = url.searchParams.get("kind");
       if (kind === "products")
         return route.fulfill({
-          json: { rows, categories, total: rows.length, offset: 0 },
+          json: {
+            rows: edgeCases
+              ? rows.map((row, index) =>
+                  index === rows.length - 1
+                    ? { ...row, name: longProductName, imageAssetId: null }
+                    : row,
+                )
+              : rows,
+            categories: edgeCases
+              ? [...categories, { id: "empty", name: "Sin productos" }]
+              : categories,
+            total: rows.length,
+            offset: 0,
+          },
         });
       if (kind === "payment-methods")
         return route.fulfill({
@@ -276,6 +298,8 @@ async function mount(page: Page) {
       /^\/api\/sales\/products\/([^/]+)\/configuration$/,
     );
     if (config) return route.fulfill({ json: configuration(config[1]) });
+    if (url.pathname.startsWith("/api/media/"))
+      return route.fulfill({ status: 404, body: "Missing fixture photo" });
     // The fixture has no external transport: unneeded read endpoints remain empty.
     if (route.request().method() === "GET")
       return route.fulfill({
@@ -300,6 +324,147 @@ async function mount(page: Page) {
   return { calls, errors, catalogueReadyMs };
 }
 const profiles: unknown[] = [];
+async function expectUnclippedKeyboardFocus(button: Locator) {
+  await expect(button).toBeFocused();
+  const focus = await button.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    const extent =
+      parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset);
+    const clipped: { ancestor: string; edge: string; clearance: number }[] = [];
+    let ancestor = element.parentElement;
+    while (ancestor) {
+      const ancestorStyle = getComputedStyle(ancestor);
+      const bounds = ancestor.getBoundingClientRect();
+      const left = bounds.left + ancestor.clientLeft;
+      const top = bounds.top + ancestor.clientTop;
+      const right = left + ancestor.clientWidth;
+      const bottom = top + ancestor.clientHeight;
+      if (
+        ["auto", "scroll", "hidden", "clip"].includes(ancestorStyle.overflowX)
+      ) {
+        if (rect.left - extent < left - 0.5)
+          clipped.push({
+            ancestor: ancestor.className || ancestor.tagName,
+            edge: "left",
+            clearance: rect.left - extent - left,
+          });
+        if (rect.right + extent > right + 0.5)
+          clipped.push({
+            ancestor: ancestor.className || ancestor.tagName,
+            edge: "right",
+            clearance: right - rect.right - extent,
+          });
+      }
+      if (
+        ["auto", "scroll", "hidden", "clip"].includes(ancestorStyle.overflowY)
+      ) {
+        if (rect.top - extent < top - 0.5)
+          clipped.push({
+            ancestor: ancestor.className || ancestor.tagName,
+            edge: "top",
+            clearance: rect.top - extent - top,
+          });
+        if (rect.bottom + extent > bottom + 0.5)
+          clipped.push({
+            ancestor: ancestor.className || ancestor.tagName,
+            edge: "bottom",
+            clearance: bottom - rect.bottom - extent,
+          });
+      }
+      ancestor = ancestor.parentElement;
+    }
+    return {
+      visible: element.matches(":focus-visible"),
+      outlineStyle: style.outlineStyle,
+      extent,
+      clipped,
+    };
+  });
+  expect(focus.visible).toBe(true);
+  expect(focus.outlineStyle).not.toBe("none");
+  expect(focus.extent).toBeGreaterThanOrEqual(4);
+  expect(focus.clipped).toEqual([]);
+}
+for (const region of ["categories", "products"] as const)
+  test(`catalogue focus ring stays visible at the first and last ${region} when using the keyboard`, async ({
+    page,
+  }) => {
+    // The baseline 844px height cannot fit one complete card until Task4.
+    // Keep this check about the focus halo, with room for a full card.
+    await page.setViewportSize({ width: 390, height: 1024 });
+    await mount(page);
+    const catalogue = page.locator("[data-pos-catalogue]");
+    const categoryButtons = catalogue
+      .getByRole("group", { name: "Categorías de productos" })
+      .getByRole("button");
+    const cards = catalogue.locator(".pos-product-card");
+    await catalogue
+      .getByRole("textbox", { name: "Buscar productos", exact: true })
+      .focus();
+    await page.keyboard.press("Tab");
+    if (region === "categories") {
+      await expectUnclippedKeyboardFocus(categoryButtons.first());
+      for (let index = 1; index < (await categoryButtons.count()); index++)
+        await page.keyboard.press("Tab");
+      await expectUnclippedKeyboardFocus(categoryButtons.last());
+    } else {
+      for (let index = 0; index < (await categoryButtons.count()); index++)
+        await page.keyboard.press("Tab");
+      await expectUnclippedKeyboardFocus(cards.first());
+      for (let index = 1; index < (await cards.count()); index++)
+        await page.keyboard.press("Tab");
+      await expectUnclippedKeyboardFocus(cards.last());
+    }
+    if (reportDirectory) {
+      await mkdir(reportDirectory, { recursive: true });
+      await page.screenshot({
+        path: join(reportDirectory, `focus-${region}-390.png`),
+      });
+    }
+  });
+
+test("catalogue handles an empty category and a long product name with a missing photo", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 720 });
+  const app = await mount(page, true);
+  const catalogue = page.locator("[data-pos-catalogue]");
+  const longCard = catalogue.getByRole("button", {
+    name: `Agregar ${longProductName}`,
+    exact: true,
+  });
+  await longCard.scrollIntoViewIfNeeded();
+  await expect(longCard.getByLabel("Sin foto", { exact: true })).toBeVisible();
+  const nameGeometry = await longCard
+    .locator(".pos-product-name")
+    .evaluate((element) => ({
+      scrollWidth: element.scrollWidth,
+      clientWidth: element.clientWidth,
+    }));
+  expect(nameGeometry.scrollWidth).toBeLessThanOrEqual(
+    nameGeometry.clientWidth,
+  );
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(320);
+  const before = app.calls.filter((call) =>
+    call.path.includes("kind=products"),
+  ).length;
+  await catalogue
+    .getByRole("button", { name: "Sin productos", exact: true })
+    .click();
+  await expect(
+    catalogue.getByText("No hay productos con estos filtros", { exact: true }),
+  ).toBeVisible();
+  await expect(catalogue.locator(".pos-product-card")).toHaveCount(0);
+  await catalogue.getByRole("button", { name: "Todas", exact: true }).click();
+  await expect(longCard).toBeVisible();
+  expect(
+    app.calls.filter((call) => call.path.includes("kind=products")).length,
+  ).toBe(before);
+  expect(app.errors).toEqual([]);
+});
 test.use({ actionTimeout: 15000 });
 test.afterAll(async () => {
   if (!reportDirectory) return;
@@ -546,6 +711,35 @@ test("catalogue uses one responsive grid, real quantities and cached data across
     .getByRole("button", { name: "Agregar al pedido", exact: true })
     .click();
   await expect(first.getByText("2 en pedido", { exact: true })).toBeVisible();
+  for (const viewport of [
+    { width: 1280, height: 800 },
+    { width: 768, height: 1024 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect(grid).toHaveCount(1);
+    await expect(first.getByText("2 en pedido", { exact: true })).toBeVisible();
+    await expect(page.getByTestId("cart-lines")).toHaveCount(1);
+    await expect(page.getByTestId("cart-line")).toHaveCount(1);
+    await expect(page.getByTestId("cart-total")).toHaveText(/15[.]000/);
+    expect(counts()).toEqual(initialCalls);
+  }
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page
+    .getByRole("button", {
+      name: "Editar opciones de Oreo Iced Latte",
+      exact: true,
+    })
+    .click();
+  await expect(
+    page.getByRole("dialog").getByRole("radio", { name: /Chocolate/ }),
+  ).toBeChecked();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Cancelar", exact: true })
+    .click();
+  await expect(first.getByText("2 en pedido", { exact: true })).toBeVisible();
+  expect(counts()).toEqual(initialCalls);
   await catalogue
     .getByRole("textbox", { name: "Buscar productos", exact: true })
     .fill("taro");

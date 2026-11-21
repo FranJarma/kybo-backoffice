@@ -47,7 +47,7 @@ export function ProductCard({
         <ProductPhoto
           id={product.imageAssetId}
           name={product.name}
-          variant="preview"
+          variant="thumbnail"
         />
       </span>
     </Button>

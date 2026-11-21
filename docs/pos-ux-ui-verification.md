@@ -22,3 +22,10 @@ El fixture carga SalesManager y sus componentes reales, usa datos ilustrativos e
 - Baseline de requests por recorrido: 1 catálogo, 9 configuraciones precargadas, 1 consulta de localizadores. El bundle de fixture con profiling pesa 2.771.954 bytes; no es el bundle optimizado de Next.
 - Pendiente: flujo completo en móvil, build final y comparación final de rendimiento; no se atribuyen mejoras de latencia de producción a respuestas simuladas.
 
+## Task 2 fix round 1
+
+El gate aislado ampliado pasó 4/4 casos y los unitarios 34/34. Verifica resize con pedido de dos unidades, total y contadores en cada breakpoint, reapertura de configuración, teclado/foco sin recorte a 390×1024, categoría vacía, nombre largo y fallback. Se conservó thumbnail128 del catálogo previo. El foco a 390×844 sigue ligado al defecto de espacio del pedido que se corrige en Task4.
+
+`pnpm build --webpack` pasó completo, con TypeScript y todas las rutas. El primer intento del runner E2E managed con fallback Webpack se detuvo antes del servidor porque scripts/migrate.ts deshabilita la migración genérica durante la transición del modelo de datos. No se modificó ni se anuló ese bloqueo. La ejecución real de /sales requiere el bootstrap descartable revisado del repositorio; permanece pendiente, no aprobada.
+
+

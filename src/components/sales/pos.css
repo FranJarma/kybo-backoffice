@@ -40,6 +40,17 @@
 .pos-catalog-header {
   padding: 0;
 }
+.pos-category-filter {
+  padding: 4px;
+  scroll-padding: 4px;
+}
+.pos-catalog > .overflow-y-auto {
+  scroll-padding: 4px;
+}
+.pos-surface .pos-category-filter [data-slot="button"]:focus-visible,
+.pos-surface .pos-product-card:focus-visible {
+  outline-offset: 2px;
+}
 .pos-surface .pos-category-filter [data-slot="button"] {
   min-height: 44px;
   height: 44px;
@@ -59,7 +70,7 @@
   grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   align-items: stretch;
-  padding-bottom: 8px;
+  padding: 4px 4px 8px;
 }
 .pos-surface .pos-product-card {
   position: relative;
@@ -79,6 +90,7 @@
   white-space: normal;
   text-align: left;
   color: var(--brand);
+  scroll-margin: 8px;
 }
 .pos-surface .pos-product-card:hover {
   background: #fff6e5;
