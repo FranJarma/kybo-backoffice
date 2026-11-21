@@ -1,0 +1,32 @@
+{
+  "before": {
+    "heading": {
+      "x": 33,
+      "y": 339.5,
+      "width": 150.5,
+      "height": 28.75
+    },
+    "checkout": {
+      "x": 33,
+      "y": 697,
+      "width": 324,
+      "height": 56
+    },
+    "total": "$ 49.000,00"
+  },
+  "after": {
+    "heading": {
+      "x": 33,
+      "y": 339.5,
+      "width": 150.5,
+      "height": 28.75
+    },
+    "checkout": {
+      "x": 33,
+      "y": 697,
+      "width": 324,
+      "height": 56
+    },
+    "total": "$ 49.000,00"
+  }
+}

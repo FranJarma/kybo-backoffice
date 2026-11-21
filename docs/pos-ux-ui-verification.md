@@ -68,4 +68,18 @@ RED del hook: tres fallos de llamadas simultáneas, cuatro respuestas 200 mal fo
 
 El estado de Caja se comparte desde su consulta existente. CASH_CLOSED devuelve un evento de actualización para volver a ofrecer apertura según permisos, conservando el pedido. Stock se muestra como detalle inline. Venta cobrada, pendiente, sin cargo y anulada usan estados distintos; impresión conserva su recuperación propia.
 
-La prueba de concurrencia con dos conexiones se detuvo por falta de KYBO_TEST_DATABASE_URL dedicada. Los E2E históricos de ventas y pickup se actualizaron por inspección y se enumeraron 17 casos; su ejecución administrada sigue bloqueada. Los recorridos completos interceptados y la revisión independiente se documentan al cerrar esta etapa.
+La prueba de concurrencia con dos conexiones se detuvo por falta de KYBO_TEST_DATABASE_URL dedicada. Los E2E históricos de ventas y pickup se actualizaron por inspección y se enumeraron 17 casos; su ejecución administrada sigue bloqueada.
+
+La revisión independiente encontró cuatro fallas materiales: una respuesta de un POS desmontado podía borrar el comando de una venta posterior; una revisión nueva de la venta conservaba una confirmación anterior; una falla de sessionStorage podía dejar bloqueado el envío; y porcentajes mal formados podían superar la validación de resultado. Se reprodujeron con seis casos RED del hook y dos de revisión de venta. La corrección invalida intentos antiguos después de cada espera, conserva el comando ante fallas de almacenamiento, descarta confirmaciones obsoletas y valida los porcentajes antes de aceptar el resultado.
+
+GREEN de la corrección: 18/18 casos del hook real en Chrome, 28 pruebas Vitest focalizadas y una ejecución nueva de 21/21 recorridos completos de checkout en 43,6 s. Los casos conservan los bytes del comando siguiente ante respuestas antiguas 200/503 y recuperan ese mismo comando después de recargar. Typecheck, lint y formato pasaron. La segunda revisión aprobó especificación y calidad en `105f01d`. El HTTP está interceptado: estos resultados no prueban conectividad productiva ni una impresora física.
+
+## Task 7: revisión integrada
+
+Se completaron las nueve paletas canónicas por ID, el área táctil del enlace de cuenta, la tipografía de los portales y el contexto compacto compartido entre catálogo y pedido. RED reprodujo los IDs sin paleta, el enlace de 37 px, Manrope en dos portales y la falta de espacio para tarjetas después de cobrar. GREEN: 9/9 unitarias de presentación y 86/86 casos de navegador en 2,2 min (52 superficie, 18 operaciones, 16 cobro). Typecheck, ESLint y formato pasaron también sobre las pruebas finales.
+
+Las capturas y datos se conservan en [evidencia](pos-ux-ui-evidence/README.md). Se verificaron 1280×800, 768×1024, 390×844, anchos 320/360/1024, 390×640, foco, nombres largos y viewport reducido de teclado. Una tarjeta visible admite iniciar el siguiente pedido mientras se muestra el recibo anterior; se conserva el desplazamiento. Las nueve paletas usan identificadores reales en un escenario de pruebas separado del recorrido comparable.
+
+El recorrido mantuvo 15 GET por ancho, incluidos 1 catálogo, 9 configuraciones y 1 consulta compartida de retiro. Buscar conserva cuatro commits React y editar diez. El script de profiling creció 27.604 bytes (+1,0 %); no es el bundle optimizado de Next. El carrito móvil pasó de 0 a 189,875 px de área de líneas. No se agregaron memoizaciones, endpoints ni cachés. Los tiempos locales se documentan con su entorno y no prueban una mejora de latencia productiva.
+
+La suite global, el build final y la revisión independiente de toda la rama están en ejecución. El runner `pnpm test:e2e` volvió a detenerse en `scripts/migrate.ts` antes de Next por la protección de transición del modelo de datos; no se eludió. Los resultados finales se registrarán a continuación.

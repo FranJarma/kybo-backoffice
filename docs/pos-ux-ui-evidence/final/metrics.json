@@ -1,0 +1,319 @@
+{
+  "source": "SalesManager isolated browser fixture; mocked API, no DB; production profiling build",
+  "node": "v24.21.0",
+  "scriptBytes": 2799558,
+  "runs": [
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "catalogueReadyMs": 560.6178,
+      "configurationReadyMs": 123.35740000000078,
+      "calls": [
+        {
+          "method": "GET",
+          "path": "/api/cash/status",
+          "elapsedMs": 382.7371999999996
+        },
+        {
+          "method": "GET",
+          "path": "/api/pickup",
+          "elapsedMs": 385.52980000000025
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/lookup?kind=payment-methods",
+          "elapsedMs": 386.9851000000017
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/lookup?kind=products&channel=counter&offset=0",
+          "elapsedMs": 389.5037000000011
+        },
+        {
+          "method": "GET",
+          "path": "/api/inventory/replenishment",
+          "elapsedMs": 449.40889999999854
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/lookup?kind=customers&q=",
+          "elapsedMs": 451.2595000000001
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/products/20000000-0000-4000-8000-000000000001/configuration?channel=counter",
+          "elapsedMs": 510.02880000000005
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/products/20000000-0000-4000-8000-000000000002/configuration?channel=counter",
+          "elapsedMs": 511.91249999999854
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/products/20000000-0000-4000-8000-000000000003/configuration?channel=counter",
+          "elapsedMs": 528.6438999999991
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/products/20000000-0000-4000-8000-000000000004/configuration?channel=counter",
+          "elapsedMs": 530.9507999999987
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/products/20000000-0000-4000-8000-000000000005/configuration?channel=counter",
+          "elapsedMs": 567.8611999999994
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/products/20000000-0000-4000-8000-000000000006/configuration?channel=counter",
+          "elapsedMs": 569.6370999999999
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/products/20000000-0000-4000-8000-000000000007/configuration?channel=counter",
+          "elapsedMs": 577.5911999999989
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/products/20000000-0000-4000-8000-000000000008/configuration?channel=counter",
+          "elapsedMs": 579.5558999999994
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/products/20000000-0000-4000-8000-000000000009/configuration?channel=counter",
+          "elapsedMs": 583.655999999999
+        }
+      ],
+      "renderProfile": {
+        "commits": 40,
+        "actualDurationMs": 143.40000009536743,
+        "phases": {
+          "mount": 1,
+          "nested-update": 16,
+          "update": 23
+        }
+      },
+      "searchProfile": {
+        "commits": 4,
+        "actualDurationMs": 4.000000059604645
+      },
+      "editProfile": {
+        "commits": 10,
+        "actualDurationMs": 16.600000023841858
+      },
+      "lineAreaHeight": 340.078125,
+      "baselineIssues": []
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "catalogueReadyMs": 534.4279999999999,
+      "configurationReadyMs": 108.72639999999956,
+      "calls": [
+        {
+          "method": "GET",
+          "path": "/api/cash/status",
+          "elapsedMs": 371.90499999999884
+        },
+        {
+          "method": "GET",
+          "path": "/api/pickup",
+          "elapsedMs": 374.2003000000004
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/lookup?kind=payment-methods",
+          "elapsedMs": 375.3647999999994
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/lookup?kind=products&channel=counter&offset=0",
+          "elapsedMs": 376.1935999999987
+        },
+        {
+          "method": "GET",
+          "path": "/api/inventory/replenishment",
+          "elapsedMs": 426.5440000000017
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/lookup?kind=customers&q=",
+          "elapsedMs": 428.1841999999997
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/products/20000000-0000-4000-8000-000000000001/configuration?channel=counter",
+          "elapsedMs": 486.03979999999865
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/products/20000000-0000-4000-8000-000000000002/configuration?channel=counter",
+          "elapsedMs": 488.13850000000093
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/products/20000000-0000-4000-8000-000000000003/configuration?channel=counter",
+          "elapsedMs": 503.35169999999925
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/products/20000000-0000-4000-8000-000000000004/configuration?channel=counter",
+          "elapsedMs": 536.7515999999996
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/products/20000000-0000-4000-8000-000000000005/configuration?channel=counter",
+          "elapsedMs": 539.5358000000015
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/products/20000000-0000-4000-8000-000000000006/configuration?channel=counter",
+          "elapsedMs": 543.9125999999997
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/products/20000000-0000-4000-8000-000000000007/configuration?channel=counter",
+          "elapsedMs": 549.620600000002
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/products/20000000-0000-4000-8000-000000000008/configuration?channel=counter",
+          "elapsedMs": 552.381400000002
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/products/20000000-0000-4000-8000-000000000009/configuration?channel=counter",
+          "elapsedMs": 554.999200000002
+        }
+      ],
+      "renderProfile": {
+        "commits": 41,
+        "actualDurationMs": 128.60000026226044,
+        "phases": {
+          "mount": 1,
+          "nested-update": 16,
+          "update": 24
+        }
+      },
+      "searchProfile": {
+        "commits": 4,
+        "actualDurationMs": 3.400000035762787
+      },
+      "editProfile": {
+        "commits": 10,
+        "actualDurationMs": 12.800000071525574
+      },
+      "lineAreaHeight": 425.875,
+      "baselineIssues": []
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "catalogueReadyMs": 542.2871999999988,
+      "configurationReadyMs": 108.99079999999958,
+      "calls": [
+        {
+          "method": "GET",
+          "path": "/api/cash/status",
+          "elapsedMs": 383.1854999999996
+        },
+        {
+          "method": "GET",
+          "path": "/api/pickup",
+          "elapsedMs": 385.7451000000001
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/lookup?kind=payment-methods",
+          "elapsedMs": 387.22290000000066
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/lookup?kind=products&channel=counter&offset=0",
+          "elapsedMs": 389.7576000000008
+        },
+        {
+          "method": "GET",
+          "path": "/api/inventory/replenishment",
+          "elapsedMs": 441.5787999999993
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/lookup?kind=customers&q=",
+          "elapsedMs": 442.97269999999844
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/products/20000000-0000-4000-8000-000000000001/configuration?channel=counter",
+          "elapsedMs": 495.28009999999995
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/products/20000000-0000-4000-8000-000000000002/configuration?channel=counter",
+          "elapsedMs": 497.38590000000113
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/products/20000000-0000-4000-8000-000000000003/configuration?channel=counter",
+          "elapsedMs": 512.1559000000016
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/products/20000000-0000-4000-8000-000000000004/configuration?channel=counter",
+          "elapsedMs": 514.167300000001
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/products/20000000-0000-4000-8000-000000000005/configuration?channel=counter",
+          "elapsedMs": 547.5980000000018
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/products/20000000-0000-4000-8000-000000000006/configuration?channel=counter",
+          "elapsedMs": 549.0069000000003
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/products/20000000-0000-4000-8000-000000000007/configuration?channel=counter",
+          "elapsedMs": 557.1814999999988
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/products/20000000-0000-4000-8000-000000000008/configuration?channel=counter",
+          "elapsedMs": 559.085500000001
+        },
+        {
+          "method": "GET",
+          "path": "/api/sales/products/20000000-0000-4000-8000-000000000009/configuration?channel=counter",
+          "elapsedMs": 562.7046000000009
+        }
+      ],
+      "renderProfile": {
+        "commits": 41,
+        "actualDurationMs": 136.5000001192093,
+        "phases": {
+          "mount": 1,
+          "nested-update": 16,
+          "update": 24
+        }
+      },
+      "searchProfile": {
+        "commits": 4,
+        "actualDurationMs": 3.9999998807907104
+      },
+      "editProfile": {
+        "commits": 10,
+        "actualDurationMs": 15.899999976158142
+      },
+      "lineAreaHeight": 189.875,
+      "baselineIssues": []
+    }
+  ]
+}

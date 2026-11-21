@@ -1,0 +1,83 @@
+{
+  "baseline": "SalesManager isolated browser fixture; mocked API, no DB; production profiling build",
+  "final": "SalesManager isolated browser fixture; mocked API, no DB; production profiling build",
+  "script": {
+    "before": 2771954,
+    "after": 2799558,
+    "delta": 27604
+  },
+  "runs": [
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "before": {
+        "calls": 15,
+        "catalogueReadyMs": 627.1171000000004,
+        "configurationReadyMs": 118.89359999999942,
+        "commits": 40,
+        "searchCommits": 4,
+        "editCommits": 10,
+        "lineAreaHeight": 307.875
+      },
+      "after": {
+        "calls": 15,
+        "catalogueReadyMs": 560.6178,
+        "configurationReadyMs": 123.35740000000078,
+        "commits": 40,
+        "searchCommits": 4,
+        "editCommits": 10,
+        "lineAreaHeight": 340.078125
+      }
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "before": {
+        "calls": 15,
+        "catalogueReadyMs": 562.9346999999998,
+        "configurationReadyMs": 125.26740000000063,
+        "commits": 41,
+        "searchCommits": 4,
+        "editCommits": 10,
+        "lineAreaHeight": 379.875
+      },
+      "after": {
+        "calls": 15,
+        "catalogueReadyMs": 534.4279999999999,
+        "configurationReadyMs": 108.72639999999956,
+        "commits": 41,
+        "searchCommits": 4,
+        "editCommits": 10,
+        "lineAreaHeight": 425.875
+      }
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "before": {
+        "calls": 15,
+        "catalogueReadyMs": 537.2163999999993,
+        "configurationReadyMs": 107.86879999999837,
+        "commits": 31,
+        "searchCommits": 4,
+        "editCommits": null,
+        "lineAreaHeight": 0
+      },
+      "after": {
+        "calls": 15,
+        "catalogueReadyMs": 542.2871999999988,
+        "configurationReadyMs": 108.99079999999958,
+        "commits": 41,
+        "searchCommits": 4,
+        "editCommits": 10,
+        "lineAreaHeight": 189.875
+      }
+    }
+  ]
+}

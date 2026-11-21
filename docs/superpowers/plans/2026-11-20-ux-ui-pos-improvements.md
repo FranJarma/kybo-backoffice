@@ -295,13 +295,13 @@ Son responsabilidades objetivo, no una orden de crear todos esos archivos si ya 
 
 **Interfaces:** consumes respuestas del servicio, permisos, caja y reserva de stock; produces estados distinguibles de edición, enviando, éxito, bloqueo, error recuperable y resultado incierto sin duplicar la operación.
 
-- [ ] Caracterizar y agregar tests de doble toque, respuesta lenta, conflicto de stock, caja cerrada, error/reintento y resultado incierto. Reutilizar `tests/cash-sales.integration.test.ts`, `tests/data-model.concurrency.test.ts`, `tests/sales-http.test.ts`, `tests/e2e/sales.spec.ts` y pruebas de permisos existentes.
-- [ ] Verificar los fallos nuevos; revisar transacciones/idempotencia existentes antes de proponer otro mecanismo.
-- [ ] Mantener el borrador hasta el éxito definitivo. Conservar caja/stock como validaciones del servidor y presentar recuperación concreta sin apilar modales.
-- [ ] No permitir reenvío concurrente; frente a resultado incierto, consultar la operación existente antes de crear otra. Si falta soporte servidor, implementar el mínimo contrato necesario y documentarlo.
-- [ ] Mostrar venta cobrada con total, medios, localizador y vuelto pertinentes. Nueva venta limpia el estado solo después de éxito; conservar acceso a última venta e impresión existente.
-- [ ] Separar fallo de impresión de fallo de cobro: un problema de impresora no reenvía la venta ni el pago.
-- [ ] Pasar pruebas y commit de resiliencia.
+- [x] Caracterizar y agregar tests de doble toque, respuesta lenta, conflicto de stock, caja cerrada, error/reintento y resultado incierto. Reutilizar `tests/cash-sales.integration.test.ts`, `tests/data-model.concurrency.test.ts`, `tests/sales-http.test.ts`, `tests/e2e/sales.spec.ts` y pruebas de permisos existentes.
+- [x] Verificar los fallos nuevos; revisar transacciones/idempotencia existentes antes de proponer otro mecanismo.
+- [x] Mantener el borrador hasta el éxito definitivo. Conservar caja/stock como validaciones del servidor y presentar recuperación concreta sin apilar modales.
+- [x] No permitir reenvío concurrente; frente a resultado incierto, consultar la operación existente antes de crear otra. Si falta soporte servidor, implementar el mínimo contrato necesario y documentarlo.
+- [x] Mostrar venta cobrada con total, medios, localizador y vuelto pertinentes. Nueva venta limpia el estado solo después de éxito; conservar acceso a última venta e impresión existente.
+- [x] Separar fallo de impresión de fallo de cobro: un problema de impresora no reenvía la venta ni el pago.
+- [x] Pasar pruebas y commit de resiliencia.
 
 ### Task 7: Revisión global, rendimiento y entrega
 

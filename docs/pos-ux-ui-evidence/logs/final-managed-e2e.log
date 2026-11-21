@@ -1,0 +1,17 @@
+
+> kybo-operations-next@0.6.0-rc.1 test:e2e C:\Users\franj\AppData\Local\Temp\kybo-pos-ux-ui-api
+> node --import tsx scripts/e2e-run.ts
+
+C:\Users\franj\AppData\Local\Temp\kybo-pos-ux-ui-api\scripts\migrate.ts:3
+throw new Error(
+      ^
+
+Error: Data-model transition requires scripts/data-model-preflight.ts and the reviewed transition runner. Generic migration is disabled for this release.
+    at <anonymous> (C:\Users\franj\AppData\Local\Temp\kybo-pos-ux-ui-api\scripts\migrate.ts:3:7)
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.21.0
+E2E process failed (1).
+ΓÇëELIFECYCLEΓÇë Command failed with exit code 1.
