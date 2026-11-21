@@ -255,7 +255,7 @@ Son responsabilidades objetivo, no una orden de crear todos esos archivos si ya 
 
 **Interfaces:** consumes PublicConfiguration y restricciones reales; produces selección confirmada compatible con el contrato actual de ProductConfigurator y CartLine. Cancelar no modifica la línea guardada.
 
-- [x] Agregar casos de selección simple y múltiple, mínimos/máximos, defaults por producto, opción no disponible, cancelar y reabrir en `tests/e2e/modifiers.spec.ts` y `tests/pos-configuration.integration.test.ts`.
+- [x] Agregar casos de selección simple y múltiple, mínimos/máximos, defaults por producto, opción no disponible, cancelar y reabrir en `tests/e2e/pos-surface.spec.ts` y `tests/pos-configuration.integration.test.ts`.
 - [x] Verificar los nuevos fallos y luego separar el borrador de presentación y las validaciones del grupo sin replicar reglas del servidor en cada opción.
 - [x] Implementar círculo de 48 px, sabor, señales de selección, leyenda de receta y X de Sin perlas. Mantener grupos de múltiples opciones funcionales.
 - [x] Guardar opciones actualiza precio, descripción e inventario según los contratos existentes; la UI no sustituye la configuración real por el ejemplo Chocolate/Caramelo.
@@ -411,6 +411,7 @@ Preservá las mejoras de velocidad existentes: caché, carga diferida de configu
 6. Stock: StockShortageNotice abre hoy otro Dialog desde PaymentDialog. El detalle debe mostrarse inline/desplegable.
 7. Fotos dinámicas: no sustituir imágenes reales por las del pedido ilustrativo de Figma. No existe correspondencia productId→paleta aprobada en main; usar fallback neutro y un adaptador tipado por IDs hasta disponer de esa correspondencia.
 8. Fuente y assets: no agregar URLs efímeras al runtime. Mantener los iconos Lucide existentes y descargar solo assets exactos cuando sean estáticos y necesarios.
+9. Apariencia de modificadores: las claves persistidas verificadas de Perlas, Salsa y Helado se resuelven en `src/components/sales/modifier-presentation.ts`. La clave `229be374-c4bf-4f7c-a4f9-0cc4e5f84700` identifica la X de Sin perlas. La clave `9bf66daa-1dd6-4cfc-a5d9-e99116c46a67` identifica el círculo neutro de Sin salsa. Las claves desconocidas conservan el círculo neutro. El nombre visible se usa solo para la etiqueta.
 
 ### Baseline y verificación
 

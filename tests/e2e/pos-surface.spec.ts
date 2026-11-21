@@ -446,6 +446,94 @@ async function mount(page: Page, options: SurfaceFixtureOptions = {}) {
   return { calls, errors, catalogueReadyMs };
 }
 const profiles: unknown[] = [];
+test("modifiers keep header and footer fixed while option groups scroll", async ({
+  page,
+}) => {
+  const viewport = { width: 390, height: 640 };
+  await page.setViewportSize(viewport);
+  const app = await mount(page, { modifiers: true });
+  const dialog = await openProductOptions(page);
+  const header = dialog.locator(".pos-configuration-header");
+  const groups = dialog.locator(".pos-modifier-groups");
+  const footer = dialog.locator(".pos-modifier-footer");
+  const firstOption = groups.locator(".pos-modifier-option").first();
+  const confirm = footer.getByRole("button", {
+    name: "Agregar al pedido",
+    exact: true,
+  });
+  await expect(header).toBeVisible();
+  await expect(groups).toBeVisible();
+  await expect(footer).toBeVisible();
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+  });
+  const geometry = async () => ({
+    header: await header.boundingBox(),
+    groups: await groups.boundingBox(),
+    footer: await footer.boundingBox(),
+    firstOption: await firstOption.boundingBox(),
+    groupScroll: await groups.evaluate((element) => ({
+      top: element.scrollTop,
+      height: element.clientHeight,
+      total: element.scrollHeight,
+    })),
+    outerScroll: await dialog.evaluate((element) => ({
+      dialog: element.scrollTop,
+      document: document.documentElement.scrollTop,
+      window: window.scrollY,
+    })),
+  });
+  const before = await geometry();
+  expect(before.groupScroll.total).toBeGreaterThan(before.groupScroll.height);
+  expect(before.groupScroll.top).toBe(0);
+  expect(before.header!.y).toBeGreaterThanOrEqual(0);
+  expect(before.footer!.y + before.footer!.height).toBeLessThanOrEqual(
+    viewport.height,
+  );
+  expect(before.groups!.y).toBeGreaterThanOrEqual(
+    before.header!.y + before.header!.height,
+  );
+  expect(before.groups!.y + before.groups!.height).toBeLessThanOrEqual(
+    before.footer!.y,
+  );
+  if (reportDirectory) {
+    await mkdir(reportDirectory, { recursive: true });
+    await page.screenshot({
+      path: join(reportDirectory, "configuration-fixed-before-390x640.png"),
+    });
+  }
+  // Scroll only the options, without focusing or scrolling the footer into view.
+  await groups.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await expect
+    .poll(() => groups.evaluate((element) => element.scrollTop))
+    .toBeGreaterThan(0);
+  const after = await geometry();
+  expect(after.firstOption!.y).toBeLessThan(before.firstOption!.y);
+  for (const region of ["header", "groups", "footer"] as const)
+    for (const value of ["x", "y", "width", "height"] as const)
+      expect(
+        Math.abs(after[region]![value] - before[region]![value]),
+        `${region} ${value}`,
+      ).toBeLessThanOrEqual(1);
+  expect(after.outerScroll).toEqual(before.outerScroll);
+  expect(after.footer!.y + after.footer!.height).toBeLessThanOrEqual(
+    viewport.height,
+  );
+  await expect(confirm).toBeEnabled();
+  if (reportDirectory) {
+    await page.screenshot({
+      path: join(reportDirectory, "configuration-fixed-after-390x640.png"),
+    });
+    await writeFile(
+      join(reportDirectory, "fixed-regions.json"),
+      JSON.stringify({ viewport, before, after }, null, 2),
+    );
+  }
+  await footer.getByRole("button", { name: "Cancelar", exact: true }).click();
+  expect(app.errors).toEqual([]);
+});
 const modifierRadio = (dialog: Locator, name: string) =>
   dialog.getByRole("radio", { name: new RegExp("^" + name) });
 const modifierLabel = (dialog: Locator, name: string) =>
@@ -501,7 +589,6 @@ for (const viewport of [
       name: "Agregar al pedido",
       exact: true,
     });
-    await confirm.scrollIntoViewIfNeeded();
     await expect(confirm).toBeEnabled();
     const bounds = await confirm.boundingBox();
     expect(bounds!.height).toBeGreaterThanOrEqual(44);

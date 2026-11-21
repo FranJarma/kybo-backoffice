@@ -217,22 +217,59 @@ describe("modifier rows", () => {
     expect(html).not.toContain("Viene incluida en la receta");
   });
 
-  it("uses the persisted flavor key regardless of the option name", () => {
+  it.each([
+    ["chocolate", "#956545"],
+    ["954f6731-0128-40d1-8f0c-4063fee07617", "#513A34"],
+    ["1875fd4b-bae4-407e-9ca8-f70fc2c76850", "#956545"],
+    ["84f02641-0f52-463c-8833-49e01818704e", "#C94254"],
+    ["b07eb534-9c5d-4dc0-975b-7e74c434c53c", "#F5BD35"],
+    ["a5f1e6b0-4a9a-4fb5-a1db-d2f21b8d1aa6", "#F5CA52"],
+    ["0f7efef8-b1d1-46f8-9605-fed632473170", "#74478C"],
+    ["0eff36cf-ebf1-4d10-850a-f738ea164a28", "#D68A4A"],
+    ["3283b742-82be-4a8b-9718-51e5e60316d6", "#956545"],
+    ["f11c17a9-d65e-4d37-82b7-cfcb0843c6d6", "#A86238"],
+    ["e00338f0-8ae3-4988-b8af-dd9ac86d7bfe", "#C94254"],
+    ["93648086-71f4-494c-8266-b608083c8e12", "#F7E8CC"],
+    ["9150176f-fdd7-46ea-b252-53196b068892", "#956545"],
+    ["14fcc687-670f-4512-8c97-79d3b863c062", "#A86238"],
+    ["795dce84-b27e-4db5-a8fd-feeb499726e9", "#C94254"],
+    ["americana", "#F7E8CC"],
+    ["caramelo", "#D68A4A"],
+    ["dulce-de-leche", "#A86238"],
+    ["frutilla", "#C94254"],
+    ["frutos-rojos", "#74478C"],
+  ])("uses the persisted flavor key %s after a rename", (key, color) => {
     expect(
-      renderOptions([option({ key: "chocolate", name: "Cacao intenso" })]),
-    ).toContain("background-color:#956545");
-    const unknown = renderOptions([option({ key: "seasonal" })]);
-    expect(unknown).toContain('data-modifier-visual="swatch"');
-    expect(unknown).not.toContain("background-color:#956545");
+      renderOptions([option({ key, name: "Edición de temporada" })]),
+    ).toContain(`background-color:${color}`);
   });
 
-  it("uses an X for the no-pearls key only", () => {
-    expect(
-      renderOptions([option({ key: "no-pearls", name: "Sin perlas" })]),
-    ).toContain('data-modifier-visual="no-pearls"');
-    expect(
-      renderOptions([option({ key: "no-sauce", name: "Sin salsa" })]),
-    ).toContain('data-modifier-visual="swatch"');
+  it("keeps an unrelated option named Chocolate neutral", () => {
+    const unknown = renderOptions([
+      option({
+        key: "85fbc266-bcc3-4e93-921f-9c2de730a0db",
+        name: "Chocolate",
+      }),
+    ]);
+    expect(unknown).toContain('data-modifier-visual="swatch"');
+    expect(unknown).toContain("background-color:#D5E1E8");
+  });
+
+  it("uses an X for the known no-pearls keys only", () => {
+    for (const key of ["no-pearls", "229be374-c4bf-4f7c-a4f9-0cc4e5f84700"]) {
+      expect(
+        renderOptions([option({ key, name: "Sin agregado de perlas" })]),
+      ).toContain('data-modifier-visual="no-pearls"');
+    }
+    for (const key of [
+      "no-sauce",
+      "sin-salsa",
+      "9bf66daa-1dd6-4cfc-a5d9-e99116c46a67",
+    ]) {
+      const html = renderOptions([option({ key, name: "Sin perlas" })]);
+      expect(html).toContain('data-modifier-visual="swatch"');
+      expect(html).toContain("background-color:#D5E1E8");
+    }
   });
 
   it("keeps unavailable options visible and their single-choice controls disabled", () => {
