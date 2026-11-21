@@ -46,4 +46,14 @@ RED: el área de líneas medía 0 px a 390x844. Se extrajeron OrderLine, el diá
 
 GREEN: 55 casos focalizados con PGlite descartable; typecheck, lint y formato correctos. El navegador pasó 14/14 en 35 s con componentes reales y HTTP interceptado, incluidos combos, cantidades, notas, eliminar/deshacer, cliente/localizador, historial/detalle y cambios de ancho. Se verificaron 320/360/390/768/1024/1280 y 390x640. La lista a 390x844 ahora mide 189,875 px; el cobro entra sin desplazar la pantalla a 390x640. En alturas pequeñas el resto del contexto y Seguir agregando se alcanzan desplazando la revisión.
 
-Se eliminó un subtotal redundante que recortaba el cobro en 17 px. Cabecera, total y cobro permanecen fijos al desplazar solo las líneas. La selección de origen/consumo usa el naranja aprobado. Revisión independiente de esta etapa en curso.
+Se eliminó un subtotal redundante que recortaba el cobro en 17 px. Cabecera, total y cobro permanecen fijos al desplazar solo las líneas. La selección de origen/consumo usa el naranja aprobado.
+
+La revisión independiente encontró que Deshacer fijado cubría 49 px de una lista de 56 px en pantallas cortas. Se corrigió para que se desplace con la lista. RED: los clics ordinarios sobre otra línea fallaban en ambos tamaños; GREEN: 4/4 casos de quitar, editar otra línea y deshacer a 320x720 y 390x640, más edición y scroll previos. La revisión acotada aprobó la corrección sin nuevos bloqueantes.
+
+## Task 5: cobro
+
+RED: tres casos del helper y tres recorridos de UI detectaron las funciones faltantes, efectivo vacío confirmable, ausencia de filas compactas y transferencia sin acreditación explícita. GREEN: 57 casos focalizados y 14 recorridos de navegador; un caso administrado quedó omitido por el entorno documentado. Typecheck, ESLint y formato pasaron.
+
+El cobro comparte cálculo bigint y presenta medios en dos columnas, campos específicos y filas compactas para división. Cada fila conserva sus referencias; agregar propone el saldo y quitar recalcula. El efectivo recibido se mantiene fuera de PaymentDraft. Titular/operación opcionales se serializan en una referencia de hasta 120 caracteres y la acreditación se vuelve a pedir al editar los datos. Cupón de tarjeta obligatorio y ceros a la izquierda preservados.
+
+Se revisaron capturas de escritorio y celular. La prueba de teclado simula un viewport visual de 370 px con desplazamiento de 28 px y verifica campo enfocado y pie visibles; no prueba un teclado Android/iOS real. La geometría responde sin transición demorada y el contexto de efectivo tiene espacio reservado. Revisión independiente de especificación y calidad en curso.

@@ -138,9 +138,14 @@ test("payment dialog distinguishes empty methods, retries, cash and split paymen
   await dialog.getByLabel("Importe 1", { exact: true }).fill("5000");
   await dialog.getByLabel("Importe 2", { exact: true }).fill("5500");
   await dialog
-    .getByRole("group", { name: "Medio de pago 2", exact: true })
-    .getByRole("button", { name: "Transferencia bancaria", exact: true })
-    .tap();
+    .getByRole("combobox", { name: "Medio de pago 2", exact: true })
+    .selectOption("transfer");
+  await expect(
+    dialog.getByRole("button", { name: "Confirmar cobro", exact: true }),
+  ).toBeDisabled();
+  await dialog
+    .getByRole("checkbox", { name: "Acreditación verificada", exact: true })
+    .check();
   await expect(
     dialog.getByRole("button", { name: "Confirmar cobro", exact: true }),
   ).toBeEnabled();

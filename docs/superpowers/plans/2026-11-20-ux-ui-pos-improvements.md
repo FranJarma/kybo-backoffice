@@ -268,12 +268,12 @@ Son responsabilidades objetivo, no una orden de crear todos esos archivos si ya 
 
 **Interfaces:** consumes CartLine, cartTotal y callbacks de configuración; produces el mismo pedido editable en panel lateral o vista de pedido. No crea un segundo estado por dispositivo.
 
-- [ ] Fijar pruebas de aumentar/disminuir cantidad, eliminar, editar opciones, notas, combos, cliente/localizador y cambio de ancho sin perder el borrador en `tests/pos-order-entry.integration.test.ts`, `tests/e2e/pickup-pos.spec.ts` y `tests/e2e/touch-pos.spec.ts`.
-- [ ] Ejecutar los casos nuevos antes del cambio y conservar la semántica existente de append/merge de líneas.
-- [ ] Extraer resumen/línea por responsabilidad y conectar edición/eliminación con confirmación donde haga falta. Mantener controles en línea y áreas táctiles cómodas.
-- [ ] Conectar Ver pedido, Seguir agregando y Continuar al cobro. Cerrar o volver no borra el pedido.
-- [ ] Preservar cliente/autocomplete, localizador, cuenta/mesa y borradores al ir a historial o detalle según el comportamiento existente.
-- [ ] Pasar pruebas y commit de pedido/refactor.
+- [x] Fijar pruebas de aumentar/disminuir cantidad, eliminar, editar opciones, notas, combos, cliente/localizador y cambio de ancho sin perder el borrador en `tests/pos-order-entry.integration.test.ts`, `tests/e2e/pickup-pos.spec.ts` y `tests/e2e/touch-pos.spec.ts`.
+- [x] Ejecutar los casos nuevos antes del cambio y conservar la semántica existente de append/merge de líneas.
+- [x] Extraer resumen/línea por responsabilidad y conectar edición/eliminación con confirmación donde haga falta. Mantener controles en línea y áreas táctiles cómodas.
+- [x] Conectar Ver pedido, Seguir agregando y Continuar al cobro. Cerrar o volver no borra el pedido.
+- [x] Preservar cliente/autocomplete, localizador, cuenta/mesa y borradores al ir a historial o detalle según el comportamiento existente.
+- [x] Pasar pruebas y commit de pedido/refactor.
 
 ### Task 5: Cobro y cálculos compartidos
 
