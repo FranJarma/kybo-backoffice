@@ -281,13 +281,13 @@ Son responsabilidades objetivo, no una orden de crear todos esos archivos si ya 
 
 **Interfaces:** consumes total real, medios habilitados y PaymentDraft; produces pagos validados y una solicitud única al flujo existente de venta. Los helpers monetarios son compartidos por todos los tamaños.
 
-- [ ] Agregar pruebas de todos los ejemplos numéricos de la sección 5, importe insuficiente, editar/quitar pagos y cancelación del cobro. Reutilizar/ampliar `tests/e2e/payment-experience.spec.ts`, `payment-receipt.spec.ts`, `tests/helpers/payment-receipt-ui.tsx` y los tests del helper monetario que existan.
-- [ ] Verificar que los casos nuevos fallen por la lógica objetivo y mantener íntegra la precisión monetaria existente.
-- [ ] Separar presentación de medios, campos específicos, resumen de saldo y envío. Reutilizar payment-math; no calcular vuelto o saldo de forma distinta en móvil.
-- [ ] Implementar el diálogo compacto desktop actualizado; tablet/celular deben conservar acciones accesibles y funcionar con teclado virtual.
-- [ ] Implementar campos y confirmación manual de transferencia; revisar compatibilidad del cupón opcional con las reglas reales. Conservar referencias al editar pagos.
-- [ ] Completar los estados que el prototipo no cubre: agregar/editar/quitar un pago, saldo restante y mensajes de validación junto al campo. Usar los mismos patrones aprobados, sin reiniciar el diseño.
-- [ ] Pasar pruebas y commit de cobro.
+- [x] Agregar pruebas de todos los ejemplos numéricos de la sección 5, importe insuficiente, editar/quitar pagos y cancelación del cobro. Reutilizar/ampliar `tests/e2e/payment-experience.spec.ts`, `payment-receipt.spec.ts`, `tests/helpers/payment-receipt-ui.tsx` y los tests del helper monetario que existan.
+- [x] Verificar que los casos nuevos fallen por la lógica objetivo y mantener íntegra la precisión monetaria existente.
+- [x] Separar presentación de medios, campos específicos, resumen de saldo y envío. Reutilizar payment-math; no calcular vuelto o saldo de forma distinta en móvil.
+- [x] Implementar el diálogo compacto desktop actualizado; tablet/celular deben conservar acciones accesibles y funcionar con teclado virtual.
+- [x] Implementar campos y confirmación manual de transferencia; revisar compatibilidad del cupón opcional con las reglas reales. Conservar referencias al editar pagos.
+- [x] Completar los estados que el prototipo no cubre: agregar/editar/quitar un pago, saldo restante y mensajes de validación junto al campo. Usar los mismos patrones aprobados, sin reiniciar el diseño.
+- [x] Pasar pruebas y commit de cobro.
 
 ### Task 6: Bloqueos, resiliencia y confirmación
 
@@ -372,17 +372,17 @@ Preservá las mejoras de velocidad existentes: caché, carga diferida de configu
 | --- | --- |
 | `src/components/sales/cart.tsx` | `CartLine` mantiene productId/name, quantity (1–999), price en texto decimal editable, expectedPrice, priceReason, notes y todos los expected*VersionId, expectedPricingRevision, modifiers, modifierLabels y comboChoices. `newCartLine(row: SaleLookup["rows"][number]): CartLine`; `cartTotal(lines: CartLine[]): string \| null` usa bigint. |
 | `src/components/sales/touch-selection.ts` | `appendCartLine(current: CartLine[], incoming: CartLine): CartLine[]` solo une identidades físicas/configuradas idénticas, conserva notas, variantes y límite 50 líneas/999 unidades. `filterCatalogue(rows, query, category)` busca localmente sin requests. |
-| `src/components/sales/cart.tsx` | `ProductPicker({channel, locked, onAdd, refresh, onCatalogueLoaded?})`; onAdd recibe fila original, onCatalogueLoaded recibe todas las filas. El loader solo depende de channel/refresh, nunca del ancho ni de filtros. |
+| `src/components/sales/cart.tsx` | `ProductPicker({channel, locked, onAdd, refresh, onCatalogueLoaded?,quantities?})`; onAdd recibe fila original, onCatalogueLoaded recibe todas las filas y quantities procede del mismo pedido. El loader solo depende de channel/refresh, nunca del ancho ni de filtros. |
 | `src/components/sales/catalogue-loader.ts` | `createCatalogueLoader({channel,onChange,onComplete?}) => {load():Promise<void>,dispose():void}`. Conserva páginas parciales, retry desde offset pendiente, timeout 15s, AbortController y descarte al desmontar. |
 | `src/components/sales/request-cache.ts` | `PosRequestCache<T>.get(key, load, now?): Promise<T>`, TTL 60s y máximo 100 entradas; comparte solicitudes en vuelo y elimina rechazos. |
 | `src/components/sales/sales-manager.tsx` | Propietario único del pedido/contexto/vistas. `DraftSnapshot` incluye líneas, origin/channel/fulfillment, mesa, cliente/email, externalId, notes, localizador/modo y tabletPanel. Historial usa ocultamiento CSS; no desmontar catálogo/pedido. La precarga de configuraciones tiene dos workers y clave branch/channel/revisión/versiones/precio. |
-| `src/components/sales/cart-order.tsx` | `Cart({lines,onChange,locked,allowPrice,total,children,onEdit?})`; onEdit recibe índice. Conserva editor aislado de notas/precio y Deshacer. |
-| `src/modules/recipes/configuration.ts` | `PublicConfiguration`: fulfillmentVersionId, recipeVersionId, model, basePrice, catalogBasePrice?, vatRate?, pricingRevision? y groups[{id,name,min,max,options[{id,name,defaultCount,maxCount,price,available}]}]. Los IDs de options son bindings de receta, no IDs del producto. |
+| `src/components/sales/cart-order.tsx` | `Cart({lines,onChange,locked,allowPrice,total,children,onEdit?,fontClassName?})`; onEdit recibe índice. Conserva editor aislado de notas/precio y Deshacer. |
+| `src/modules/recipes/configuration.ts` | `PublicConfiguration`: fulfillmentVersionId, recipeVersionId, model, basePrice, catalogBasePrice?, vatRate?, pricingRevision? y groups[{id,name,min,max,options[{id,key?,name,defaultCount,maxCount,price,available}]}]. Los IDs de options son bindings de receta, no IDs del producto; key persistida solo identifica apariencia. |
 | `src/components/sales/product-configurator.tsx` | initialSelection?: Selection[]; onConfirm({expectedRecipeVersionId,modifiers,expectedPrice,modifierLabels,selectionSurcharge?}); onCancel(). Choices vive solo en el configurador; confirmar es el único commit a CartLine. |
 | `src/components/sales/combo-configurator.tsx` | Mantener ComboSaleConfiguration y initialChoices/LineInput.comboChoices, sus versiones y el ProductConfigurator anidado. No convertir combos en productos simples. |
-| `src/components/sales/payment-dialog.tsx` | `PaymentDraft = {collector:"local"\|"platform";methodId?:string;amount:string;reference:string}`. Recibido vive fuera del payload. Mantener canDiscard/onDiscard y todos los props de carga/recuperación del checkout actual. |
+| `src/components/sales/payment-dialog.tsx` | `PaymentDraft = {collector:"local"\|"platform";methodId?:string;amount:string;reference:string}`. `onConfirm(payments,cash?)` añade un resumen UI opcional `{applied,received,change}` con cadenas canónicas; recibido vive fuera del payload. Conserva canDiscard/onDiscard y la recuperación. |
 | `src/components/sales/payment-math.ts` | `cashChange(received:string, collection:string): {valid:boolean;change:string\|null}`; usa decimal/integer/cents. Ningún componente puede sumar el recibido al monto aplicado. |
-| `src/components/inventory/shared.tsx` | `useOperation<T>(actorId,kind,onSuccess,explicitBranchId?)`: sessionStorage por actor/sucursal/tipo; persiste outcomeUncertain antes del POST y reintenta el mismo payload/requestId. Preservar descarte seguro de rechazos y validación de permisos. |
+| `src/components/inventory/shared.tsx` | `useOperation<T>(actorId,kind,onSuccess,explicitBranchId?,validateResult?)`: sessionStorage por actor/sucursal/tipo; persiste outcomeUncertain antes del POST y reintenta el mismo payload/requestId. submit devuelve admisión booleana, onSuccess recibe resultado y comando admitido; validador opcional antes de limpiar. Conserva descarte seguro y expone errorCode del mismo parseo HTTP. |
 | `src/modules/sales/service.ts` | create/addOrder/pay/cancel son transaccionales. claim+fingerprint retorna replay antes de nueva caja/stock. Mantener reserveOrder, lockCashSession, movimientos únicos y enqueueOrderPrints/cancelOrderPrints. |
 | `src/components/cash/status-gate.tsx` | Ya usa CashOpeningAction con CashManager lazy/openingOnly; abrir caja conserva el POS. No reemplazarlo por navegación. |
 | `src/components/printing/order-printing.tsx` | LatestOrderPrinting y usePrinting tienen recuperación propia; fallo de impresión no reenvía venta ni pago. |

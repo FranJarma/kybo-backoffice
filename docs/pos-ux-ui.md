@@ -16,3 +16,13 @@ Se reutilizan Button, Dialog, Input, SearchCombobox, formato monetario y avisos 
 - Transferencia manual requiere confirmación explícita de acreditación. Titular y operación son opcionales y no requieren cliente.
 - Recibido y vuelto son ayuda operativa; el servidor recibe exclusivamente monto aplicado.
 - Reintentar una operación incierta conserva requestId y payload; impresión conserva recuperación independiente.
+
+## Decisiones de integración
+
+| Decisión | Motivo | Límite o costo |
+| --- | --- | --- |
+| Checkout independiente en la rama exacta | El .git original es de lectura y contiene trabajo local del usuario | El código debe incorporarse al checkout habitual para verlo en su localhost |
+| Cupón de tarjeta obligatorio | La política del servidor lo exige | El campo difiere del ejemplo opcional del prototipo |
+| Titular de transferencia en referencia legible | El contrato actual persiste una sola referencia | Límite conjunto de 120 caracteres; un reporte estructurado futuro necesitaría otro contrato |
+| Apariencia por identidades verificadas y fallback neutro | No hay color de producto persistido; los nombres pueden cambiar | Los nuevos IDs requieren configuración visual para tener una paleta específica |
+| Registro y empaquetado de revisión con herramientas nativas de Windows | La sesión no dispone de los scripts Unix del flujo | La evidencia y los gates equivalentes se registran en la verificación |

@@ -280,6 +280,7 @@ export function PaymentDialog({
   canManageMethods = false,
   onRefreshMethods,
   checkoutIssue = "",
+  cashClosed = false,
   fontClassName = "",
 }: {
   amount: string;
@@ -301,6 +302,7 @@ export function PaymentDialog({
   canManageMethods?: boolean;
   onRefreshMethods: () => void;
   checkoutIssue?: string;
+  cashClosed?: boolean;
   fontClassName?: string;
 }) {
   const totalInput = inputDecimal(amount);
@@ -310,6 +312,13 @@ export function PaymentDialog({
   const split = drafts.length > 1;
   const rows =
     exact && !split ? [{ ...drafts[0], amount: totalInput }] : drafts;
+  const localBlocked =
+    cashClosed && rows.some((row) => row.collector === "local");
+  const issue =
+    checkoutIssue ||
+    (localBlocked && !uncertain
+      ? "Caja cerrada. Volvé al pedido para gestionar la apertura antes de cobrar en el local."
+      : "");
   const allocation = paymentAllocation(
     amount,
     rows.map((row) => row.amount),
@@ -421,7 +430,7 @@ export function PaymentDialog({
   }
 
   function confirm() {
-    if (locked || busy || !valid || checkoutIssue) return;
+    if (locked || busy || !valid || issue) return;
     onConfirm(
       prepared.map(({ row, method, reference }) => ({
         collector: row.collector,
@@ -670,9 +679,9 @@ export function PaymentDialog({
               remaining={allocation.remaining}
             />
           )}
-          {checkoutIssue ? (
+          {issue ? (
             <p className="pos-payment-field-error" role="status">
-              {checkoutIssue}
+              {issue}
             </p>
           ) : !exact || (!split && cashRows.length > 0) ? (
             <p
@@ -693,11 +702,11 @@ export function PaymentDialog({
               disabled={locked}
               onClick={onClose}
             >
-              Cancelar
+              {localBlocked ? "Volver al pedido" : "Cancelar"}
             </Button>
             <Button
               type="button"
-              disabled={locked || busy || !valid || !!checkoutIssue}
+              disabled={locked || busy || !valid || !!issue}
               onClick={confirm}
             >
               {busy ? (

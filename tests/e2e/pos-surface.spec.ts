@@ -489,6 +489,9 @@ type SurfaceFixtureOptions = {
   modifiers?: boolean;
   combos?: boolean;
   navigation?: boolean;
+  cashOpen?: boolean;
+  freeCappuccino?: boolean;
+  tables?: boolean;
 };
 async function mount(page: Page, options: SurfaceFixtureOptions = {}) {
   const {
@@ -496,6 +499,9 @@ async function mount(page: Page, options: SurfaceFixtureOptions = {}) {
     modifiers = false,
     combos = false,
     navigation = false,
+    cashOpen = true,
+    freeCappuccino = false,
+    tables = false,
   } = options;
   const calls: Call[] = [],
     errors: string[] = [];
@@ -537,8 +543,8 @@ async function mount(page: Page, options: SurfaceFixtureOptions = {}) {
         json: {
           available: true,
           activated: true,
-          open: true,
-          sessionId: id(500),
+          open: cashOpen,
+          sessionId: cashOpen ? id(500) : null,
           canOpen: true,
         },
       });
@@ -572,7 +578,11 @@ async function mount(page: Page, options: SurfaceFixtureOptions = {}) {
                       ? { ...row, name: longProductName, imageAssetId: null }
                       : row,
                   )
-                : rows),
+                : rows.map((row) =>
+                    freeCappuccino && row.id === id(8)
+                      ? { ...row, price: "0.00" }
+                      : row,
+                  )),
               ...(combos ? [comboRow] : []),
             ],
             categories: edgeCases
@@ -609,6 +619,24 @@ async function mount(page: Page, options: SurfaceFixtureOptions = {}) {
         });
       return route.fulfill({ json: { rows: [], total: 0 } });
     }
+    if (tables && url.pathname === "/api/sales/tables")
+      return route.fulfill({
+        json: [
+          {
+            id: id(950),
+            name: "Mesa 4",
+            capacity: 4,
+            x: 0,
+            y: 0,
+            revision: 1,
+            archived: false,
+            saleId: null,
+            saleNumber: null,
+            balanceDue: null,
+            orderCount: 0,
+          },
+        ],
+      });
     if (
       navigation &&
       url.pathname === "/api/sales" &&
@@ -652,8 +680,15 @@ async function mount(page: Page, options: SurfaceFixtureOptions = {}) {
     const config = url.pathname.match(
       /^\/api\/sales\/products\/([^/]+)\/configuration$/,
     );
-    if (config)
-      return route.fulfill({ json: configuration(config[1], modifiers) });
+    if (config) {
+      const result = configuration(config[1], modifiers);
+      return route.fulfill({
+        json:
+          freeCappuccino && config[1] === id(8)
+            ? { ...result, basePrice: "0.00", catalogBasePrice: "0.00" }
+            : result,
+      });
+    }
     if (url.pathname.startsWith("/api/media/"))
       return route.fulfill({ status: 404, body: "Missing fixture photo" });
     // The fixture has no external transport: unneeded read endpoints remain empty.
@@ -744,6 +779,768 @@ const businessRequests = (calls: Call[]) => ({
   configuration: calls.filter((call) => call.path.includes("/configuration"))
     .length,
   combos: calls.filter((call) => /\/combo[?]/.test(call.path)).length,
+});
+
+type CheckoutFailure =
+  | "stock"
+  | "cash"
+  | "conflict"
+  | "network"
+  | "invalid-json"
+  | "invalid-result"
+  | "server-error"
+  | "slow";
+type CapturedSubmission = {
+  body: string;
+  payload: Record<string, unknown>;
+};
+function confirmedFixtureSale(
+  kind:
+    | "paid"
+    | "pending-table"
+    | "pending-delivery"
+    | "free"
+    | "platform" = "paid",
+): SaleDetail {
+  const pending = kind.startsWith("pending-");
+  const free = kind === "free";
+  const delivery = kind === "pending-delivery" || kind === "platform";
+  const amount = free ? "0.00" : "3500.00";
+  return {
+    ...historicalSale,
+    id: id(900),
+    number: 73,
+    origin: delivery
+      ? "delivery"
+      : kind === "pending-table"
+        ? "table"
+        : "counter",
+    channel: delivery ? "pedidosya" : "counter",
+    fulfillment: delivery
+      ? "delivery"
+      : kind === "pending-table"
+        ? "dine_in"
+        : "takeaway",
+    status: pending ? "open" : "closed",
+    tableId: kind === "pending-table" ? id(950) : null,
+    tableName: kind === "pending-table" ? "Mesa 4" : null,
+    customerId: null,
+    customerName: null,
+    externalId: delivery ? "PED-73" : null,
+    totalAmount: amount,
+    paidAmount: pending ? "0.00" : amount,
+    balanceDue: pending ? amount : "0.00",
+    localCollected: pending || kind === "platform" ? "0.00" : amount,
+    platformCollected: kind === "platform" ? amount : "0.00",
+    closedAt: pending ? null : historicalSale.closedAt,
+    orders: [
+      {
+        ...historicalSale.orders[0],
+        id: id(901),
+        locatorNumber: 3,
+        totalAmount: amount,
+        lines: [
+          {
+            ...historicalSale.orders[0].lines[0],
+            id: id(902),
+            listPrice: amount,
+            unitPrice: amount,
+            lineTotal: amount,
+            netTotal: amount,
+          },
+        ],
+      },
+    ],
+    payments:
+      pending || free
+        ? []
+        : [
+            {
+              ...historicalSale.payments[0],
+              id: id(903),
+              collector: kind === "platform" ? "platform" : "local",
+              methodName: kind === "platform" ? null : "Efectivo",
+              methodKind: kind === "platform" ? null : "cash",
+            },
+          ],
+  };
+}
+async function mountCheckout(
+  page: Page,
+  {
+    sale = confirmedFixtureSale(),
+    firstResponse,
+    printFailure = false,
+    ...surface
+  }: SurfaceFixtureOptions & {
+    sale?: SaleDetail;
+    firstResponse?: CheckoutFailure;
+    printFailure?: boolean;
+  } = {},
+) {
+  const app = await mount(page, surface);
+  const submissions: CapturedSubmission[] = [];
+  const printingSubmissions: CapturedSubmission[] = [];
+  const cashStatusReads: boolean[] = [];
+  let cashIsOpen = surface.cashOpen ?? true;
+  let releaseSlow = () => {};
+  const slowResponse = new Promise<void>((resolve) => {
+    releaseSlow = resolve;
+  });
+  await page.route("**/api/cash/status", (route) => {
+    cashStatusReads.push(cashIsOpen);
+    return route.fulfill({
+      json: {
+        available: true,
+        activated: true,
+        open: cashIsOpen,
+        sessionId: cashIsOpen ? id(500) : null,
+        canOpen: true,
+      },
+    });
+  });
+  await page.route("**/api/sales", async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    submissions.push({
+      body: route.request().postData()!,
+      payload: route.request().postDataJSON(),
+    });
+    if (submissions.length === 1) {
+      if (firstResponse === "slow") await slowResponse;
+      if (firstResponse === "network") return route.abort("failed");
+      if (firstResponse === "invalid-json")
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: '{"id":',
+        });
+      if (firstResponse === "invalid-result")
+        return route.fulfill({ json: { id: sale.id, number: sale.number } });
+      if (firstResponse === "server-error")
+        return route.fulfill({
+          status: 503,
+          json: { error: "No se pudo confirmar el resultado del cobro." },
+        });
+      if (firstResponse === "stock")
+        return route.fulfill({
+          status: 400,
+          json: {
+            error:
+              "No hay stock disponible suficiente para reservar:\nLeche entera · Barra · Faltan 0,250 L.",
+          },
+        });
+      if (firstResponse === "conflict")
+        return route.fulfill({
+          status: 409,
+          json: { error: "Revisá el precio de Cappuccino antes de continuar." },
+        });
+      if (firstResponse === "cash") {
+        cashIsOpen = false;
+        return route.fulfill({
+          status: 409,
+          json: {
+            code: "CASH_CLOSED",
+            error:
+              "Abrí la caja antes de registrar cobros o salidas de efectivo.",
+          },
+        });
+      }
+    }
+    return route.fulfill({ json: sale });
+  });
+  await page.route(`**/api/sales/${sale.id}`, (route) =>
+    route.fulfill({ json: sale }),
+  );
+  await page.route("**/api/fulfillment/state**", (route) =>
+    route.fulfill({
+      json: {
+        capabilities: { deliver: false },
+        combos: [],
+        rows: [
+          {
+            lineId: sale.orders[0].lines[0].id,
+            name: "Cappuccino",
+            orderId: sale.orders[0].id,
+            returnLots: [],
+            progress: {
+              mode: "direct",
+              ordered: 1,
+              completed: 1,
+              delivered: 1,
+              cancelled: 0,
+            },
+            task: null,
+            notes: null,
+          },
+        ],
+        cancelled: false,
+        resolution: null,
+      },
+    }),
+  );
+  await page.route("**/api/printing**", (route) => {
+    if (route.request().method() === "POST") {
+      printingSubmissions.push({
+        body: route.request().postData()!,
+        payload: route.request().postDataJSON(),
+      });
+      return printingSubmissions.length === 1
+        ? route.fulfill({
+            status: 503,
+            json: { error: "La impresora no respondió." },
+          })
+        : route.fulfill({ json: { id: id(960) } });
+    }
+    const snapshot: PrintingSnapshot = {
+      ready: true,
+      canConfigure: false,
+      canManage: true,
+      settings: { enabled: true, revision: 1, printerName: "Barra fixture" },
+      connector: {
+        id: id(965),
+        name: "Conector fixture",
+        connected: true,
+        lastSeenAt: "2026-11-20T17:00:00.000Z",
+        printerStatus: "ready",
+        printerMessage: null,
+      },
+      jobs: printFailure
+        ? [
+            {
+              id: id(960),
+              ticketId: id(961),
+              saleId: sale.id,
+              orderId: sale.orders[0].id,
+              saleNumber: sale.number,
+              sequence: 1,
+              stationName: "Barra",
+              kind: "original",
+              copyNumber: 0,
+              state: printingSubmissions.length > 1 ? "pending" : "error",
+              createdAt: "2026-11-20T17:00:00.000Z",
+              sentAt: null,
+              error:
+                printingSubmissions.length > 1
+                  ? null
+                  : "La impresora no respondió.",
+              spoolState: "not_submitted",
+              canReprint: false,
+              canRetry: printingSubmissions.length < 2,
+              reason: null,
+              requestedBy: "surface-cashier",
+              document: {
+                version: 1,
+                widthDots: 576,
+                logo: true,
+                lines: [
+                  { text: "Pedido 73.1 · Localizador 3", style: "title" },
+                  { text: "1 × Cappuccino", style: "normal" },
+                ],
+              },
+            },
+          ]
+        : [],
+    };
+    return route.fulfill({ json: snapshot });
+  });
+  return {
+    ...app,
+    submissions,
+    printingSubmissions,
+    cashStatusReads,
+    releaseSlow,
+  };
+}
+async function prepareCappuccino(page: Page) {
+  await page.getByRole("button", { name: /^Localizador 1\b/ }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Localizador 3", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Agregar Cappuccino", exact: true })
+    .click();
+  return showOrder(page);
+}
+async function openCashCheckout(page: Page) {
+  await page
+    .getByRole("button", { name: "Continuar al cobro", exact: true })
+    .click();
+  const payment = page.getByRole("dialog");
+  await payment.getByRole("button", { name: "Efectivo", exact: true }).click();
+  await payment
+    .getByRole("textbox", { name: "Efectivo recibido 1", exact: true })
+    .fill("5000");
+  return payment;
+}
+const confirmCheckout = (payment: Locator) =>
+  payment.getByRole("button", { name: /^Confirmar cobro/ });
+const confirmationRegion = (page: Page) =>
+  page.getByRole("region", { name: "Confirmación de venta", exact: true });
+async function captureCheckout(page: Page, name: string) {
+  if (!reportDirectory) return;
+  await mkdir(reportDirectory, { recursive: true });
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+  });
+  await page.screenshot({ path: join(reportDirectory, `${name}.png`) });
+}
+
+for (const viewport of [
+  { width: 1280, height: 800 },
+  { width: 390, height: 844 },
+])
+  test(`checkout confirms paid cash and starts a new draft at ${viewport.width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    const app = await mountCheckout(page);
+    await prepareCappuccino(page);
+    const payment = await openCashCheckout(page);
+    await confirmCheckout(payment).click();
+    const confirmation = confirmationRegion(page);
+    await expect(confirmation).toBeVisible();
+    await expect(confirmation).toContainText(/Venta cobrada.*#73/);
+    await expect(confirmation).toContainText(/Total.*3[.]500/);
+    await expect(confirmation).toContainText("Localizador 3");
+    await expect(confirmation).toContainText(/Efectivo.*3[.]500/);
+    await expect(confirmation).toContainText(
+      /Recibido.*5[.]000.*Vuelto.*1[.]500/,
+    );
+    await expect(page.getByTestId("cart-line")).toHaveCount(0);
+    expect(app.submissions).toHaveLength(1);
+    expect(app.submissions[0].payload).toMatchObject({
+      origin: "counter",
+      channel: "counter",
+      locatorMode: "manual",
+      locatorNumber: 3,
+      payments: [
+        {
+          collector: "local",
+          methodId: id(601),
+          amount: "3500",
+          reference: "",
+        },
+      ],
+    });
+    expect(
+      Object.keys((app.submissions[0].payload.payments as object[])[0]).sort(),
+    ).toEqual(["amount", "collector", "methodId", "reference"]);
+    await captureCheckout(page, `confirmed-paid-${viewport.width}`);
+    await confirmation
+      .getByRole("button", { name: "Nueva venta", exact: true })
+      .click();
+    await expect(confirmation).toHaveCount(0);
+    await page
+      .getByRole("button", { name: "Agregar Soft Frutilla", exact: true })
+      .click();
+    await showOrder(page);
+    await expect(page.getByTestId("cart-line")).toHaveCount(1);
+    await expect(page.getByTestId("cart-line")).toContainText("Soft Frutilla");
+    await expect(page.getByTestId("cart-total")).toHaveText(/3[.]500/);
+    expect(app.submissions).toHaveLength(1);
+    expect(app.errors).toEqual([]);
+  });
+
+test("checkout confirmation lists each split payment and known cash change", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const sale = confirmedFixtureSale();
+  sale.payments = [
+    { ...sale.payments[0], amount: "2000.00", settlementNet: "2000.00" },
+    {
+      ...sale.payments[0],
+      id: id(904),
+      methodName: "Débito",
+      methodKind: "card",
+      amount: "1500.00",
+      settlementNet: "1500.00",
+      reference: "000073",
+    },
+  ];
+  const app = await mountCheckout(page, { sale });
+  await prepareCappuccino(page);
+  const payment = await openCashCheckout(page);
+  await payment
+    .getByRole("button", { name: "Dividir cobro", exact: true })
+    .click();
+  await payment
+    .getByRole("textbox", { name: "Importe 1", exact: true })
+    .fill("2000");
+  await payment
+    .getByRole("textbox", { name: "Importe 2", exact: true })
+    .fill("1500");
+  await payment
+    .getByRole("combobox", { name: "Medio de pago 2", exact: true })
+    .selectOption(id(602));
+  await payment
+    .getByRole("textbox", {
+      name: "Número de comprobante del pago 2",
+      exact: true,
+    })
+    .fill("000073");
+  await confirmCheckout(payment).click();
+  const confirmation = confirmationRegion(page);
+  await expect(confirmation).toContainText(/Efectivo.*2[.]000/);
+  await expect(confirmation).toContainText(/Débito.*1[.]500/);
+  await expect(confirmation).toContainText(
+    /Recibido.*5[.]000.*Vuelto.*3[.]000/,
+  );
+  expect(app.submissions).toHaveLength(1);
+  expect(app.submissions[0].payload.payments).toEqual([
+    { collector: "local", methodId: id(601), amount: "2000", reference: "" },
+    {
+      collector: "local",
+      methodId: id(602),
+      amount: "1500",
+      reference: "000073",
+    },
+  ]);
+  await captureCheckout(page, "confirmed-split");
+  expect(app.errors).toEqual([]);
+});
+
+for (const origin of ["table", "delivery"] as const)
+  test(`checkout labels an unpaid ${origin} sale as pending`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    const app = await mountCheckout(page, {
+      sale: confirmedFixtureSale(
+        origin === "table" ? "pending-table" : "pending-delivery",
+      ),
+      tables: true,
+    });
+    await page
+      .getByRole("button", {
+        name: origin === "table" ? "Mesa" : "Delivery",
+        exact: true,
+      })
+      .click();
+    if (origin === "table")
+      await page.getByRole("combobox", { name: /^Mesa/ }).selectOption(id(950));
+    else
+      await page
+        .getByRole("textbox", {
+          name: "Número del pedido externo",
+          exact: false,
+        })
+        .fill("PED-73");
+    await prepareCappuccino(page);
+    await page
+      .getByRole("button", {
+        name:
+          origin === "table" ? "Abrir cuenta" : "Registrar pendiente de cobro",
+        exact: true,
+      })
+      .click();
+    const confirmation = confirmationRegion(page);
+    await expect(confirmation).toBeVisible();
+    await expect(confirmation).toContainText(/Venta pendiente de cobro.*#73/);
+    await expect(confirmation).toContainText(/Total.*3[.]500.*Saldo.*3[.]500/);
+    await expect(confirmation).not.toContainText("Venta cobrada");
+    await expect(confirmation).not.toContainText("Recibido");
+    await expect(confirmation).not.toContainText("Vuelto");
+    expect(app.submissions).toHaveLength(1);
+    expect(app.submissions[0].payload).toMatchObject({ origin, payments: [] });
+    await captureCheckout(page, `confirmed-pending-${origin}`);
+    expect(app.errors).toEqual([]);
+  });
+
+test("checkout labels a zero total sale as free without invented payment values", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const app = await mountCheckout(page, {
+    freeCappuccino: true,
+    sale: confirmedFixtureSale("free"),
+  });
+  await prepareCappuccino(page);
+  await page
+    .getByRole("button", { name: "Registrar sin cargo", exact: true })
+    .click();
+  const confirmation = confirmationRegion(page);
+  await expect(confirmation).toContainText(/Venta sin cargo.*#73/);
+  await expect(confirmation).toContainText(/Total.*0,00/);
+  await expect(confirmation).not.toContainText("Recibido");
+  await expect(confirmation).not.toContainText("Vuelto");
+  expect(app.submissions).toHaveLength(1);
+  expect(app.submissions[0].payload.payments).toEqual([]);
+  await captureCheckout(page, "confirmed-free-390");
+  expect(app.errors).toEqual([]);
+});
+
+test("checkout blocks known closed cash and returns to the intact order", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const app = await mountCheckout(page, { cashOpen: false });
+  await prepareCappuccino(page);
+  const payment = await openCashCheckout(page);
+  await expect(payment).toContainText("Caja cerrada");
+  await expect(confirmCheckout(payment)).toBeDisabled();
+  await captureCheckout(page, "cash-known-closed");
+  await payment
+    .getByRole("button", { name: "Volver al pedido", exact: true })
+    .click();
+  await expect(page.getByTestId("cart-line")).toContainText("Cappuccino");
+  await expect(page.getByTestId("cart-total")).toHaveText(/3[.]500/);
+  await expect(
+    page.getByRole("button", { name: "Abrir caja", exact: true }),
+  ).toBeVisible();
+  expect(app.submissions).toHaveLength(0);
+  expect(app.errors).toEqual([]);
+});
+
+test("checkout allows platform collection when local cash is closed", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const app = await mountCheckout(page, {
+    cashOpen: false,
+    sale: confirmedFixtureSale("platform"),
+  });
+  await page.getByRole("button", { name: "Delivery", exact: true }).click();
+  await page
+    .getByRole("textbox", { name: "Número del pedido externo", exact: false })
+    .fill("PED-73");
+  await prepareCappuccino(page);
+  await page
+    .getByRole("button", { name: "Continuar al cobro", exact: true })
+    .click();
+  const payment = page.getByRole("dialog");
+  await payment
+    .getByRole("combobox", { name: "Cobrado por 1", exact: false })
+    .selectOption("platform");
+  await expect(confirmCheckout(payment)).toBeEnabled();
+  await confirmCheckout(payment).click();
+  const confirmation = confirmationRegion(page);
+  await expect(confirmation).toContainText(/Venta cobrada.*#73/);
+  await expect(confirmation).toContainText(/PedidosYa.*3[.]500/);
+  await expect(confirmation).not.toContainText("Recibido");
+  expect(app.submissions).toHaveLength(1);
+  expect(app.submissions[0].payload.payments).toEqual([
+    { collector: "platform", amount: "3500", reference: "" },
+  ]);
+  await captureCheckout(page, "confirmed-platform-cash-closed");
+  expect(app.errors).toEqual([]);
+});
+
+test("checkout stock rejection keeps the draft and exposes inline shortage details", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const app = await mountCheckout(page, { firstResponse: "stock" });
+  await prepareCappuccino(page);
+  const payment = await openCashCheckout(page);
+  await confirmCheckout(payment).click();
+  await expect(payment).toContainText("Falta stock para completar el pedido");
+  await expect(page.getByRole("dialog")).toHaveCount(1);
+  await payment
+    .getByText("Ver detalle de insumos faltantes", { exact: true })
+    .click();
+  await expect(
+    payment.getByText(/Leche entera.*Barra.*Faltan 0,250 L/),
+  ).toBeVisible();
+  await expect(confirmationRegion(page)).toHaveCount(0);
+  await expect(
+    payment.getByRole("textbox", { name: "Efectivo recibido 1", exact: true }),
+  ).toHaveValue("5000");
+  await captureCheckout(page, "stock-inline-recovery");
+  await payment.getByRole("button", { name: "Cancelar", exact: true }).click();
+  await expect(page.getByTestId("cart-line")).toContainText("Cappuccino");
+  await expect(page.getByTestId("cart-total")).toHaveText(/3[.]500/);
+  expect(app.submissions).toHaveLength(1);
+  expect(app.errors).toEqual([]);
+});
+
+test("checkout refreshes stale open cash after server rejection without losing the draft", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const app = await mountCheckout(page, { firstResponse: "cash" });
+  await page.evaluate(() => {
+    const tracker = { count: 0 };
+    Object.assign(window, { surfaceCashEvents: tracker });
+    window.addEventListener("kybo:cash-changed", () => tracker.count++);
+  });
+  await prepareCappuccino(page);
+  const payment = await openCashCheckout(page);
+  await expect(confirmCheckout(payment)).toBeEnabled();
+  const readsBefore = app.cashStatusReads.length;
+  await confirmCheckout(payment).click();
+  await expect(payment).toContainText("Caja cerrada");
+  await expect(confirmCheckout(payment)).toBeDisabled();
+  await expect.poll(() => app.cashStatusReads).toContain(false);
+  expect(app.cashStatusReads).toHaveLength(readsBefore + 1);
+  expect(
+    await page.evaluate(
+      () => Reflect.get(window, "surfaceCashEvents").count as number,
+    ),
+  ).toBe(1);
+  await captureCheckout(page, "cash-closed-after-open-status");
+  await payment
+    .getByRole("button", { name: "Volver al pedido", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Abrir caja", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByTestId("cart-line")).toContainText("Cappuccino");
+  await expect(page.getByTestId("cart-total")).toHaveText(/3[.]500/);
+  await page
+    .getByRole("button", { name: "Aumentar Cappuccino", exact: true })
+    .click();
+  await expect(page.getByTestId("cart-total")).toHaveText(/7[.]000/);
+  expect(app.cashStatusReads).toHaveLength(readsBefore + 1);
+  expect(app.submissions).toHaveLength(1);
+  expect(app.errors).toEqual([]);
+});
+
+test("checkout leaves cash status unchanged for an unrelated server conflict", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const app = await mountCheckout(page, { firstResponse: "conflict" });
+  await prepareCappuccino(page);
+  const payment = await openCashCheckout(page);
+  const readsBefore = app.cashStatusReads.length;
+  await confirmCheckout(payment).click();
+  await expect(payment.getByRole("alert")).toContainText(
+    "Revisá el precio de Cappuccino antes de continuar.",
+  );
+  await expect(confirmCheckout(payment)).toBeEnabled();
+  expect(app.cashStatusReads).toHaveLength(readsBefore);
+  await payment.getByRole("button", { name: "Cancelar", exact: true }).click();
+  await expect(page.getByTestId("cart-line")).toContainText("Cappuccino");
+  await expect(page.getByTestId("cart-total")).toHaveText(/3[.]500/);
+  expect(app.submissions).toHaveLength(1);
+  expect(app.errors).toEqual([]);
+});
+
+test("checkout waits for a slow definitive response with one physical sale request", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const app = await mountCheckout(page, { firstResponse: "slow" });
+  await prepareCappuccino(page);
+  const payment = await openCashCheckout(page);
+  await confirmCheckout(payment).click();
+  await expect.poll(() => app.submissions.length).toBe(1);
+  await expect(
+    payment.getByRole("button", { name: /Guardando/ }),
+  ).toBeDisabled();
+  await expect(
+    payment.getByRole("button", { name: "Cancelar", exact: true }),
+  ).toBeDisabled();
+  await expect(page.getByTestId("cart-line")).toContainText("Cappuccino");
+  await expect(page.getByTestId("cart-total")).toHaveText(/3[.]500/);
+  await expect(confirmationRegion(page)).toHaveCount(0);
+  await captureCheckout(page, "slow-pending-response");
+  expect(app.submissions).toHaveLength(1);
+  app.releaseSlow();
+  await expect(confirmationRegion(page)).toContainText("Venta cobrada");
+  expect(app.submissions).toHaveLength(1);
+  expect(app.errors).toEqual([]);
+});
+
+for (const failure of [
+  "network",
+  "invalid-json",
+  "invalid-result",
+  "server-error",
+] as const)
+  test(`checkout replays the exact uncertain ${failure} request and preserves the draft`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const app = await mountCheckout(page, { firstResponse: failure });
+    await prepareCappuccino(page);
+    const payment = await openCashCheckout(page);
+    await confirmCheckout(payment).click();
+    const retry = payment.getByRole("button", {
+      name: "Reintentar mismo envío",
+      exact: true,
+    });
+    await expect(retry).toBeEnabled();
+    await expect(confirmCheckout(payment)).toBeDisabled();
+    await expect(payment).toContainText("pendiente de confirmar");
+    await expect(confirmationRegion(page)).toHaveCount(0);
+    await expect(page.getByTestId("cart-line")).toContainText("Cappuccino");
+    await expect(page.getByTestId("cart-total")).toHaveText(/3[.]500/);
+    await expect(
+      payment.getByRole("textbox", {
+        name: "Efectivo recibido 1",
+        exact: true,
+      }),
+    ).toHaveValue("5000");
+    expect(app.submissions).toHaveLength(1);
+    await captureCheckout(page, `uncertain-${failure}`);
+    await retry.click();
+    await expect(confirmationRegion(page)).toContainText("Venta cobrada");
+    await expect(confirmationRegion(page)).toContainText(
+      /Recibido.*5[.]000.*Vuelto.*1[.]500/,
+    );
+    expect(app.submissions).toHaveLength(2);
+    expect(app.submissions[1].body).toBe(app.submissions[0].body);
+    expect(app.submissions[0].payload.requestId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(
+      new Set(app.submissions.map(({ payload }) => payload.requestId)).size,
+    ).toBe(1);
+    if (reportDirectory)
+      await writeFile(
+        join(reportDirectory, `replay-${failure}.json`),
+        JSON.stringify(app.submissions, null, 2),
+      );
+    expect(app.errors).toEqual([]);
+  });
+
+test("checkout printing recovery keeps the sale confirmed and never repeats its payment", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const app = await mountCheckout(page, { printFailure: true });
+  await prepareCappuccino(page);
+  const payment = await openCashCheckout(page);
+  await confirmCheckout(payment).click();
+  await expect(confirmationRegion(page)).toContainText("Venta cobrada");
+  await expect(
+    page.getByText(
+      "La impresión necesita revisión. La venta sigue confirmada.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await captureCheckout(page, "printing-failure-confirmed-sale");
+  await page.getByRole("button", { name: "Ver tickets", exact: true }).click();
+  const detail = page.getByRole("dialog");
+  await expect(
+    detail.getByRole("heading", { name: "Venta #73", exact: true }),
+  ).toBeVisible();
+  const printing = detail.getByRole("region", {
+    name: "Impresión de comandas",
+    exact: true,
+  });
+  await printing
+    .getByRole("button", { name: "Reintentar", exact: true })
+    .click();
+  await expect(
+    detail.getByRole("alert").filter({
+      hasText: /La impresora no respondió.*La venta sigue confirmada/,
+    }),
+  ).toBeVisible();
+  const retry = detail.getByRole("button", {
+    name: "Reintentar la misma operación",
+    exact: true,
+  });
+  await expect(retry).toBeEnabled();
+  expect(app.submissions).toHaveLength(1);
+  await captureCheckout(page, "printing-own-recovery");
+  await retry.click();
+  await expect(printing).toContainText("Pendiente");
+  expect(app.printingSubmissions).toHaveLength(2);
+  expect(app.printingSubmissions[1].body).toBe(app.printingSubmissions[0].body);
+  expect(app.submissions).toHaveLength(1);
+  expect(app.errors).toEqual([]);
 });
 
 for (const viewport of [

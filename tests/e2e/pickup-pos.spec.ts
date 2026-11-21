@@ -653,29 +653,27 @@ test("stock error stays compact and help preserves the payment form", async ({
   await expect(page.getByRole("alert")).toContainText(
     "Falta stock para completar el pedido.",
   );
-  await expect(page.getByText(/Leche en Barra/)).toHaveCount(0);
-  const help = page.getByRole("button", {
-    name: "Ver detalle de insumos faltantes",
+  const payment = page.getByRole("dialog", {
+    name: "Registrar cobro",
+    exact: true,
   });
+  const help = payment.locator("summary", {
+    hasText: "Ver detalle de insumos faltantes",
+  });
+  await expect(payment.getByText(/Leche en Barra/)).toBeHidden();
   await help.tap();
+  await expect(page.getByRole("dialog")).toHaveCount(1);
+  await expect(payment.getByText(/Leche en Barra/)).toBeVisible();
   await expect(
-    page.getByRole("dialog", { name: "Insumos faltantes", exact: true }),
-  ).toBeVisible();
-  await expect(page.getByText(/Leche en Barra/)).toBeVisible();
-  await expect(page.getByText(/Preparado de té chai en Barra/)).toBeVisible();
-  await page.getByRole("button", { name: "Entendido", exact: true }).tap();
-  await expect(
-    page.getByRole("dialog", { name: "Registrar cobro", exact: true }),
+    payment.getByText(/Preparado de té chai en Barra/),
   ).toBeVisible();
   await expect(
-    page.getByRole("textbox", { name: "Efectivo recibido" }),
+    payment.getByRole("textbox", { name: "Efectivo recibido" }),
   ).toHaveValue("5000");
+  await help.focus();
+  await help.press("Enter");
+  await expect(payment.getByText(/Leche en Barra/)).toBeHidden();
   await expect(help).toBeFocused();
-  await help.tap();
-  await page.keyboard.press("Escape");
-  await expect(
-    page.getByRole("dialog", { name: "Registrar cobro", exact: true }),
-  ).toBeVisible();
 });
 
 test("inline order actions use the shared customer autocomplete and automatic locator", async ({
@@ -792,7 +790,65 @@ test("typed customers and optional email travel with checkout without an extra r
         number: 88,
         status: "closed",
         origin: "counter",
-        orders: [{ id: orderId, locatorNumber: 2 }],
+        channel: "counter",
+        fulfillment: "takeaway",
+        revision: 1,
+        totalAmount: "100.00",
+        paidAmount: "100.00",
+        balanceDue: "0.00",
+        localCollected: "100.00",
+        platformCollected: "0.00",
+        createdAt: "2026-10-22T12:00:00Z",
+        closedAt: "2026-10-22T12:00:00Z",
+        businessDate: "2026-10-22",
+        externalId: null,
+        tableId: null,
+        tableName: null,
+        customerId: null,
+        customerName: "Martina nueva",
+        orderCount: 1,
+        notes: null,
+        cancelReason: null,
+        payments: [
+          {
+            id: "payment",
+            kind: "collection",
+            collector: "local",
+            amount: "100.00",
+            methodName: "Efectivo",
+            methodKind: "cash",
+            reference: null,
+            originalPaymentId: null,
+            createdAt: "2026-10-22T12:00:00Z",
+            actorId: "fixture",
+          },
+        ],
+        orders: [
+          {
+            id: orderId,
+            sequence: 1,
+            totalAmount: "100.00",
+            notes: null,
+            createdAt: "2026-10-22T12:00:00Z",
+            locatorNumber: 2,
+            lines: [
+              {
+                id: "line",
+                productId: "product",
+                name: "Kybo Tea",
+                quantity: 1,
+                listPrice: "100.00",
+                unitPrice: "100.00",
+                lineTotal: "100.00",
+                priceReason: null,
+                notes: null,
+                recipeVersionId: null,
+                modifiers: [],
+                compositionStatus: "ready",
+              },
+            ],
+          },
+        ],
       },
     });
   });
@@ -820,9 +876,7 @@ test("typed customers and optional email travel with checkout without an extra r
   await page
     .getByRole("button", { name: "Importe exacto", exact: true })
     .click();
-  await page
-    .getByRole("button", { name: "Confirmar cobro", exact: true })
-    .click();
+  await page.getByRole("button", { name: /^Confirmar cobro/ }).click();
   await expect(
     page.getByRole("button", { name: "Última venta #88", exact: true }),
   ).toBeVisible();

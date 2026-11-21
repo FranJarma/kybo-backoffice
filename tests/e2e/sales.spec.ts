@@ -23,7 +23,9 @@ async function signIn(page: Page) {
   await page.getByLabel("Usuario", { exact: true }).fill(username!);
   await page.getByLabel("Contraseña").fill(password!);
   await page.getByRole("button", { name: "Ingresar" }).click();
-  await expect(page).toHaveURL("/", { timeout: 25000 });
+  await expect(page).toHaveURL(/\/(?:settings\/branches)?$/, {
+    timeout: 25000,
+  });
   cookies = await page.context().cookies();
   await saveAdminSession(page);
   await page.goto("/sales");
@@ -36,19 +38,45 @@ async function post(page: Page, url: string, data: unknown) {
   expect(r.ok(), await r.text()).toBe(true);
   return r.json();
 }
-async function fixtures(page: Page, suffix: string) {
+async function fixtures(page: Page, suffix: string, kind: "cash" | "card") {
+  const branches = await (await page.request.get("/api/branches")).json();
+  const branchId = branches.rows[0].id;
+  await post(page, "/api/branches/select", { branchId });
+  const setup = await (await page.request.get("/api/products/setup")).json();
+  const locationId = setup.locations[0].id;
+  const name = `Taro Latte · ${suffix}`;
   const product = (
     await post(page, "/api/catalog/products", {
-      name: `Taro Latte · ${suffix}`,
+      name,
+      vatRate: "21",
       priceCounter: "7000",
       pricePedidosYa: "7500",
       priceUberEats: "",
+      setup: {
+        mode: "direct",
+        branchId,
+        dispatchLocationId: locationId,
+        quantity: "1",
+        source: { newItem: { name, class: "beverage", unitCost: "1200" } },
+      },
     })
   ).row;
+  const physical = await (
+    await page.request.get(`/api/products/${product.id}/fulfillment`)
+  ).json();
+  await post(page, "/api/inventory/adjustments", {
+    requestId: randomUUID(),
+    kind: "opening",
+    itemId: physical.itemId,
+    locationId,
+    quantity: "10",
+    unitCost: "1200",
+    receivedOn: new Date().toISOString().slice(0, 10),
+  });
   const method = (
     await post(page, "/api/catalog/payment-methods", {
-      name: `Efectivo · ${suffix}`,
-      kind: "cash",
+      name: `${kind === "card" ? "Tarjeta" : "Efectivo"} · ${suffix}`,
+      kind,
     })
   ).row;
   const customer = (
@@ -118,11 +146,14 @@ test("counter sale recovers a lost response without a second sale", async ({
   await expect(
     page.getByRole("heading", { name: "Punto de venta", exact: true }),
   ).toBeVisible();
-  const { product, method, customer } = await fixtures(page, "mostrador");
+  const { product, method, customer } = await fixtures(
+    page,
+    "mostrador",
+    "card",
+  );
   await page.reload();
-  await page
-    .getByRole("combobox", { name: "Cliente" })
-    .selectOption(customer.id);
+  await page.getByRole("combobox", { name: "Cliente" }).fill(customer.name);
+  await page.getByRole("option", { name: customer.name }).click();
   await page
     .getByRole("button", { name: `Agregar ${product.name}`, exact: true })
     .click();
@@ -142,14 +173,15 @@ test("counter sale recovers a lost response without a second sale", async ({
     path: "docs/previews/sales-mobile.png",
     fullPage: true,
   });
+  await page.getByRole("button", { name: /^Ver pedido/ }).click();
   await page
-    .getByRole("button", { name: "Cobrar y registrar", exact: true })
+    .getByRole("button", { name: "Continuar al cobro", exact: true })
     .click();
-  const dialog = page.getByRole("dialog");
+  const dialog = page.getByRole("dialog", { name: "Registrar cobro" });
+  await dialog.getByRole("button", { name: method.name, exact: true }).click();
   await dialog
-    .getByRole("combobox", { name: "Medio de pago 1" })
-    .selectOption(method.id);
-  await dialog.getByRole("textbox", { name: "Referencia 1" }).fill("A-00012");
+    .getByRole("textbox", { name: /Número de comprobante/ })
+    .fill("A-00012");
   let intercepted = false;
   await page.route("**/api/sales", async (route) => {
     if (route.request().method() === "POST" && !intercepted) {
@@ -163,12 +195,20 @@ test("counter sale recovers a lost response without a second sale", async ({
     .getByRole("button", { name: "Confirmar cobro", exact: true })
     .click();
   await expect(
-    page.getByRole("alert").filter({ hasText: /confirmar el resultado/ }),
+    dialog.getByRole("button", { name: "Reintentar mismo envío" }),
   ).toBeVisible();
   await page.reload();
   await page.getByRole("button", { name: "Reintentar mismo envío" }).click();
-  await expect(page.getByRole("heading", { name: /Venta #/ })).toBeVisible();
-  await expect(page.getByText("A-00012", { exact: true })).toBeVisible();
+  const confirmation = page.getByRole("region", {
+    name: "Confirmación de venta",
+  });
+  await expect(confirmation.getByRole("heading")).toContainText(
+    "Venta cobrada",
+  );
+  await page.getByRole("button", { name: /Última venta #/ }).click();
+  const detail = page.getByRole("dialog", { name: /Venta #/ });
+  await detail.locator("summary", { hasText: "Cobros e historial" }).click();
+  await expect(detail.getByText(/A-00012/)).toBeVisible();
   const result = await (
     await page.request.get(`/api/sales?q=${encodeURIComponent(customer.name)}`)
   ).json();
@@ -187,7 +227,7 @@ test("table keeps multiple orders in one visit, settles balance and delivery pre
 }) => {
   test.setTimeout(120000);
   await signIn(page);
-  const { product, method } = await fixtures(page, "mesa");
+  const { product, method } = await fixtures(page, "mesa", "cash");
   await page.goto("/sales/tables");
   await page.getByRole("button", { name: "Editar disposición" }).click();
   await page.getByRole("button", { name: "Celda 2, 2" }).click();
@@ -212,15 +252,16 @@ test("table keeps multiple orders in one visit, settles balance and delivery pre
   await page
     .getByRole("button", { name: "Guardar pedido", exact: true })
     .click();
-  await expect(page.getByText("Pedido 2", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: /Pedido \d+\.2\b/ }),
+  ).toBeVisible();
   await page
     .getByRole("button", { name: "Registrar cobro", exact: true })
     .click();
-  const dialog = page.getByRole("dialog");
-  await dialog
-    .getByRole("combobox", { name: "Medio de pago 1" })
-    .selectOption(method.id);
+  const dialog = page.getByRole("dialog", { name: "Registrar cobro" });
+  await dialog.getByRole("button", { name: method.name, exact: true }).click();
   await dialog.getByRole("textbox", { name: "Importe 1" }).fill("4000");
+  await dialog.getByRole("button", { name: "Importe exacto" }).click();
   await dialog.getByRole("button", { name: "Confirmar cobro" }).click();
   await expect(page.getByTestId("sale-balance")).toHaveText(/10\.000/);
   await page.goto("/sales/tables");
@@ -244,15 +285,15 @@ test("table keeps multiple orders in one visit, settles balance and delivery pre
   await page
     .getByRole("button", { name: "Registrar cobro", exact: true })
     .click();
-  await dialog
-    .getByRole("combobox", { name: "Medio de pago 1" })
-    .selectOption(method.id);
+  await dialog.getByRole("button", { name: method.name, exact: true }).click();
+  await dialog.getByRole("button", { name: "Importe exacto" }).click();
   await dialog.getByRole("button", { name: "Confirmar cobro" }).click();
   await expect(page.getByTestId("sale-balance")).toHaveText(/0,00/);
   await page.goto("/sales/tables");
   await expect(page.getByRole("link", { name: /Mesa jardín/ })).toContainText(
     "Libre",
   );
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/sales");
   await page.getByRole("button", { name: "Delivery", exact: true }).click();
   await page
@@ -262,11 +303,18 @@ test("table keeps multiple orders in one visit, settles balance and delivery pre
     .getByRole("button", { name: `Agregar ${product.name}`, exact: true })
     .click();
   await page
+    .getByRole("button", { name: `Editar precio de ${product.name}` })
+    .click();
+  const priceEditor = page.getByRole("dialog", {
+    name: `Editar ${product.name}`,
+  });
+  await priceEditor
     .getByRole("textbox", { name: `Precio de ${product.name}` })
     .fill("7400");
-  await page
-    .getByRole("textbox", { name: `Motivo del precio de ${product.name}` })
+  await priceEditor
+    .getByRole("textbox", { name: /Motivo del cambio de precio/ })
     .fill("Precio informado por PedidosYa");
+  await priceEditor.getByRole("button", { name: "Guardar cambios" }).click();
   await page
     .getByRole("button", { name: "Continuar al cobro", exact: true })
     .click();

@@ -965,3 +965,41 @@
     grid-template-columns: minmax(0, 0.45fr) minmax(0, 1fr);
   }
 }
+
+.pos-confirmation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.6rem 0.9rem;
+  border: 1px solid #a7d6bb;
+  border-radius: 0.75rem;
+  background: #f1faf4;
+  color: #18432a;
+  font-size: 0.9rem;
+}
+.pos-confirmation h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 700;
+}
+.pos-confirmation-method {
+  display: inline-block;
+  margin-inline-end: 0.7rem;
+}
+.pos-confirmation button {
+  min-height: 3rem;
+  flex-shrink: 0;
+}
+
+.pos-confirmation[data-sale-status="open"] {
+  color: #744911;
+  border-color: #e5cf9f;
+  background: #fff9ec;
+}
+.pos-confirmation[data-sale-status="cancelled"] {
+  color: var(--muted);
+  border-color: var(--line);
+  background: #fff;
+}

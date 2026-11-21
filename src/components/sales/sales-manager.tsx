@@ -1,7 +1,10 @@
 "use client";
 import { LatestOrderPrinting } from "@/components/printing/order-printing";
 import { useErrorFeedback } from "@/components/ui/use-error-feedback";
-import { CashStatusGate } from "@/components/cash/status-gate";
+import {
+  CashStatusGate,
+  type CashGateStatus,
+} from "@/components/cash/status-gate";
 import type { ComboSaleConfiguration } from "./combo-configurator";
 import { OrderConfigurationDialog } from "./order-configuration-dialog";
 import {
@@ -56,7 +59,13 @@ import {
   type CartLine,
 } from "./cart";
 import { Control, SalesScope, OperationNotice } from "./shared";
-import { PaymentDialog, type PaymentDraft } from "./payment-dialog";
+import { SaleConfirmation } from "./sale-confirmation";
+import { validSaleResult } from "./sale-result";
+import {
+  PaymentDialog,
+  type CashPaymentSummary,
+  type PaymentDraft,
+} from "./payment-dialog";
 import { SaleDetailDialog } from "./sale-detail-dialog";
 import { SaleHistory } from "./history";
 import { LocatorPicker } from "@/components/pickup/locator-picker";
@@ -152,6 +161,20 @@ export function SalesManager({
     [cancelReason, setCancelReason] = useState(""),
     [refundConfirmed, setRefundConfirmed] = useState(false);
   const [lastSale, setLastSale] = useState<SaleDetail | null>(null);
+  const [cashStatus, setCashStatus] = useState<CashGateStatus | null>(null);
+  const cashClosed = !!(
+    cashStatus?.available &&
+    cashStatus.activated &&
+    !cashStatus.open
+  );
+  const receipt = useRef<{
+    requestId: string;
+    cash?: CashPaymentSummary;
+  } | null>(null);
+  const [confirmation, setConfirmation] = useState<{
+    sale: SaleDetail;
+    cash?: CashPaymentSummary;
+  } | null>(null);
   const [locatorNumber, setLocatorNumber] = useState<number | null>(null);
   const [locatorMode, setLocatorMode] = useState<"automatic" | "manual">(
     "automatic",
@@ -231,8 +254,19 @@ export function SalesManager({
     }
   }, []);
   const success = useCallback(
-    (result: unknown) => {
+    (
+      result: unknown,
+      command: { url: string; payload: Record<string, unknown> },
+    ) => {
       const sale = result as SaleDetail;
+      const cash =
+        receipt.current?.requestId === command.payload.requestId
+          ? receipt.current?.cash
+          : undefined;
+      receipt.current = null;
+      const isCollection =
+        command.url === "/api/sales" || command.url.endsWith("/payments");
+      setConfirmation(isCollection ? { sale, cash } : null);
       if (view === "detail" && activeDetailId.current !== sale.id) {
         setRefresh((n) => n + 1);
         setNotice(`Venta #${sale.number} actualizada.`);
@@ -260,7 +294,7 @@ export function SalesManager({
         setPaymentOpen(false);
         setCancelOpen(false);
         setError("");
-        setNotice(`Venta #${sale.number} actualizada.`);
+        setNotice(isCollection ? "" : `Venta #${sale.number} actualizada.`);
         setRefresh((n) => n + 1);
         const url = new URL(window.location.href);
         url.searchParams.set("account", sale.id);
@@ -280,16 +314,8 @@ export function SalesManager({
       activeDetailId.current = sale.id;
       setReturnView("new");
       setView(nextCustomer ? "new" : "detail");
-      if (nextCustomer) {
-        setLastSale(sale);
-        setNotes("");
-        setCustomerId("");
-        setCustomerName("");
-        setCustomerEmail("");
-        setTabletPanel("products");
-        setExternalId("");
-        setTableId("");
-      }
+      setLastSale(sale);
+      if (nextCustomer) setTabletPanel("products");
       setLines([]);
       setNotes("");
       setCustomerId("");
@@ -305,9 +331,7 @@ export function SalesManager({
       setDraftGeneration((n) => n + 1);
       setPaymentOpen(false);
       setCancelOpen(false);
-      setNotice(
-        `Venta #${sale.number} guardada.${sale.orders.at(-1)?.locatorNumber != null ? ` Localizador ${sale.orders.at(-1)!.locatorNumber}.` : ""}${nextCustomer ? " Lista la caja para el siguiente pedido." : " Los importes quedaron registrados."}`,
-      );
+      setNotice("");
       setError("");
       setRefresh((n) => n + 1);
     },
@@ -317,8 +341,16 @@ export function SalesManager({
     actorId,
     "sale",
     success,
+    undefined,
+    validSaleResult,
   );
   const locked = operation.locked || loading;
+  useEffect(() => {
+    if (operation.status === 409 && operation.errorCode === "CASH_CLOSED")
+      window.dispatchEvent(
+        new CustomEvent("kybo:cash-changed", { detail: { branchId } }),
+      );
+  }, [branchId, operation.status, operation.errorCode]);
   useEffect(() => {
     let live = true;
     getJson<SaleLookup>("/api/sales/lookup?kind=payment-methods")
@@ -420,11 +452,13 @@ export function SalesManager({
     window.history.replaceState(null, "", "/sales");
     setView("new");
     setReturnView("new");
+    setConfirmation(null);
     setError("");
     setNotice("");
     operation.clearError();
   }
   function changeOrigin(next: SaleOrigin) {
+    setConfirmation(null);
     setOrigin(next);
     setChannel(next === "delivery" ? "pedidosya" : "counter");
     setFulfillment(
@@ -493,6 +527,7 @@ export function SalesManager({
     )
       return;
     configRequest.current = true;
+    setConfirmation(null);
     setLoading(true);
     setError("");
     try {
@@ -540,7 +575,16 @@ export function SalesManager({
       setLoading(false);
     }
   }
-  function submit(payments: PaymentDraft[] = []) {
+  function submitPayment(
+    url: string,
+    payload: Record<string, unknown>,
+    cash?: CashPaymentSummary,
+  ) {
+    const requestId = crypto.randomUUID();
+    if (operation.submit(url, { ...payload, requestId }))
+      receipt.current = { requestId, cash };
+  }
+  function submit(payments: PaymentDraft[] = [], cash?: CashPaymentSummary) {
     if (locked || !valid) return;
     const linePayload = lines.map(
       ({
@@ -582,27 +626,30 @@ export function SalesManager({
       });
       return;
     }
-    operation.submit("/api/sales", {
-      requestId: crypto.randomUUID(),
-      origin,
-      channel,
-      fulfillment,
-      tableId: tableId || undefined,
-      customerId: customerId || undefined,
-      newCustomer:
-        !customerId && customerName.trim()
-          ? {
-              name: customerName.trim(),
-              email: customerEmail.trim() || undefined,
-            }
-          : undefined,
-      externalId: origin === "delivery" ? externalId.trim() : undefined,
-      notes,
-      lines: linePayload,
-      payments,
-      locatorMode,
-      locatorNumber: locatorMode === "manual" ? locatorNumber : undefined,
-    });
+    submitPayment(
+      "/api/sales",
+      {
+        origin,
+        channel,
+        fulfillment,
+        tableId: tableId || undefined,
+        customerId: customerId || undefined,
+        newCustomer:
+          !customerId && customerName.trim()
+            ? {
+                name: customerName.trim(),
+                email: customerEmail.trim() || undefined,
+              }
+            : undefined,
+        externalId: origin === "delivery" ? externalId.trim() : undefined,
+        notes,
+        lines: linePayload,
+        payments,
+        locatorMode,
+        locatorNumber: locatorMode === "manual" ? locatorNumber : undefined,
+      },
+      cash,
+    );
   }
   async function selectSale(id: string) {
     if (operation.locked || fulfillmentBusy) return;
@@ -749,7 +796,12 @@ export function SalesManager({
       data-pos-active-panel={showCart ? tabletPanel : undefined}
       className={`pos-surface ${fontClassName} flex h-full min-h-0 flex-col gap-2 [&>div:not([data-pos-workspace])]:shrink-0`}
     >
-      <CashStatusGate key={branchId} branchId={branchId} actorId={actorId} />
+      <CashStatusGate
+        key={branchId}
+        branchId={branchId}
+        actorId={actorId}
+        onStatusChange={setCashStatus}
+      />
       <OrderConfigurationDialog
         configuration={configuring}
         line={
@@ -783,7 +835,7 @@ export function SalesManager({
             disabled={locked || view === "append"}
             aria-pressed={showCart}
             onClick={() => {
-              if (view !== "new") newSale();
+              if (view !== "new" || confirmation) newSale();
             }}
             className={`min-h-12 border-b-2 px-3 text-sm font-bold ${showCart ? "border-blue text-blue" : "border-transparent text-muted"}`}
           >
@@ -884,6 +936,19 @@ export function SalesManager({
       {accountKind === "store" && (
         <WorkplaceSummary key={branchId} branchId={branchId} />
       )}
+      {confirmation &&
+        confirmation.sale.id === lastSale?.id &&
+        view === "new" &&
+        !lines.length && (
+          <SaleConfirmation
+            {...confirmation}
+            onNewSale={() => {
+              setConfirmation(null);
+              setTabletPanel("products");
+              document.querySelector<HTMLElement>("[data-pos-title]")?.focus();
+            }}
+          />
+        )}
       {lastSale && view === "new" && (
         <LatestOrderPrinting
           key={`${actorId}:${branchId}:${lastSale.id}`}
@@ -1302,13 +1367,18 @@ export function SalesManager({
           }}
           feedback={
             !paymentOpen && !cancelOpen ? (
-              <OperationNotice
-                eventKey={operation.errorAttempt}
-                error={operation.error}
-                uncertain={operation.uncertain}
-                busy={operation.busy}
-                retry={operation.retry}
-              />
+              <>
+                {confirmation && confirmation.sale.id === detail?.id && (
+                  <SaleConfirmation {...confirmation} />
+                )}
+                <OperationNotice
+                  eventKey={operation.errorAttempt}
+                  error={operation.error}
+                  uncertain={operation.uncertain}
+                  busy={operation.busy}
+                  retry={operation.retry}
+                />
+              </>
             ) : null
           }
           onPay={() => {
@@ -1375,6 +1445,7 @@ export function SalesManager({
           }
           exact={view !== "detail" && origin === "counter"}
           locked={operation.locked}
+          cashClosed={cashClosed}
           checkoutIssue={view === "detail" ? "" : locatorIssue || customerIssue}
           busy={operation.busy}
           error={operation.error}
@@ -1383,14 +1454,17 @@ export function SalesManager({
           canDiscard={operation.canDiscard}
           onDiscard={operation.discardRejected}
           onClose={() => setPaymentOpen(false)}
-          onConfirm={(payments) => {
+          onConfirm={(payments, cash) => {
             if (view === "detail" && detail)
-              operation.submit(`/api/sales/${detail.id}/payments`, {
-                requestId: crypto.randomUUID(),
-                revision: detail.revision,
-                payments,
-              });
-            else submit(payments);
+              submitPayment(
+                `/api/sales/${detail.id}/payments`,
+                {
+                  revision: detail.revision,
+                  payments,
+                },
+                cash,
+              );
+            else submit(payments, cash);
           }}
         />
       )}

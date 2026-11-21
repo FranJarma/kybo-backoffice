@@ -56,4 +56,16 @@ RED: tres casos del helper y tres recorridos de UI detectaron las funciones falt
 
 El cobro comparte cálculo bigint y presenta medios en dos columnas, campos específicos y filas compactas para división. Cada fila conserva sus referencias; agregar propone el saldo y quitar recalcula. El efectivo recibido se mantiene fuera de PaymentDraft. Titular/operación opcionales se serializan en una referencia de hasta 120 caracteres y la acreditación se vuelve a pedir al editar los datos. Cupón de tarjeta obligatorio y ceros a la izquierda preservados.
 
-Se revisaron capturas de escritorio y celular. La prueba de teclado simula un viewport visual de 370 px con desplazamiento de 28 px y verifica campo enfocado y pie visibles; no prueba un teclado Android/iOS real. La geometría responde sin transición demorada y el contexto de efectivo tiene espacio reservado. Revisión independiente de especificación y calidad en curso.
+Se revisaron capturas de escritorio y celular. La prueba de teclado simula un viewport visual de 370 px con desplazamiento de 28 px y verifica campo enfocado y pie visibles; no prueba un teclado Android/iOS real. La geometría responde sin transición demorada y el contexto de efectivo tiene espacio reservado.
+
+La revisión independiente corrigió dos desvíos: aviso fuera de vista al confirmar desde la última fila y panel 29 px más alto que el aprobado. RED: tres casos reprodujeron ambos defectos. GREEN: 4 focalizados y 16 de cobro; un caso administrado omitido. Efectivo mide 900x520 con columnas de 266 px, referencia opcional accesible y cuerpo desplazable al expandirla en poca altura. Los avisos nuevos reciben foco y quedan visibles incluso si se repite el texto con un nuevo evento. La revisión acotada aprobó especificación y calidad.
+
+## Task 6: recuperación y confirmación
+
+El hook adquiere exclusión sincrónica antes de persistir o despachar y comprueba la identidad vigente del comando al enviar, reintentar y descartar. Se conservaron URL, cuerpo, requestId y clave de sesión. Un validador opcional confirma la estructura y la identidad de la venta antes de limpiar la operación. Las respuestas incompletas conservan incertidumbre. El resumen del vuelto se asocia exclusivamente al comando admitido; después de recargar se omiten los datos de efectivo que no se conocen.
+
+RED del hook: tres fallos de llamadas simultáneas, cuatro respuestas 200 mal formadas y tres acciones retenidas de renders anteriores. GREEN final: 12 casos Chrome; 61 pruebas Vitest de resultado, caja, stock, impresión, permisos y HTTP. Después de reforzar las acciones retenidas, se repitieron 22 regresiones pertinentes. Typecheck, lint y formato pasaron.
+
+El estado de Caja se comparte desde su consulta existente. CASH_CLOSED devuelve un evento de actualización para volver a ofrecer apertura según permisos, conservando el pedido. Stock se muestra como detalle inline. Venta cobrada, pendiente, sin cargo y anulada usan estados distintos; impresión conserva su recuperación propia.
+
+La prueba de concurrencia con dos conexiones se detuvo por falta de KYBO_TEST_DATABASE_URL dedicada. Los E2E históricos de ventas y pickup se actualizaron por inspección y se enumeraron 17 casos; su ejecución administrada sigue bloqueada. Los recorridos completos interceptados y la revisión independiente se documentan al cerrar esta etapa.
