@@ -2,6 +2,7 @@
 import {
   canDiscardRejectedOperation,
   discardRejectedOperation,
+  isDefinitiveClientRejection,
 } from "./operation-recovery";
 import { useCallback, useId, useLayoutEffect, useRef, useState } from "react";
 import type { CatalogRow, Entity, ListResult } from "@/modules/catalog/types";
@@ -335,37 +336,31 @@ export function useOperation<T>(
         if (!isCurrent()) return;
         setErrorCode(code);
         setStatus(response.status);
-        if (
-          response.status >= 400 &&
-          response.status < 500 &&
-          ![401, 403, 429].includes(response.status)
-        ) {
+        const definitive = isDefinitiveClientRejection(response.status);
+        let feedback = message;
+        if (definitive && ![401, 403].includes(response.status)) {
           try {
             sessionStorage.removeItem(storageKey);
-          } catch {
-            setError(
-              "No pudimos limpiar la operación local. Recargá antes de una nueva carga.",
-            );
+            setPending(null);
+            setUncertain(false);
+            setError(message);
             return;
-          }
-          setPending(null);
-          setUncertain(false);
-        } else {
-          const preserved = {
-            ...operation,
-            outcomeUncertain:
-              operation.outcomeUncertain !== false ||
-              ![401, 403].includes(response.status),
-          };
-          try {
-            sessionStorage.setItem(storageKey, JSON.stringify(preserved));
           } catch {
-            preserved.outcomeUncertain = true;
+            feedback = `${message}\nNo pudimos borrar la copia local del envío.`;
           }
-          setPending(preserved);
-          setUncertain(true);
         }
-        setError(message);
+        const preserved = {
+          ...operation,
+          outcomeUncertain: operation.outcomeUncertain !== false || !definitive,
+        };
+        try {
+          sessionStorage.setItem(storageKey, JSON.stringify(preserved));
+        } catch {
+          preserved.outcomeUncertain = true;
+        }
+        setPending(preserved);
+        setUncertain(true);
+        setError(feedback);
         return;
       }
       let result: unknown;

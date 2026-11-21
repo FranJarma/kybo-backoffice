@@ -4,12 +4,15 @@ export type RejectedOperationState = {
   status: number | null;
   outcomeUncertain?: boolean;
 };
+export function isDefinitiveClientRejection(status: number | null) {
+  return status !== null && status >= 400 && status < 500 && status !== 429;
+}
 export function canDiscardRejectedOperation(state: RejectedOperationState) {
   return (
     state.pending &&
     !state.busy &&
     state.outcomeUncertain === false &&
-    (state.status === 401 || state.status === 403)
+    isDefinitiveClientRejection(state.status)
   );
 }
 export function discardRejectedOperation(

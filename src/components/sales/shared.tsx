@@ -91,7 +91,7 @@ export function OperationNotice({
         >
           <p>
             {canDiscard
-              ? "El servidor rechazó este envío por permisos. Descartalo para seguir con otras tareas."
+              ? "El servidor rechazó este envío. Podés descartarlo para continuar."
               : "El resultado del envío está pendiente de confirmar."}
           </p>
           {canDiscard && onDiscard && (

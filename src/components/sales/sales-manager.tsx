@@ -739,6 +739,7 @@ export function SalesManager({
             modifiers: config.model === "configurable" ? [] : undefined,
             configurable: false,
             name: row.name,
+            expectedPricingRevision: row.pricingRevision,
             expectedPrice: row.price ?? null,
             price: defaultPrice
               ? row.price === null || row.price === undefined
@@ -1383,6 +1384,8 @@ export function SalesManager({
                   uncertain={operation.uncertain}
                   busy={operation.busy}
                   retry={operation.retry}
+                  canDiscard={operation.canDiscard}
+                  onDiscard={operation.discardRejected}
                 />
               </>
             ) : null
@@ -1498,6 +1501,8 @@ export function SalesManager({
               uncertain={operation.uncertain}
               busy={operation.busy}
               retry={operation.retry}
+              canDiscard={operation.canDiscard}
+              onDiscard={operation.discardRejected}
             />
             <Control label="Motivo de anulación" required>
               <Input

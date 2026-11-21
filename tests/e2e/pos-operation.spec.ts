@@ -1,3 +1,4 @@
+import { failSaleCleanupOnce } from "../helpers/pos-storage-failure";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { createRequire } from "node:module";
 
@@ -490,3 +491,38 @@ test("does not dispatch a verified command after switching its branch", async ({
     ),
   ).not.toBeNull();
 });
+
+for (const status of [400, 409])
+  test(`retries the identical command after ${status} and failed local cleanup`, async ({
+    page,
+  }) => {
+    const requests: { url: string; body: string }[] = [];
+    await fixture(page, (route) => {
+      requests.push({
+        url: route.request().url(),
+        body: route.request().postData()!,
+      });
+      return route.fulfill({ status, json: { error: "Corregí el pedido." } });
+    });
+    await failSaleCleanupOnce(page);
+    const submit = page.getByRole("button", { name: "Enviar", exact: true });
+    await submit.click();
+    await expect(page.getByTestId("state")).toHaveText("incierto");
+    await expect(page.getByTestId("discard")).toHaveText("true");
+    expect(JSON.parse((await saved(page))!)).toMatchObject({
+      url: "/api/sales",
+      payload: JSON.parse(requests[0].body),
+      outcomeUncertain: false,
+    });
+    await submit.click();
+    expect(requests).toHaveLength(1);
+    await page.getByRole("button", { name: "Reintentar", exact: true }).click();
+    await expect(page.getByTestId("state")).toHaveText("edición");
+    expect(requests).toEqual([requests[0], requests[0]]);
+    expect(await saved(page)).toBeNull();
+    await submit.click();
+    await expect.poll(() => requests.length).toBe(3);
+    expect(JSON.parse(requests[2].body).requestId).not.toBe(
+      JSON.parse(requests[0].body).requestId,
+    );
+  });

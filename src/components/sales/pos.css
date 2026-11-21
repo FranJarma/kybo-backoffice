@@ -509,8 +509,12 @@
 }
 
 @media (max-width: 1023px) {
-  .pos-surface[data-pos][data-pos-active-panel="order"] {
-    overflow: auto;
+  .pos-surface[data-pos][data-pos-active-panel] {
+    overflow-y: auto;
+  }
+  .pos-surface[data-pos-active-panel="products"] [data-pos-workspace] {
+    /* Keep the filters and one product card usable when the setup or receipt grows. */
+    min-height: 272px;
   }
   .pos-surface[data-pos-active-panel="order"] [data-pos-workspace] {
     /* Keep space for a scrollable line area and the full checkout footer. */

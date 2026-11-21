@@ -1,3 +1,4 @@
+import { failSaleCleanupOnce } from "../helpers/pos-storage-failure";
 import {
   test,
   expect,
@@ -29,6 +30,7 @@ const posFontCss = posFonts
   .join("\n");
 let css = "",
   script = "",
+  shellScript = "",
   scriptBytes = 0;
 const id = (number: number) =>
   `20000000-0000-4000-8000-${String(number).padStart(12, "0")}`;
@@ -564,8 +566,11 @@ test.beforeAll(async () => {
   test.setTimeout(120000);
   await mkdir(".next-e2e", { recursive: true });
   await createRequire(require.resolve("tsx"))("esbuild").build({
-    entryPoints: ["tests/helpers/pos-surface-ui.tsx"],
-    outfile: ".next-e2e/pos-surface-fixture.js",
+    entryPoints: {
+      "pos-surface-fixture": "tests/helpers/pos-surface-ui.tsx",
+      "pos-shell-fixture": "tests/helpers/pos-shell-ui.tsx",
+    },
+    outdir: ".next-e2e",
     bundle: true,
     platform: "browser",
     jsx: "automatic",
@@ -584,6 +589,7 @@ test.beforeAll(async () => {
   script = await readFile(".next-e2e/pos-surface-fixture.js", "utf8");
   if (process.env.POS_SURFACE_USE_FROZEN_SOURCE === "1" && reportDirectory)
     script = await readFile(join(reportDirectory, "fixture.js"), "utf8");
+  shellScript = await readFile(".next-e2e/pos-shell-fixture.js", "utf8");
   scriptBytes = Buffer.byteLength(script);
   const postcss = createRequire(require.resolve("@tailwindcss/postcss"))(
     "postcss",
@@ -605,6 +611,7 @@ const longProductName =
   "Waffle de chipá con jamón, queso y una descripción extendida para comprobar el ajuste de nombres " +
   "superextensosininterrupciones".repeat(3);
 type SurfaceFixtureOptions = {
+  shell?: boolean;
   edgeCases?: boolean;
   modifiers?: boolean;
   combos?: boolean;
@@ -630,18 +637,21 @@ async function mount(page: Page, options: SurfaceFixtureOptions = {}) {
   const calls: Call[] = [],
     errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
+  const host = options.shell
+    ? '<div id="fixture"></div>'
+    : '<main id="fixture"></main>';
   const started = performance.now();
   await page.route("**/*", async (route: Route) => {
     const url = new URL(route.request().url());
-    if (url.pathname === "/__pos-surface")
+    if (url.pathname === "/__pos-surface" || url.pathname === "/sales")
       return route.fulfill({
         contentType: "text/html; charset=utf-8",
-        body: `<!doctype html><html lang="es-AR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>@font-face{font-family:Manrope;src:url(/fonts/manrope.ttf)}${posFontCss}:root{--font-manrope:Manrope;--font-barlow:Barlow} ${css} html,body{height:100%;margin:0}#fixture{height:100dvh;padding:16px;min-width:0;overflow:hidden}</style></head><body><main id="fixture"></main><script src="/__pos-surface.js"></script></body></html>`,
+        body: `<!doctype html><html lang="es-AR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>@font-face{font-family:Manrope;src:url(/fonts/manrope.ttf)}${posFontCss}:root{--font-manrope:Manrope;--font-barlow:Barlow} ${css} html,body{height:100%;margin:0}${options.shell ? "" : "#fixture{height:100dvh;padding:16px;min-width:0;overflow:hidden}"}</style></head><body>${host}<script src="/__pos-surface.js"></script></body></html>`,
       });
     if (url.pathname === "/__pos-surface.js")
       return route.fulfill({
         contentType: "text/javascript; charset=utf-8",
-        body: script,
+        body: options.shell ? shellScript : script,
       });
     if (url.pathname === "/fonts/manrope.ttf")
       return route.fulfill({
@@ -846,7 +856,7 @@ async function mount(page: Page, options: SurfaceFixtureOptions = {}) {
       json: { error: "Esta prueba no registra operaciones reales." },
     });
   });
-  await page.goto("/__pos-surface");
+  await page.goto(options.shell ? "/sales" : "/__pos-surface");
   await expect(
     page.getByRole("button", { name: "Agregar Oreo Iced Latte", exact: true }),
   )
@@ -3363,4 +3373,242 @@ test("catalogue uses one responsive grid, real quantities and cached data across
     calls: app.calls,
     renderProfile: await page.evaluate(() => window.posProfile),
   });
+});
+
+for (const viewport of [
+  { width: 320, height: 720 },
+  { width: 360, height: 740 },
+  { width: 390, height: 844 },
+]) {
+  for (const state of ["delivery", "receipt"] as const) {
+    test(`shell catalogue has a physical product target at ${viewport.width} with ${state}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(viewport);
+      const app = await mountCheckout(page, { shell: true });
+      const main = page.locator("main#main-content");
+      const header = await page.locator("[data-topbar]").boundingBox();
+      expect(header!.height).toBeGreaterThanOrEqual(110);
+      expect(await main.evaluate((node) => node.clientHeight)).toBeCloseTo(
+        viewport.height - header!.height,
+        0,
+      );
+      if (state === "delivery") {
+        await page
+          .getByRole("button", { name: "Delivery", exact: true })
+          .click();
+      } else {
+        await prepareCappuccino(page);
+        await confirmCheckout(await openCashCheckout(page)).click();
+        await expect(confirmationRegion(page)).toContainText(
+          /Venta cobrada.*#73/,
+        );
+      }
+      const product = page.getByRole("button", {
+        name: "Agregar Cappuccino",
+        exact: true,
+      });
+      await expect(product).toBeEnabled();
+      await product.evaluate((node) =>
+        node.scrollIntoView({ block: "center" }),
+      );
+      const tap = await visibleTouchPoint(product);
+      expect(
+        tap,
+        "44 consecutive product pixels must receive pointer input inside the actual shell",
+      ).toBeTruthy();
+      await page.mouse.click(tap!.x, tap!.y);
+      await expect(page.getByTestId("cart-line")).toHaveCount(1);
+      await expect(page.getByTestId("cart-line")).toContainText("Cappuccino");
+      expect(app.submissions).toHaveLength(state === "receipt" ? 1 : 0);
+      expect(app.errors).toEqual([]);
+    });
+  }
+}
+
+const rejectedDiscard = (dialog: Locator) =>
+  dialog.getByRole("button", { name: "Descartar envío rechazado" });
+const sameCommand = (dialog: Locator) =>
+  dialog.getByRole("button", { name: "Reintentar mismo envío" });
+
+test("cancel permission rejection releases sale detail and retains the new draft", async ({
+  page,
+}) => {
+  const app = await mountCheckout(page, { navigation: true });
+  await prepareCappuccino(page);
+  await confirmCheckout(await openCashCheckout(page)).click();
+  await expect(confirmationRegion(page)).toBeVisible();
+  await page
+    .getByRole("button", { name: "Agregar Soft Frutilla", exact: true })
+    .click();
+  await page.getByRole("button", { name: /Última venta/ }).click();
+  const detail = page.locator("[data-sale-detail]");
+  await detail
+    .getByRole("button", { name: "Anular venta", exact: true })
+    .click();
+  const cancellation = page.getByRole("dialog", { name: "Anular venta #73" });
+  await cancellation.getByRole("textbox").fill("Pedido equivocado");
+  await cancellation.getByRole("checkbox").check();
+  let attempts = 0;
+  await page.route("**/cancel", (route) => {
+    attempts++;
+    return route.fulfill({ status: 403, json: { error: "Sin permiso" } });
+  });
+  await cancellation
+    .getByRole("button", { name: "Confirmar anulación" })
+    .click();
+  await expect(sameCommand(cancellation)).toBeEnabled();
+  await page.keyboard.press("Escape");
+  await expect(rejectedDiscard(cancellation)).toBeEnabled();
+  await rejectedDiscard(cancellation).click();
+  await page.keyboard.press("Escape");
+  await expect(cancellation).toHaveCount(0);
+  await expect(
+    detail.getByRole("heading", { name: "Venta #73" }),
+  ).toBeVisible();
+  await detail.getByRole("button", { name: "Cerrar detalle de venta" }).click();
+  await expect(page.getByTestId("cart-line")).toContainText("Soft Frutilla");
+  expect(attempts).toBe(1);
+  expect(app.submissions).toHaveLength(1);
+});
+
+for (const uncertain of [false, true])
+  test(`account deep link preserves the discard policy for a saved command (uncertain=${uncertain})`, async ({
+    page,
+  }) => {
+    const app = await mountCheckout(page, { shell: true });
+    const sale = confirmedFixtureSale();
+    const url = `/api/sales/${sale.id}/cancel`;
+    const payload = {
+      requestId: id(999),
+      revision: 1,
+      reason: "Pedido equivocado",
+      refundConfirmed: true,
+    };
+    await page.evaluate(
+      ({ url, payload, uncertain }) => {
+        sessionStorage.setItem(
+          "kybo:pending:surface-cashier:10000000-0000-4000-8000-000000000001:sale",
+          JSON.stringify({ url, payload, outcomeUncertain: uncertain }),
+        );
+      },
+      { url, payload, uncertain },
+    );
+    const attempts: string[] = [];
+    await page.route("**/cancel", (route) => {
+      attempts.push(route.request().postData()!);
+      return route.fulfill({
+        status: 401,
+        json: { error: "Autenticación requerida" },
+      });
+    });
+    await page.goto("/sales?account=" + sale.id);
+    const detail = page.locator("[data-sale-detail]");
+    await expect(
+      detail.getByRole("heading", { name: "Venta #73" }),
+    ).toBeVisible();
+    await sameCommand(detail).click();
+    await expect.poll(() => attempts).toEqual([JSON.stringify(payload)]);
+    await expect(sameCommand(detail)).toBeEnabled();
+    if (uncertain) {
+      await expect(rejectedDiscard(detail)).toHaveCount(0);
+      await page.keyboard.press("Escape");
+      await expect(detail).toBeVisible();
+    } else {
+      await rejectedDiscard(detail).click({ timeout: 5000 });
+      await detail
+        .getByRole("button", { name: "Cerrar detalle de venta" })
+        .click();
+      await expect(detail).toHaveCount(0);
+    }
+    expect(attempts).toHaveLength(1);
+    expect(app.submissions).toHaveLength(0);
+  });
+
+test("price refresh sends the current revision and preserves the edited line", async ({
+  page,
+}) => {
+  const app = await mountCheckout(page, { firstResponse: "conflict" });
+  await prepareCappuccino(page);
+  const line = page.getByTestId("cart-line");
+  await line.getByRole("button", { name: "Aumentar Cappuccino" }).click();
+  await line
+    .getByRole("button", { name: "Editar observaciones de Cappuccino" })
+    .click();
+  await page
+    .getByRole("dialog")
+    .getByRole("textbox", { name: "Observaciones de Cappuccino" })
+    .fill("Sin azúcar");
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Guardar cambios" })
+    .click();
+  const payment = await openCashCheckout(page);
+  const received = payment.getByRole("textbox", {
+    name: "Efectivo recibido 1",
+  });
+  await received.fill("10000");
+  await confirmCheckout(payment).click();
+  await expect(payment).toContainText("Revisá el precio");
+  await payment.getByRole("button", { name: "Cancelar", exact: true }).click();
+  const fresh = { ...rows[7], price: "3900.00", pricingRevision: 2 };
+  await page.route("**/api/sales/lookup?**", (route) =>
+    new URL(route.request().url()).searchParams.get("q") === fresh.id
+      ? route.fulfill({ json: { rows: [fresh], total: 1, offset: 0 } })
+      : route.fallback(),
+  );
+  await page.route(
+    `**/api/sales/products/${fresh.id}/configuration?**`,
+    (route) =>
+      route.fulfill({
+        json: {
+          ...configuration(fresh.id),
+          basePrice: fresh.price,
+          catalogBasePrice: fresh.price,
+          pricingRevision: 2,
+        },
+      }),
+  );
+  await page.getByRole("button", { name: "Actualizar precios" }).click();
+  await expect(page.getByTestId("cart-total")).toHaveText(/7[.]800/);
+  await expect(line).toContainText("Sin azúcar");
+  await openCashCheckout(page);
+  await received.fill("10000");
+  await confirmCheckout(payment).click();
+  await expect.poll(() => app.submissions.length).toBe(2);
+  const original = { productId: fresh.id, quantity: 2, notes: "Sin azúcar" };
+  expect(app.submissions[0].payload.lines).toMatchObject([
+    { ...original, expectedPrice: "3500.00", expectedPricingRevision: 1 },
+  ]);
+  expect(app.submissions[1].payload.lines).toMatchObject([
+    {
+      ...original,
+      price: "3900",
+      expectedPrice: "3900.00",
+      expectedPricingRevision: 2,
+    },
+  ]);
+});
+
+test("checkout can safely discard after a stock rejection and failed local cleanup", async ({
+  page,
+}) => {
+  const app = await mountCheckout(page, { firstResponse: "stock" });
+  await prepareCappuccino(page);
+  const payment = await openCashCheckout(page);
+  await failSaleCleanupOnce(page);
+  await confirmCheckout(payment).click();
+  await expect(sameCommand(payment)).toBeEnabled();
+  await expect(confirmCheckout(payment)).toBeDisabled();
+  await expect(
+    payment.getByRole("textbox", { name: "Efectivo recibido 1" }),
+  ).toHaveValue("5000");
+  await rejectedDiscard(payment).click();
+  await expect(confirmCheckout(payment)).toBeEnabled();
+  await payment.getByRole("button", { name: "Cancelar", exact: true }).click();
+  const line = page.getByTestId("cart-line");
+  await expect(line).toContainText("Cappuccino");
+  await line.getByRole("button", { name: "Aumentar Cappuccino" }).click();
+  await expect(page.getByTestId("cart-total")).toHaveText(/7[.]000/);
+  expect(app.submissions).toHaveLength(1);
 });
