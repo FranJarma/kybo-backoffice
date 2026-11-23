@@ -108,6 +108,27 @@ describe("POS product presentation", () => {
       }
     },
   );
+  it("renders the owner's sandwich and soda cutout with the combo palette", () => {
+    for (const imageAssetId of [null, "old-combo-photo"]) {
+      const html = renderToStaticMarkup(
+        createElement(ProductCard, {
+          product: productCardModel(
+            row({
+              id: "e9aa38cd-f3a5-4389-83c8-d70edc22fb34",
+              name: "Updated combo name",
+              imageAssetId,
+            }),
+          ),
+          onSelect: () => {},
+        }),
+      );
+      expect(html).toContain(
+        encodeURIComponent("/images/pos-products/tostados-lata-gaseosa.webp"),
+      );
+      expect(html).toContain("linear-gradient(to bottom, #fff1d4 0");
+      expect(html).not.toContain("/api/media/old-combo-photo");
+    }
+  });
   it("renders the supplied food circle in cream behind the cutout", () => {
     const html = renderToStaticMarkup(
       createElement(ProductCard, {

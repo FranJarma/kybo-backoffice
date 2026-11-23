@@ -2,15 +2,15 @@
 
 Se incorporan los dos ZIP adjuntados por Francisco: `kybo-fotos-productos-actualizadas.zip` y `kybo-circulos-y-semicirculos-actualizados.zip`.
 
-Las 43 fotos WebP originales se conservan en `public/images/pos-products`, con transparencia y sombra integradas. Las 43 paletas de ocho bandas se transcriben de `productos-y-paletas.json` a `src/components/sales/product-visual-assets.ts`; el semicírculo existente conserva la forma y usa esos colores exactos, en orden de arriba hacia abajo. Alimentos y combos usan crema #fff1d4. Los SVG/WebP decorativos son referencias equivalentes al gradiente; no se añaden solicitudes de imagen para cada fondo.
+Las 43 fotos WebP originales y la versión WebP de sándwich con gaseosa suministrada después se conservan en `public/images/pos-products`, con transparencia y sombra integradas. Las 43 paletas de ocho bandas se transcriben de `productos-y-paletas.json` a `src/components/sales/product-visual-assets.ts`; el semicírculo existente conserva la forma y usa esos colores exactos, en orden de arriba hacia abajo. Alimentos y combos usan crema #fff1d4. Los SVG/WebP decorativos son referencias equivalentes al gradiente; no se añaden solicitudes de imagen para cada fondo.
 
-Las coincidencias verificadas cubren 36 productos actuales. La asociación se resuelve por UUID en `pos-presentation.ts`, independientemente del nombre. La foto suministrada prevalece sobre la foto anterior solo en las tarjetas del POS. Las fotos locales pasan por el optimizador de Next con un espacio declarado de 100 px; las fotos autenticadas del catálogo conservan su ruta y modo sin optimización. Todas se muestran completas, sin agregar otra sombra.
+Las coincidencias verificadas cubren 37 productos actuales. La asociación se resuelve por UUID en `pos-presentation.ts`, independientemente del nombre. La foto suministrada prevalece sobre la foto anterior solo en las tarjetas del POS. Las fotos locales pasan por el optimizador de Next con un espacio declarado de 100 px; las fotos autenticadas del catálogo conservan su ruta y modo sin optimización. Todas se muestran completas, sin agregar otra sombra.
 
 El producto configurable Kybo Shake usa Americana y Kybo Frozen usa Mango y Durazno como imágenes representativas. Las otras variantes entregadas se conservan disponibles, sin crear productos nuevos ni cambiar las opciones actuales. Waffle Clásico y Waffle de Salame comparten la foto de Waffle salado según la descripción del ZIP.
 
 ## Asociación con el catálogo
 
-| Producto actual               | Archivo WebP                     |
+| Producto actual               | Archivo de imagen                |
 | ----------------------------- | -------------------------------- |
 | Blue Iced Matcha              | blue-iced-matcha.webp            |
 | Blueberry Bubble              | blueberry-bubble.webp            |
@@ -49,16 +49,19 @@ El producto configurable Kybo Shake usa Americana y Kybo Frozen usa Mango y Dura
 
 Francisco confirmó usar Flat White para Café con Leche, Mocca para Chocolatada Caliente y Tostados para las dos fichas de Sándwich de miga. Las fotos y paletas quedan asociadas por UUID, sin cambiar nombres, recetas ni precios.
 
-| Producto actual            | Archivo WebP    |
-| -------------------------- | --------------- |
-| Café con Leche             | flat-white.webp |
-| Chocolatada Caliente       | mocca.webp      |
-| Sandwich de miga clásico   | tostados.webp   |
-| Sandwich de miga de salame | tostados.webp   |
+| Producto actual            | Archivo de imagen          |
+| -------------------------- | -------------------------- |
+| Café con Leche             | flat-white.webp            |
+| Chocolatada Caliente       | mocca.webp                 |
+| Sandwich de miga clásico   | tostados.webp              |
+| Sandwich de miga de salame | tostados.webp              |
+| Combo Sandwich + Gaseosa   | tostados-lata-gaseosa.webp |
 
-La foto suministrada de Tostados incluye café y es idéntica a `tostados-cafe.webp`. El ZIP no contiene una foto de sándwich con gaseosa; esa asociación queda pendiente de identificar el archivo o preparar la composición solicitada.
+La foto suministrada de Tostados incluye café y es idéntica a `tostados-cafe.webp`. Para Combo Sandwich + Gaseosa, Francisco adjuntó después `tostados-lata-gaseosa-sin-fondo.png`: se publica como `tostados-lata-gaseosa.webp`, como WebP de calidad 95, conservando su resolución, canal alfa y composición. El PNG fuente se conserva sin cambios. Este combo utiliza la paleta crema #fff1d4 de los alimentos y combos.
 
 Verificación de estas equivalencias: 24/24 pruebas focalizadas de presentación y carga del catálogo y el recorrido de imágenes reales, colores y fallback en seis anchos de pantalla. Las cuatro asociaciones nuevas se comprobaron también con una foto antigua y sin foto en el catálogo.
+
+Verificación del combo adjuntado: 25/25 pruebas focalizadas y recorrido de fotos reales y paletas en seis anchos; el PNG fuente se conserva sin cambios y la versión web mantiene exactamente el canal alfa y la resolución.
 
 ## Productos sin coincidencia confirmada
 
@@ -66,7 +69,6 @@ Conservan su foto del catálogo, si existe, y el fondo neutro.
 
 - 7up 500 ml
 - 7up en lata
-- Combo Sandwich + Gaseosa
 - Cookie chispas de chocolate
 - Cookie chocolate
 - Cookie especial

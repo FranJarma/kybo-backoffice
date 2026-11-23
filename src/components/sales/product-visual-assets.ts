@@ -560,4 +560,17 @@ export const productVisualAssets = {
       "#fff1d4",
     ],
   },
+  "tostados-lata-gaseosa": {
+    photoSrc: "/images/pos-products/tostados-lata-gaseosa.webp",
+    stripes: [
+      "#fff1d4",
+      "#fff1d4",
+      "#fff1d4",
+      "#fff1d4",
+      "#fff1d4",
+      "#fff1d4",
+      "#fff1d4",
+      "#fff1d4",
+    ],
+  },
 } as const;

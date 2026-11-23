@@ -393,6 +393,22 @@ const canonicalProducts = [
       "FFF1D4",
     ],
   },
+  {
+    id: "e9aa38cd-f3a5-4389-83c8-d70edc22fb34",
+    name: "Combo Sandwich + Gaseosa",
+    categoryId: "salados",
+    photo: "tostados-lata-gaseosa.webp",
+    bands: [
+      "FFF1D4",
+      "FFF1D4",
+      "FFF1D4",
+      "FFF1D4",
+      "FFF1D4",
+      "FFF1D4",
+      "FFF1D4",
+      "FFF1D4",
+    ],
+  },
 ] as const;
 // Diagnostic 2 × 4 RGBA PNG used only in the canonical catalogue scenario.
 const fixtureThumbnail = Buffer.from(
@@ -1895,6 +1911,7 @@ test("Task 7 renders supplied transparent product photos, exact bands and catalo
       "rgba(0, 0, 0, 0)",
     );
   }
+  await captureCheckout(page, "sandwich-soda-1280");
   const persisted = page
     .getByRole("button", {
       name: "Agregar Producto con foto del catálogo",

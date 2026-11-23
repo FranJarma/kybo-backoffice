@@ -72,6 +72,7 @@ const productVisualKeys: Readonly<
   "cfa734c7-7957-43ac-8df8-aabeefdf4114": "mocca",
   "efb8602b-6695-4fad-9fb5-b58c86b347b3": "tostados",
   "b184da69-9a1e-44b3-8af2-45703879ccab": "tostados",
+  "e9aa38cd-f3a5-4389-83c8-d70edc22fb34": "tostados-lata-gaseosa",
 };
 
 /** Visual metadata follows persistent identities, independently of product names. */
