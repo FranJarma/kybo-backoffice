@@ -84,6 +84,10 @@ describe("POS product presentation", () => {
     ["c8f9f85d-fe9b-4b2b-9acc-11df3e7ad4a8", "taro-iced-latte"],
     ["f60e2f4d-e48a-46a4-aa74-25efff4b7a9c", "coffee-iced-latte"],
     ["8401749e-cd0d-40b8-b002-e98a483c47ba", "medialunas-cafe"],
+    ["3217a420-1658-43ef-a84e-582a21146113", "flat-white"],
+    ["cfa734c7-7957-43ac-8df8-aabeefdf4114", "mocca"],
+    ["efb8602b-6695-4fad-9fb5-b58c86b347b3", "tostados"],
+    ["b184da69-9a1e-44b3-8af2-45703879ccab", "tostados"],
   ])(
     "renders the supplied cutout for %s even with an old or missing media photo",
     (id, asset) => {

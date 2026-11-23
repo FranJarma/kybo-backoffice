@@ -4,7 +4,7 @@ Se incorporan los dos ZIP adjuntados por Francisco: `kybo-fotos-productos-actual
 
 Las 43 fotos WebP originales se conservan en `public/images/pos-products`, con transparencia y sombra integradas. Las 43 paletas de ocho bandas se transcriben de `productos-y-paletas.json` a `src/components/sales/product-visual-assets.ts`; el semicírculo existente conserva la forma y usa esos colores exactos, en orden de arriba hacia abajo. Alimentos y combos usan crema #fff1d4. Los SVG/WebP decorativos son referencias equivalentes al gradiente; no se añaden solicitudes de imagen para cada fondo.
 
-Las coincidencias verificadas cubren 32 productos actuales. La asociación se resuelve por UUID en `pos-presentation.ts`, independientemente del nombre. La foto suministrada prevalece sobre la foto anterior solo en las tarjetas del POS. Las fotos locales pasan por el optimizador de Next con un espacio declarado de 100 px; las fotos autenticadas del catálogo conservan su ruta y modo sin optimización. Todas se muestran completas, sin agregar otra sombra.
+Las coincidencias verificadas cubren 36 productos actuales. La asociación se resuelve por UUID en `pos-presentation.ts`, independientemente del nombre. La foto suministrada prevalece sobre la foto anterior solo en las tarjetas del POS. Las fotos locales pasan por el optimizador de Next con un espacio declarado de 100 px; las fotos autenticadas del catálogo conservan su ruta y modo sin optimización. Todas se muestran completas, sin agregar otra sombra.
 
 El producto configurable Kybo Shake usa Americana y Kybo Frozen usa Mango y Durazno como imágenes representativas. Las otras variantes entregadas se conservan disponibles, sin crear productos nuevos ni cambiar las opciones actuales. Waffle Clásico y Waffle de Salame comparten la foto de Waffle salado según la descripción del ZIP.
 
@@ -45,14 +45,27 @@ El producto configurable Kybo Shake usa Americana y Kybo Frozen usa Mango y Dura
 | Waffle Clásico                | waffle-salado.webp               |
 | Waffle de Salame              | waffle-salado.webp               |
 
+## Equivalencias aprobadas el 23/11/2026
+
+Francisco confirmó usar Flat White para Café con Leche, Mocca para Chocolatada Caliente y Tostados para las dos fichas de Sándwich de miga. Las fotos y paletas quedan asociadas por UUID, sin cambiar nombres, recetas ni precios.
+
+| Producto actual            | Archivo WebP    |
+| -------------------------- | --------------- |
+| Café con Leche             | flat-white.webp |
+| Chocolatada Caliente       | mocca.webp      |
+| Sandwich de miga clásico   | tostados.webp   |
+| Sandwich de miga de salame | tostados.webp   |
+
+La foto suministrada de Tostados incluye café y es idéntica a `tostados-cafe.webp`. El ZIP no contiene una foto de sándwich con gaseosa; esa asociación queda pendiente de identificar el archivo o preparar la composición solicitada.
+
+Verificación de estas equivalencias: 24/24 pruebas focalizadas de presentación y carga del catálogo y el recorrido de imágenes reales, colores y fallback en seis anchos de pantalla. Las cuatro asociaciones nuevas se comprobaron también con una foto antigua y sin foto en el catálogo.
+
 ## Productos sin coincidencia confirmada
 
-Conservan su foto del catálogo, si existe, y el fondo neutro. No se asigna una foto de otro producto. Flat White, Mocca y Tostados no se consideran equivalentes automáticamente a Café con Leche, Chocolatada y Sándwich de miga.
+Conservan su foto del catálogo, si existe, y el fondo neutro.
 
 - 7up 500 ml
 - 7up en lata
-- Café con Leche
-- Chocolatada Caliente
 - Combo Sandwich + Gaseosa
 - Cookie chispas de chocolate
 - Cookie chocolate
@@ -65,8 +78,6 @@ Conservan su foto del catálogo, si existe, y el fondo neutro. No se asigna una 
 - Pepsi Max 500 ml
 - Pepsi en lata
 - Pepsi max en lata
-- Sandwich de miga clásico
-- Sandwich de miga de salame
 
 Las fotos futuras cambiadas desde la ficha administrativa no reemplazan automáticamente los recursos aprobados de estas tarjetas; para actualizar la identidad del POS se modifica esta asociación. No se escribieron productos, imágenes ni otros registros en la base compartida con producción.
 

@@ -67,6 +67,11 @@ const productVisualKeys: Readonly<
   "4245713e-7ac8-40e6-b3f9-155ee4edff05": "2-superpanchos-gaseosa",
   "d1fdc5d2-0fd7-4f60-8bbb-781e658a60ec": "superpancho-lata-de-gaseosa",
   "3d3dc3c9-45d5-414f-9a0b-419dc3f34ca6": "box-waffle-para-4",
+  // Visual equivalences explicitly approved by the catalogue owner.
+  "3217a420-1658-43ef-a84e-582a21146113": "flat-white",
+  "cfa734c7-7957-43ac-8df8-aabeefdf4114": "mocca",
+  "efb8602b-6695-4fad-9fb5-b58c86b347b3": "tostados",
+  "b184da69-9a1e-44b3-8af2-45703879ccab": "tostados",
 };
 
 /** Visual metadata follows persistent identities, independently of product names. */
