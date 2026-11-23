@@ -71,111 +71,262 @@ const rows = [
   pricingRevision: 1,
   fulfillmentVersionId: id(100 + Number(row.id.slice(-3))),
 }));
+// Handed-off ZIP references; independent of the production presentation resolver.
 const canonicalProducts = [
   {
     id: "d8667694-d0b4-49ff-90cb-e72f3cc6aa17",
     name: "Oreo Iced Latte",
     categoryId: "lattes",
+    photo: "oreo-iced-latte.webp",
     bands: [
-      ["E9CEAE", 2],
-      ["D2A775", 2],
-      ["A87345", 2],
-      ["68432F", 1],
-      ["352B26", 1],
+      "CE9D76",
+      "CE9D76",
+      "F8A63A",
+      "F8A63A",
+      "F8A63A",
+      "F8A63A",
+      "33231D",
+      "33231D",
     ],
   },
   {
     id: "36145bed-d3f4-4ddc-9289-1097992cd692",
     name: "Kybo Shake",
     categoryId: "shakes",
+    photo: "kybo-shake-americana.webp",
     bands: [
-      ["F6E3BF", 2],
-      ["EDD0A0", 3],
-      ["DAB57F", 2],
-      ["C29560", 1],
+      "E1C9AE",
+      "EDD5BF",
+      "EDD5BF",
+      "EDD5BF",
+      "EDD5BF",
+      "EDD5BF",
+      "2B1A14",
+      "2B1A14",
     ],
   },
   {
     id: "a83e25f6-8b50-493f-a9fe-57ba74a03533",
     name: "Kybo Shake Oreo",
     categoryId: "shakes",
+    photo: "kybo-shake-oreo.webp",
     bands: [
-      ["F1E4D1", 2],
-      ["DAC4AA", 3],
-      ["9F7C60", 1],
-      ["614A3B", 1],
-      ["342C27", 1],
+      "C3A191",
+      "D5B7A9",
+      "D5B7A9",
+      "D5B7A9",
+      "D5B7A9",
+      "D5B7A9",
+      "231412",
+      "231412",
     ],
   },
   {
     id: "d47f268b-2d57-4642-a9ff-5695aa0c2ce7",
     name: "Kybo Shake Taro",
     categoryId: "shakes",
+    photo: "kybo-shake-taro.webp",
     bands: [
-      ["E7DAF0", 2],
-      ["C4A4E4", 3],
-      ["A67ACB", 2],
-      ["71518D", 1],
+      "D2252A",
+      "A692AD",
+      "A692AD",
+      "A692AD",
+      "A692AD",
+      "A692AD",
+      "22151A",
+      "22151A",
     ],
   },
   {
     id: "30a9fd90-2f51-41b1-839c-8760f54b20a6",
     name: "Kybo Frozen",
     categoryId: "shakes",
+    photo: "frozen-mango-y-durazno.webp",
     bands: [
-      ["FFE29A", 2],
-      ["FFC14A", 3],
-      ["FFA329", 1],
-      ["E87325", 1],
-      ["DC4C36", 1],
+      "ED8C0B",
+      "FFB722",
+      "FFB722",
+      "FFB722",
+      "FFB722",
+      "FFB722",
+      "BD0407",
+      "BD0407",
     ],
   },
   {
     id: "35f4099a-a0d5-4f0d-afa5-ab5dfff9b1c9",
     name: "Kybo Soft Sundae Chocolate",
     categoryId: "soft",
+    photo: "kybo-soft-chocolate.webp",
     bands: [
-      ["F0D4BA", 2],
-      ["B98666", 3],
-      ["956043", 1],
-      ["69422D", 1],
-      ["493026", 1],
+      "561C0F",
+      "561C0F",
+      "E6D5CC",
+      "E6D5CC",
+      "E6D5CC",
+      "E6D5CC",
+      "E6D5CC",
+      "60251A",
     ],
   },
   {
     id: "1685d383-5581-459f-a5c4-2777331c243e",
     name: "Kybo Soft Sundae Frutilla",
     categoryId: "soft",
+    photo: "kybo-soft-frutilla.webp",
     bands: [
-      ["FFE0DF", 2],
-      ["F6B1BC", 3],
-      ["ED849C", 1],
-      ["D95776", 1],
-      ["B53859", 1],
+      "B3050C",
+      "B3050C",
+      "ECD6CC",
+      "ECD6CC",
+      "ECD6CC",
+      "ECD6CC",
+      "ECD6CC",
+      "A10B17",
     ],
   },
   {
     id: "1bee7489-5ee8-4e93-a586-d85629cef23f",
     name: "Kybo Soft Sundae Frutos rojos",
     categoryId: "soft",
+    photo: "kybo-soft-frutos-rojos.webp",
     bands: [
-      ["F1D4E4", 2],
-      ["D99DB8", 3],
-      ["B66794", 1],
-      ["914468", 1],
-      ["693950", 1],
+      "5C0B26",
+      "5C0B26",
+      "EBD7D3",
+      "EBD7D3",
+      "EBD7D3",
+      "EBD7D3",
+      "EBD7D3",
+      "6E041E",
     ],
   },
   {
     id: "3efc7be3-52af-402e-9990-350d0f1599f4",
     name: "Cappuccino",
     categoryId: "lattes",
+    photo: "cappuccino.webp",
     bands: [
-      ["F6E1BE", 2],
-      ["E8BE8F", 3],
-      ["C38D5B", 1],
-      ["A26B43", 1],
-      ["795037", 1],
+      "E58B25",
+      "E58B25",
+      "E58B25",
+      "FBE5C7",
+      "FBE5C7",
+      "FBE5C7",
+      "E58B25",
+      "E58B25",
+    ],
+  },
+  {
+    id: "c8f9f85d-fe9b-4b2b-9acc-11df3e7ad4a8",
+    name: "Taro Iced Latte",
+    categoryId: "lattes",
+    photo: "taro-iced-latte.webp",
+    bands: [
+      "B178CC",
+      "C398D9",
+      "C398D9",
+      "C398D9",
+      "C398D9",
+      "C398D9",
+      "33242C",
+      "33242C",
+    ],
+  },
+  {
+    id: "9bb0cebb-c87b-48ce-8e17-d596ef1ec71c",
+    name: "Matcha Iced Latte",
+    categoryId: "lattes",
+    photo: "iced-matcha.webp",
+    bands: [
+      "9EB93D",
+      "ACC055",
+      "ACC055",
+      "ACC055",
+      "ACC055",
+      "ACC055",
+      "2A271F",
+      "2A271F",
+    ],
+  },
+  {
+    id: "4690a82f-c39d-4b89-9f0b-b386c727d8f9",
+    name: "Kybo Tea",
+    categoryId: "lattes",
+    photo: "kybo-tea.webp",
+    bands: [
+      "B04F0B",
+      "B04F0B",
+      "FBD8B1",
+      "FBD8B1",
+      "FBD8B1",
+      "FBD8B1",
+      "341B10",
+      "341B10",
+    ],
+  },
+  {
+    id: "a7af601e-e6cd-4ec9-9a2e-383c9ba68dc9",
+    name: "Waffle Clásico",
+    categoryId: "salados",
+    photo: "waffle-salado.webp",
+    bands: [
+      "FFF1D4",
+      "FFF1D4",
+      "FFF1D4",
+      "FFF1D4",
+      "FFF1D4",
+      "FFF1D4",
+      "FFF1D4",
+      "FFF1D4",
+    ],
+  },
+  {
+    id: "8401749e-cd0d-40b8-b002-e98a483c47ba",
+    name: "Combo 2 medialunas + Café",
+    categoryId: "salados",
+    photo: "medialunas-cafe.webp",
+    bands: [
+      "FFF1D4",
+      "FFF1D4",
+      "FFF1D4",
+      "FFF1D4",
+      "FFF1D4",
+      "FFF1D4",
+      "FFF1D4",
+      "FFF1D4",
+    ],
+  },
+  {
+    id: "20000000-0000-4000-8000-000000000900",
+    name: "Producto con foto del catálogo",
+    categoryId: "lattes",
+    photo: null,
+    bands: [
+      "E7EDF0",
+      "E7EDF0",
+      "D5E1E8",
+      "D5E1E8",
+      "C5D4DC",
+      "C5D4DC",
+      "B6C9D4",
+      "B6C9D4",
+    ],
+  },
+  {
+    id: "20000000-0000-4000-8000-000000000901",
+    name: "Producto sin foto",
+    categoryId: "lattes",
+    photo: null,
+    bands: [
+      "E7EDF0",
+      "E7EDF0",
+      "D5E1E8",
+      "D5E1E8",
+      "C5D4DC",
+      "C5D4DC",
+      "B6C9D4",
+      "B6C9D4",
     ],
   },
 ] as const;
@@ -666,6 +817,18 @@ async function mount(page: Page, options: SurfaceFixtureOptions = {}) {
         contentType: "font/ttf",
         body: await readFile(`public/fonts/${posFont.file}`),
       });
+    const photoPath =
+      url.pathname === "/_next/image"
+        ? url.searchParams.get("url")
+        : url.pathname;
+    if (
+      photoPath &&
+      /^\/images\/pos-products\/[a-z0-9-]+\.webp$/.test(photoPath)
+    )
+      return route.fulfill({
+        contentType: "image/webp",
+        body: await readFile("public" + photoPath),
+      });
     if (!url.pathname.startsWith("/api/")) return route.abort();
     calls.push({
       method: route.request().method(),
@@ -709,11 +872,16 @@ async function mount(page: Page, options: SurfaceFixtureOptions = {}) {
               ...(canonicalCatalogue
                 ? canonicalProducts.map(
                     ({ id: productId, name, categoryId }, index) => ({
-                      ...rows[index],
+                      ...(rows[index] ?? rows[0]),
                       id: productId,
                       name,
                       categoryId,
-                      imageAssetId: index < 2 ? id(981 + index) : null,
+                      imageAssetId:
+                        productId === id(900)
+                          ? id(981)
+                          : productId === id(901)
+                            ? id(982)
+                            : "old-white-background",
                     }),
                   )
                 : edgeCases
@@ -732,7 +900,9 @@ async function mount(page: Page, options: SurfaceFixtureOptions = {}) {
             categories: edgeCases
               ? [...categories, { id: "empty", name: "Sin productos" }]
               : categories,
-            total: rows.length + Number(combos),
+            total:
+              (canonicalCatalogue ? canonicalProducts.length : rows.length) +
+              Number(combos),
             offset: 0,
           },
         });
@@ -829,7 +999,8 @@ async function mount(page: Page, options: SurfaceFixtureOptions = {}) {
         ? canonicalProducts.findIndex((product) => product.id === config[1])
         : -1;
       const result = configuration(
-        rows[canonicalIndex]?.id ?? config[1],
+        rows[canonicalIndex]?.id ??
+          (canonicalIndex >= 0 ? rows[0].id : config[1]),
         modifiers,
       );
       return route.fulfill({
@@ -1586,7 +1757,7 @@ test("Task 7 keeps cash actions usable after a keyboard-sized viewport reduction
   expect(app.errors).toEqual([]);
 });
 
-test("Task 7 renders canonical product bands and actual Next thumbnail fallback", async ({
+test("Task 7 renders supplied transparent product photos, exact bands and catalogue fallback", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -1631,26 +1802,52 @@ test("Task 7 renders canonical product bands and actual Next thumbnail fallback"
       width: "152px",
       height: "152px",
       repeats: false,
-      bands: product.bands.flatMap(([color, count]) =>
-        Array<string>(count).fill(color),
-      ),
+      bands: product.bands,
     });
   }
-  const loaded = page
-    .getByRole("button", { name: "Agregar Oreo Iced Latte", exact: true })
-    .getByRole("img", { name: "Oreo Iced Latte", exact: true });
+  for (const product of canonicalProducts.filter((p) => p.photo)) {
+    const card = page.getByRole("button", {
+      name: "Agregar " + product.name,
+      exact: true,
+    });
+    await card.scrollIntoViewIfNeeded();
+    const photo = card.getByRole("img", { name: product.name, exact: true });
+    await expect
+      .poll(() =>
+        photo.evaluate(
+          (image: HTMLImageElement) => image.complete && image.naturalWidth > 0,
+        ),
+      )
+      .toBe(true);
+    expect(
+      new URL(
+        await photo.evaluate((image: HTMLImageElement) => image.currentSrc),
+      ).searchParams.get("url"),
+    ).toBe("/images/pos-products/" + product.photo);
+    await expect(photo).toHaveCSS("object-fit", "contain");
+    await expect(photo).toHaveCSS("filter", "none");
+    await expect(card.locator(".pos-product-photo > span")).toHaveCSS(
+      "background-color",
+      "rgba(0, 0, 0, 0)",
+    );
+  }
+  const persisted = page
+    .getByRole("button", {
+      name: "Agregar Producto con foto del catálogo",
+      exact: true,
+    })
+    .getByRole("img", { name: "Producto con foto del catálogo", exact: true });
   await expect
     .poll(() =>
-      loaded.evaluate((image: HTMLImageElement) => [
+      persisted.evaluate((image: HTMLImageElement) => [
         image.naturalWidth,
         image.naturalHeight,
       ]),
     )
     .toEqual([2, 4]);
-  await expect(loaded).toHaveCSS("object-fit", "contain");
   await expect(
     page
-      .getByRole("button", { name: "Agregar Kybo Shake", exact: true })
+      .getByRole("button", { name: "Agregar Producto sin foto", exact: true })
       .getByLabel("Sin foto"),
   ).toBeVisible();
   const media = () =>
@@ -1674,7 +1871,10 @@ test("Task 7 renders canonical product bands and actual Next thumbnail fallback"
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth),
     ).toBeLessThanOrEqual(viewport.width);
-    await captureCheckout(page, "canonical-catalogue-" + viewport.width);
+    await page
+      .getByRole("button", { name: "Agregar Oreo Iced Latte", exact: true })
+      .scrollIntoViewIfNeeded();
+    await captureCheckout(page, "supplied-catalogue-" + viewport.width);
   }
   expect(media()).toEqual(mediaRequests);
   expect(

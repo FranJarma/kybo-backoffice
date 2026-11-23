@@ -58,12 +58,11 @@ describe("POS product presentation", () => {
     expect(sameName.appearance).toEqual(productAppearance("unknown"));
     expect(approved.appearance).not.toEqual(sameName.appearance);
   });
-  it("uses a neutral palette for catalogue products without an approved design", () => {
+  it("uses a neutral palette for catalogue products without a supplied design", () => {
     const neutral = productAppearance("unknown");
     for (const id of [
-      "c8f9f85d-fe9b-4b2b-9acc-11df3e7ad4a8", // Taro Iced Latte
-      "9bb0cebb-c87b-48ce-8e17-d596ef1ec71c", // Matcha Iced Latte
-      "4690a82f-c39d-4b89-9f0b-b386c727d8f9", // Kybo Tea
+      "e5860d4a-6aac-4669-bce0-906603c45199", // Cono is absent from both ZIPs.
+      "c4faf0a3-a1d4-4166-832b-31bf9d10b66e", // Cookies are absent too.
       "constructor",
     ]) {
       expect(productAppearance(id)).toEqual(neutral);
@@ -77,9 +76,47 @@ describe("POS product presentation", () => {
       createElement(ProductCard, { product, onSelect: () => {} }),
     );
 
-    expect(html).toContain("linear-gradient(to bottom, #E9CEAE 0");
-    expect(html).toContain("#68432F 75% 87.5%, #352B26 87.5% 100%)");
+    expect(html).toContain("linear-gradient(to bottom, #ce9d76 0");
+    expect(html).toContain("#33231d 75% 87.5%, #33231d 87.5% 100%)");
     expect(html).not.toContain("repeating-linear-gradient");
+  });
+  it.each([
+    ["c8f9f85d-fe9b-4b2b-9acc-11df3e7ad4a8", "taro-iced-latte"],
+    ["f60e2f4d-e48a-46a4-aa74-25efff4b7a9c", "coffee-iced-latte"],
+    ["8401749e-cd0d-40b8-b002-e98a483c47ba", "medialunas-cafe"],
+  ])(
+    "renders the supplied cutout for %s even with an old or missing media photo",
+    (id, asset) => {
+      for (const imageAssetId of [null, "old-white-background"]) {
+        const html = renderToStaticMarkup(
+          createElement(ProductCard, {
+            product: productCardModel(
+              row({ id, name: "Renamed product", imageAssetId }),
+            ),
+            onSelect: () => {},
+          }),
+        );
+        expect(html).toContain(
+          encodeURIComponent(`/images/pos-products/${asset}.webp`),
+        );
+        expect(html).not.toContain("/api/media/old-white-background");
+        expect(html).toContain('sizes="100px"');
+      }
+    },
+  );
+  it("renders the supplied food circle in cream behind the cutout", () => {
+    const html = renderToStaticMarkup(
+      createElement(ProductCard, {
+        product: productCardModel(
+          row({ id: "a7af601e-e6cd-4ec9-9a2e-383c9ba68dc9" }),
+        ),
+        onSelect: () => {},
+      }),
+    );
+    expect(html).toContain("linear-gradient(to bottom, #fff1d4 0");
+    expect(html).toContain(
+      encodeURIComponent("/images/pos-products/waffle-salado.webp"),
+    );
   });
   it("shows the quantity from the actual order and the persisted photo without fetching business data", () => {
     const html = renderToStaticMarkup(

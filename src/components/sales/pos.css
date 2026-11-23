@@ -154,7 +154,6 @@
 }
 .pos-product-photo img {
   object-fit: contain;
-  filter: drop-shadow(0 3px 4px #013e5e26);
 }
 @container (min-width: 550px) {
   .pos-product-grid {

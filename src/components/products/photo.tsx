@@ -9,25 +9,30 @@ import { useErrorFeedback } from "@/components/ui/use-error-feedback";
 import type { PhotoVariant } from "@/modules/media/photo-variants";
 export function ProductPhoto({
   id,
+  src,
   name,
   variant = "thumbnail",
+  sizes,
 }: {
   id?: string | null;
+  src?: string | null;
   name: string;
   variant?: Exclude<PhotoVariant, "original">;
+  sizes?: string;
 }) {
   const [failed, setFailed] = useState<string | null>(null);
+  const imageSrc = src ?? (id ? `/api/media/${id}?size=${variant}` : null);
   return (
     <span className="relative flex aspect-square w-full items-center justify-center overflow-hidden rounded-xl bg-slate-50 text-muted">
-      {id && failed !== id ? (
+      {imageSrc && failed !== imageSrc ? (
         <Image
-          unoptimized
-          src={`/api/media/${id}?size=${variant}`}
+          unoptimized={!src}
+          src={imageSrc}
           alt={name}
           fill
-          sizes={variant === "preview" ? "128px" : "64px"}
+          sizes={sizes ?? (variant === "preview" ? "128px" : "64px")}
           className="object-cover"
-          onError={() => setFailed(id)}
+          onError={() => setFailed(imageSrc)}
         />
       ) : (
         <ImageIcon size={28} aria-label="Sin foto" />

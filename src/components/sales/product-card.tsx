@@ -50,8 +50,10 @@ export function ProductCard({
       <span className="pos-product-photo">
         <ProductPhoto
           id={product.imageAssetId}
+          src={product.appearance.photoSrc}
           name={product.name}
           variant="thumbnail"
+          sizes="100px"
         />
       </span>
     </Button>
