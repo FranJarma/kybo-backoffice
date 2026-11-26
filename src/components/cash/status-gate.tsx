@@ -4,7 +4,7 @@ import { Banknote } from "lucide-react";
 import { cashBranchRequest } from "./shared";
 import { CashOpeningAction } from "./opening-action";
 
-type Status = {
+export type CashGateStatus = {
   available: boolean;
   activated: boolean;
   open: boolean;
@@ -15,22 +15,31 @@ type Status = {
 export function CashStatusGate({
   branchId,
   actorId,
+  onStatusChange,
 }: {
   branchId: string;
   actorId?: string;
+  onStatusChange?: (status: CashGateStatus | null) => void;
 }) {
-  const [status, setStatus] = useState<Status | null>(null);
+  const [status, setStatus] = useState<CashGateStatus | null>(null);
   useEffect(() => {
     const controller = new AbortController();
+    let revision = 0;
+    onStatusChange?.(null);
     const load = () => {
-      void cashBranchRequest<Status>(branchId, "/api/cash/status", {
+      const request = ++revision;
+      void cashBranchRequest<CashGateStatus>(branchId, "/api/cash/status", {
         signal: controller.signal,
       })
         .then((result) => {
-          if (!controller.signal.aborted) setStatus(result);
+          if (controller.signal.aborted || request !== revision) return;
+          setStatus(result);
+          onStatusChange?.(result);
         })
         .catch(() => {
-          /* Collection commands remain authoritative when the status is unavailable. */
+          if (controller.signal.aborted || request !== revision) return;
+          setStatus(null);
+          onStatusChange?.(null);
         });
     };
     load();
@@ -48,7 +57,7 @@ export function CashStatusGate({
       window.removeEventListener("focus", load);
       window.removeEventListener("kybo:cash-changed", changed);
     };
-  }, [branchId]);
+  }, [branchId, onStatusChange]);
   if (!status?.available || !status.activated || status.open) return null;
   return (
     <div

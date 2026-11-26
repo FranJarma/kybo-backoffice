@@ -251,3 +251,38 @@ it("takes the branch assignment lock before returning a held locator during repl
   expect(lock).toBeGreaterThanOrEqual(0);
   expect(lock).toBeLessThan(returned);
 });
+
+it("records the quantities and notes from the reviewed order with its customer and selected locator", async () => {
+  await c.db
+    .update(s.branches)
+    .set({ locatorCount: 16 })
+    .where(eq(s.branches.id, actor.branchId!));
+  const initial = input();
+  const service = createSalesService(c.db);
+  const command = {
+    ...initial,
+    newCustomer: { name: "Cliente de pedido revisado" },
+    locatorMode: "manual",
+    locatorNumber: 12,
+    notes: "Llevar a la terraza",
+    lines: [{ ...initial.lines[0], quantity: 2, notes: "Sin hielo" }],
+    payments: [{ collector: "local", methodId, amount: "200" }],
+  };
+  const sale = await service.create(actor, command);
+
+  expect(sale.customerName).toBe("Cliente de pedido revisado");
+  expect(sale.orders[0]).toMatchObject({
+    locatorNumber: 12,
+    notes: "Llevar a la terraza",
+    lines: [
+      {
+        productId,
+        quantity: 2,
+        notes: "Sin hielo",
+        unitPrice: "100.00",
+        lineTotal: "200.00",
+      },
+    ],
+  });
+  expect(await service.create(actor, command)).toEqual(sale);
+});

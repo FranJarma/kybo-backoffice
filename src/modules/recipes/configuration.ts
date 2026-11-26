@@ -459,6 +459,7 @@ export async function getProductConfiguration(
           option: {
             id: recipeModifierOptions.id,
             name: modifierOptions.name,
+            key: modifierOptions.key,
             defaultCount: recipeModifierOptions.defaultCount,
             maxCount: recipeModifierOptions.maxCount,
             price: recipeModifierOptionPrices.surcharge,
@@ -495,23 +496,7 @@ export async function getProductConfiguration(
           asc(recipeModifierGroups.position),
           asc(modifierOptions.position),
         );
-      const groups = new Map<
-        string,
-        {
-          id: string;
-          name: string;
-          min: number;
-          max: number;
-          options: {
-            id: string;
-            name: string;
-            defaultCount: number;
-            maxCount: number;
-            price: string | null;
-            available: boolean;
-          }[];
-        }
-      >();
+      const groups = new Map<string, PublicConfiguration["groups"][number]>();
       for (const choice of choices) {
         let group = groups.get(choice.group.id);
         if (!group) {
@@ -522,6 +507,7 @@ export async function getProductConfiguration(
           group.options.push({
             id: choice.option.id,
             name: choice.option.name,
+            key: choice.option.key ?? undefined,
             defaultCount: choice.option.defaultCount!,
             maxCount: choice.option.maxCount!,
             price: choice.option.price,
@@ -562,6 +548,7 @@ export type PublicConfiguration = {
     options: {
       id: string;
       name: string;
+      key?: string;
       defaultCount: number;
       maxCount: number;
       price: string | null;

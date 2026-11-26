@@ -2,6 +2,22 @@ import { test, expect, type Page } from "@playwright/test";
 import { createRequire } from "node:module";
 import { readFile } from "node:fs/promises";
 const require = createRequire(import.meta.url);
+const barlow = [
+  ["regular", 400],
+  ["medium", 500],
+  ["semibold", 600],
+  ["bold", 700],
+] as const;
+const fonts = barlow.map(([name, weight]) => ({
+  file: `barlow-${name}.ttf`,
+  weight,
+}));
+const fontCss = fonts
+  .map(
+    ({ file, weight }) =>
+      `@font-face{font-family:Barlow;src:url(/fonts/${file});font-weight:${weight};font-display:swap}`,
+  )
+  .join("\n");
 let css = "",
   script = "";
 test.beforeAll(async () => {
@@ -25,24 +41,32 @@ test.beforeAll(async () => {
       from: "src/app/globals.css",
     })
   ).css;
+  css += "\n" + (await readFile("src/components/sales/pos.css", "utf8"));
 });
 async function mount(page: Page, query = "") {
-  await page.route("**/*", (route) => {
+  await page.route("**/*", async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === "/__payment-receipt")
       return route.fulfill({
         contentType: "text/html; charset=utf-8",
-        body: `<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style></head><body><script src="/__payment-receipt.js"></script></body></html>`,
+        body: `<!doctype html><html lang="es-AR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${fontCss}\n${css}</style></head><body><script src="/__payment-receipt.js"></script></body></html>`,
       });
     if (url.pathname === "/__payment-receipt.js")
       return route.fulfill({
         contentType: "text/javascript; charset=utf-8",
         body: script,
       });
+    const font = fonts.find(({ file }) => url.pathname === `/fonts/${file}`);
+    if (font)
+      return route.fulfill({
+        contentType: "font/ttf",
+        body: await readFile(`public/fonts/${font.file}`),
+      });
     return route.abort();
   });
   await page.goto(`/__payment-receipt${query}`);
   await expect(page.getByRole("dialog")).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
 }
 const confirm = (page: Page) =>
   page.getByRole("button", { name: "Confirmar cobro", exact: true });
@@ -88,9 +112,8 @@ test("split card payments keep separate receipt numbers", async ({ page }) => {
     .getByRole("textbox", { name: "Importe 2", exact: true })
     .fill("50");
   await page
-    .getByRole("group", { name: "Medio de pago 2", exact: true })
-    .getByRole("button", { name: "Tarjeta crédito", exact: true })
-    .click();
+    .getByRole("combobox", { name: "Medio de pago 2", exact: true })
+    .selectOption("card-2");
   await expect(confirm(page)).toBeDisabled();
   await page
     .getByRole("textbox", {
@@ -164,3 +187,410 @@ for (const width of [390, 1024, 1440])
       fullPage: true,
     });
   });
+
+test("cash needs valid tender and distinguishes exact, over and under payment", async ({
+  page,
+}) => {
+  await mount(page, "?example=1");
+  await page.getByRole("button", { name: "Efectivo", exact: true }).click();
+  const received = page.getByRole("textbox", {
+    name: "Efectivo recibido 1",
+    exact: true,
+  });
+  await expect(confirm(page)).toBeDisabled();
+  await received.fill("18899,99");
+  await expect(
+    page.getByText("El efectivo recibido no cubre el cobro."),
+  ).toBeVisible();
+  await expect(confirm(page)).toBeDisabled();
+  for (const [amount, expected] of [
+    ["20000", /1\.100,00/],
+    ["18900", /0,00$/],
+    ["50000", /31\.100,00/],
+  ] as const) {
+    await received.fill(amount);
+    await expect(page.getByText(/Vuelto:/)).toHaveText(expected);
+    await expect(confirm(page)).toBeEnabled();
+  }
+  await confirm(page).click();
+  await expect(page.locator("[data-payments-json]")).toHaveText(
+    JSON.stringify([
+      { collector: "local", methodId: "cash", amount: "18900", reference: "" },
+    ]),
+  );
+  await expect(page.locator("[data-cash-json]")).toHaveText(
+    JSON.stringify({
+      applied: "18900.00",
+      received: "50000.00",
+      change: "31100.00",
+    }),
+  );
+});
+
+test("dividing preserves cash and receipts while allocations are edited or removed", async ({
+  page,
+}) => {
+  await mount(page, "?example=1");
+  await page.getByRole("button", { name: "Efectivo", exact: true }).click();
+  const received = page.getByRole("textbox", {
+    name: "Efectivo recibido 1",
+    exact: true,
+  });
+  await received.fill("20000");
+  await page
+    .getByRole("button", { name: "Dividir cobro", exact: true })
+    .click();
+  const first = page.getByRole("textbox", { name: "Importe 1", exact: true });
+  const second = page.getByRole("textbox", { name: "Importe 2", exact: true });
+  await first.fill("10000");
+  await second.fill("8000");
+  await page
+    .getByRole("combobox", { name: "Medio de pago 2", exact: true })
+    .selectOption("card");
+  const receipt = page.getByRole("textbox", {
+    name: "Número de comprobante del pago 2",
+    exact: true,
+  });
+  await receipt.fill("00009");
+  const balance = (label: string) =>
+    page.getByText(label, { exact: true }).locator("..");
+  await expect(balance("Falta cubrir")).toHaveText(/900,00/);
+  await expect(confirm(page)).toBeDisabled();
+  await second.fill("8900,01");
+  await expect(balance("Excedente")).toHaveText(/0,01/);
+  await expect(confirm(page)).toBeDisabled();
+  await second.fill("8900");
+  await expect(balance("Falta cubrir")).toHaveText(/0,00/);
+  await expect(balance("Asignado")).toHaveText(/18\.900,00/);
+  await expect(received).toHaveValue("20000");
+  await expect(receipt).toHaveValue("00009");
+  await expect(page.getByText(/Vuelto:/)).toHaveText(/10\.000,00/);
+  await confirm(page).click();
+  await expect(page.locator("[data-payments-json]")).toHaveText(
+    JSON.stringify([
+      { collector: "local", methodId: "cash", amount: "10000", reference: "" },
+      {
+        collector: "local",
+        methodId: "card",
+        amount: "8900",
+        reference: "00009",
+      },
+    ]),
+  );
+  await expect(page.locator("[data-cash-json]")).toHaveText(
+    JSON.stringify({
+      applied: "10000.00",
+      received: "20000.00",
+      change: "10000.00",
+    }),
+  );
+  await page
+    .getByRole("button", { name: "Quitar cobro 1", exact: true })
+    .click();
+  await expect(first).toHaveCount(0);
+  await expect(
+    page.getByRole("textbox", { name: "Número de comprobante", exact: true }),
+  ).toHaveValue("00009");
+  await confirm(page).click();
+  await expect(page.locator("[data-payments-json]")).toHaveText(
+    JSON.stringify([
+      {
+        collector: "local",
+        methodId: "card",
+        amount: "18900",
+        reference: "00009",
+      },
+    ]),
+  );
+});
+
+test("partial allocation proposes the remaining amount when a payment is added", async ({
+  page,
+}) => {
+  await mount(page, "?example=1&partial=1");
+  await page.getByRole("button", { name: "Efectivo", exact: true }).click();
+  await page
+    .getByRole("textbox", { name: "Importe 1", exact: true })
+    .fill("10000");
+  await page
+    .getByRole("button", { name: "Importe exacto", exact: true })
+    .click();
+  await expect(confirm(page)).toBeEnabled();
+  await page
+    .getByRole("button", { name: "Dividir cobro", exact: true })
+    .click();
+  await expect(
+    page.getByRole("textbox", { name: "Importe 2", exact: true }),
+  ).toHaveValue("8900");
+  await expect(confirm(page)).toBeDisabled();
+});
+
+test("transfer requires verification of the current details and limits the combined reference", async ({
+  page,
+}) => {
+  await mount(page, "?partial=1");
+  await page
+    .getByRole("button", { name: "Transferencia", exact: true })
+    .click();
+  const verified = page.getByRole("checkbox", {
+    name: "Acreditación verificada",
+    exact: true,
+  });
+  const holder = page.getByRole("textbox", {
+    name: "Titular de la transferencia",
+    exact: true,
+  });
+  const reference = page.getByRole("textbox", {
+    name: "Número de operación o referencia",
+    exact: true,
+  });
+  await expect(verified).toBeVisible();
+  await expect(confirm(page)).toBeDisabled();
+  await verified.check();
+  await expect(confirm(page)).toBeEnabled();
+  await holder.fill("  Lucía Pérez  ");
+  await expect(verified).not.toBeChecked();
+  await reference.fill("  000451  ");
+  await verified.check();
+  await page
+    .getByRole("textbox", { name: "Importe 1", exact: true })
+    .fill("99");
+  await expect(verified).not.toBeChecked();
+  await reference.fill("a".repeat(115));
+  await verified.check();
+  await expect(page.getByText(/hasta 120 caracteres en total/)).toBeVisible();
+  await expect(confirm(page)).toBeDisabled();
+  await reference.fill("  000451  ");
+  await verified.check();
+  await confirm(page).click();
+  await expect(page.locator("[data-payments-json]")).toHaveText(
+    JSON.stringify([
+      {
+        collector: "local",
+        methodId: "transfer",
+        amount: "99",
+        reference: "Titular: Lucía Pérez · Operación: 000451",
+      },
+    ]),
+  );
+  await expect(page.locator("[data-cash-json]")).toHaveText("null");
+  await page
+    .getByRole("button", { name: "Tarjeta débito", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Transferencia", exact: true })
+    .click();
+  await expect(verified).not.toBeChecked();
+  await expect(confirm(page)).toBeDisabled();
+});
+
+test("cancelling checkout does not confirm or retain payment details when reopened", async ({
+  page,
+}) => {
+  await mount(page, "?example=1");
+  await page.getByRole("button", { name: "Efectivo", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Importe exacto", exact: true })
+    .click();
+  await expect(confirm(page)).toBeEnabled();
+  await page.getByRole("button", { name: "Cancelar", exact: true }).click();
+  await expect(page.getByRole("dialog")).toBeHidden();
+  await expect(page.locator("[data-payments-json]")).toHaveText("null");
+  await page.getByRole("button", { name: "Abrir cobro", exact: true }).click();
+  await page.getByRole("button", { name: "Efectivo", exact: true }).click();
+  await expect(
+    page.getByRole("textbox", { name: "Efectivo recibido 1", exact: true }),
+  ).toHaveValue("");
+  await expect(confirm(page)).toBeDisabled();
+});
+
+test("desktop cash checkout fits the approved two-column layout", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mount(page, "?example=1");
+  await page.getByRole("button", { name: "Efectivo", exact: true }).click();
+  await page.getByRole("button", { name: "$ 20.000", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  const panel = (await dialog.boundingBox())!;
+  const method = (await dialog.locator(".pos-payment-choice").boundingBox())!;
+  const cash = (await dialog
+    .locator(".pos-payment-columns > .pos-payment-fields")
+    .boundingBox())!;
+  expect(panel.width).toBe(900);
+  expect(panel.height).toBeCloseTo(520, 0);
+  expect(panel.y).toBeCloseTo(140, 0);
+  expect(Math.abs(cash.height - 266)).toBeLessThan(2);
+  expect(cash.height).toBeCloseTo(method.height, 0);
+  const body = dialog.locator(".pos-payment-body");
+  expect(
+    await body.evaluate((node) => node.scrollHeight - node.clientHeight),
+  ).toBe(0);
+  const reference = dialog.getByText("Referencia (opcional)", {
+    exact: true,
+  });
+  await expect(reference).toBeInViewport({ ratio: 1 });
+  expect((await reference.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  expect(panel.x).toBe(190);
+  expect(cash.x).toBeGreaterThan(method.x + method.width);
+  expect(cash.width).toBeCloseTo(method.width, 0);
+  expect(cash.y).toBeCloseTo(method.y, 0);
+  await expect(confirm(page)).toBeInViewport();
+  await page.screenshot({ path: ".next-e2e/payment-cash-desktop.png" });
+
+  await page.setViewportSize({ width: 1280, height: 540 });
+  await reference.click();
+  await dialog
+    .getByRole("textbox", { name: "Referencia 1", exact: true })
+    .fill("0001");
+  expect(
+    await body.evaluate((node) => node.scrollHeight - node.clientHeight),
+  ).toBeGreaterThan(0);
+  await expect(confirm(page)).toBeInViewport({ ratio: 1 });
+  await confirm(page).click();
+  await expect(page.locator("[data-payments-json]")).toHaveText(
+    JSON.stringify([
+      {
+        collector: "local",
+        methodId: "cash",
+        amount: "18900",
+        reference: "0001",
+      },
+    ]),
+  );
+});
+
+test("cash actions stay visible when the visual viewport shrinks for the keyboard", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => {
+    const viewport = window.visualViewport!;
+    const fullHeight = viewport.height;
+    let height = fullHeight;
+    let top = 0;
+    Object.defineProperty(viewport, "height", { get: () => height });
+    Object.defineProperty(viewport, "offsetTop", { get: () => top });
+    document.addEventListener("focusin", (event) => {
+      if (
+        event.target instanceof HTMLInputElement &&
+        event.target.inputMode === "decimal"
+      ) {
+        height = 370;
+        top = 28;
+        viewport.dispatchEvent(new Event("resize"));
+      }
+    });
+  });
+  await mount(page, "?example=1");
+  await page.getByRole("button", { name: "Efectivo", exact: true }).click();
+  const received = page.getByRole("textbox", {
+    name: "Efectivo recibido 1",
+    exact: true,
+  });
+  await received.fill("20000");
+  const dialog = page.getByRole("dialog");
+  const dialogBounds = (await dialog.boundingBox())!;
+  const actions = (await page.locator("[data-payment-footer]").boundingBox())!;
+  expect(dialogBounds.y).toBeGreaterThanOrEqual(28);
+  expect(actions.y + actions.height).toBeLessThanOrEqual(398);
+  const input = (await received.boundingBox())!;
+  const body = (await dialog.locator(".pos-payment-body").boundingBox())!;
+  expect(input.y).toBeGreaterThanOrEqual(body.y);
+  expect(input.y + input.height).toBeLessThanOrEqual(body.y + body.height);
+  await expect(
+    page.getByRole("button", { name: "Cancelar", exact: true }),
+  ).toBeInViewport();
+  await expect(confirm(page)).toBeEnabled();
+  await page.screenshot({
+    path: ".next-e2e/payment-cash-keyboard-viewport.png",
+  });
+  await page.setViewportSize({ width: 390, height: 640 });
+  await page.reload();
+  await page.getByRole("button", { name: "Efectivo", exact: true }).click();
+  await page.getByRole("button", { name: "$ 20.000", exact: true }).click();
+  await expect(confirm(page)).toBeInViewport();
+  await page.screenshot({ path: ".next-e2e/payment-cash-mobile.png" });
+});
+
+async function prepareSplitCardCheckout(page: Page, query: string) {
+  await page.setViewportSize({ width: 390, height: 640 });
+  await mount(page, query);
+  await page
+    .getByRole("button", { name: "Tarjeta débito", exact: true })
+    .click();
+  await page
+    .getByRole("textbox", { name: "Número de comprobante", exact: true })
+    .fill("00001");
+  await page
+    .getByRole("button", { name: "Dividir cobro", exact: true })
+    .click();
+  await page
+    .getByRole("textbox", { name: "Importe 1", exact: true })
+    .fill("50");
+  await page
+    .getByRole("textbox", { name: "Importe 2", exact: true })
+    .fill("50");
+  await page
+    .getByRole("combobox", { name: "Medio de pago 2", exact: true })
+    .selectOption("card-2");
+  const receipt = page.getByRole("textbox", {
+    name: "Número de comprobante del pago 2",
+    exact: true,
+  });
+  await receipt.fill("00002");
+  return {
+    receipt,
+    body: page.locator(".pos-payment-body"),
+    notice: page.locator(".pos-payment-notices").getByRole("alert"),
+  };
+}
+
+test("a repeated checkout error is visible from the last split payment", async ({
+  page,
+}) => {
+  const { body, notice, receipt } = await prepareSplitCardCheckout(
+    page,
+    "?error=1",
+  );
+  for (const expectedAttempts of ["1", "2"]) {
+    await receipt.scrollIntoViewIfNeeded();
+    expect(await body.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+    await confirm(page).click();
+    await expect(page.locator("[data-attempts]")).toHaveText(expectedAttempts);
+    await expect(notice).toBeInViewport({ ratio: 1 });
+    await expect(receipt).toHaveValue("00002");
+  }
+});
+
+test("uncertain checkout shows retry and discard from the last split payment", async ({
+  page,
+}) => {
+  const { body, notice, receipt } = await prepareSplitCardCheckout(
+    page,
+    "?uncertain=1",
+  );
+  expect(await body.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+  await confirm(page).click();
+  await expect(notice).toBeInViewport({ ratio: 1 });
+  const retry = page.getByRole("button", {
+    name: "Reintentar mismo envío",
+    exact: true,
+  });
+  const discard = page.getByRole("button", {
+    name: "Descartar envío rechazado",
+    exact: true,
+  });
+  await expect(retry).toBeInViewport({ ratio: 1 });
+  await expect(discard).toBeInViewport({ ratio: 1 });
+  await expect(confirm(page)).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "Cancelar", exact: true }),
+  ).toBeDisabled();
+  await retry.click();
+  await expect(page.locator("[data-retries]")).toHaveText("1");
+  await discard.click();
+  await expect(notice).toHaveCount(0);
+  await expect(confirm(page)).toBeEnabled();
+  await expect(receipt).toHaveValue("00002");
+});

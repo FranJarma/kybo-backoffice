@@ -31,6 +31,26 @@ afterEach(() => {
 });
 
 describe("the POS catalogue resource", () => {
+  it("retains a complete local catalogue through repeated loads and filtering", async () => {
+    const pending = deferred<Response>();
+    const fetch = vi.fn().mockReturnValue(pending.promise);
+    vi.stubGlobal("fetch", fetch);
+    const states: CatalogueState[] = [];
+    const loader = createCatalogueLoader({
+      channel: "counter",
+      onChange: (state) => states.push(state),
+    });
+    const loading = loader.load();
+    await loader.load();
+    pending.resolve(page([row("first"), row("last", "Té frío")], 2));
+    await loading;
+    expect(filterCatalogue(states.at(-1)!.data.rows, "te frio", "tea")).toEqual(
+      [row("last", "Té frío")],
+    );
+    await loader.load();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(states.at(-1)?.complete).toBe(true);
+  });
   it("publishes usable first-page rows while later pages are still pending, then searches the whole catalogue locally", async () => {
     const second = deferred<Response>();
     const nextStarted = deferred<void>();

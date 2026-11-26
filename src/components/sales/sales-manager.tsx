@@ -1,18 +1,20 @@
 "use client";
 import { LatestOrderPrinting } from "@/components/printing/order-printing";
 import { useErrorFeedback } from "@/components/ui/use-error-feedback";
-import { CashStatusGate } from "@/components/cash/status-gate";
 import {
-  ComboConfigurator,
-  type ComboSaleConfiguration,
-} from "./combo-configurator";
-
+  CashStatusGate,
+  type CashGateStatus,
+} from "@/components/cash/status-gate";
+import type { ComboSaleConfiguration } from "./combo-configurator";
+import { OrderConfigurationDialog } from "./order-configuration-dialog";
+import {
+  saveConfiguredLine,
+  type OrderConfiguration,
+} from "./order-configuration";
 import { CustomerPicker } from "./customer-picker";
-import { OrderControls } from "./order-controls";
-import { ProductConfigurator } from "./product-configurator";
+import { OrderControls, OrderFulfillmentFields } from "./order-controls";
 import type { PublicConfiguration } from "@/modules/recipes/configuration";
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import {
   Plus,
   RotateCw,
@@ -21,6 +23,7 @@ import {
   MessageSquare,
   SlidersHorizontal,
   ShoppingBag,
+  Trash2,
   ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -55,8 +58,14 @@ import {
   appendCartLine,
   type CartLine,
 } from "./cart";
-import { Control, SalesScope, OperationNotice, selectClass } from "./shared";
-import { PaymentDialog, type PaymentDraft } from "./payment-dialog";
+import { Control, SalesScope, OperationNotice } from "./shared";
+import { SaleConfirmation } from "./sale-confirmation";
+import { validSaleResult } from "./sale-result";
+import {
+  PaymentDialog,
+  type CashPaymentSummary,
+  type PaymentDraft,
+} from "./payment-dialog";
 import { SaleDetailDialog } from "./sale-detail-dialog";
 import { SaleHistory } from "./history";
 import { LocatorPicker } from "@/components/pickup/locator-picker";
@@ -93,6 +102,7 @@ export function SalesManager({
   branchId,
   role,
   accountKind = "personal",
+  fontClassName = "",
   initialAccount,
   initialTable,
 }: {
@@ -100,6 +110,7 @@ export function SalesManager({
   branchId: string;
   role: Actor["role"];
   accountKind?: Actor["accountKind"];
+  fontClassName?: string;
   initialAccount?: string;
   initialTable?: string;
 }) {
@@ -150,6 +161,20 @@ export function SalesManager({
     [cancelReason, setCancelReason] = useState(""),
     [refundConfirmed, setRefundConfirmed] = useState(false);
   const [lastSale, setLastSale] = useState<SaleDetail | null>(null);
+  const [cashStatus, setCashStatus] = useState<CashGateStatus | null>(null);
+  const cashClosed = !!(
+    cashStatus?.available &&
+    cashStatus.activated &&
+    !cashStatus.open
+  );
+  const receipt = useRef<{
+    requestId: string;
+    cash?: CashPaymentSummary;
+  } | null>(null);
+  const [confirmation, setConfirmation] = useState<{
+    sale: SaleDetail;
+    cash?: CashPaymentSummary;
+  } | null>(null);
   const [locatorNumber, setLocatorNumber] = useState<number | null>(null);
   const [locatorMode, setLocatorMode] = useState<"automatic" | "manual">(
     "automatic",
@@ -216,7 +241,13 @@ export function SalesManager({
     activeDetailId.current = id;
     try {
       const sale = await getJson<SaleDetail>(`/api/sales/${id}`);
-      if (detailRequest.current.revision === request) setDetail(sale);
+      if (detailRequest.current.revision !== request) return;
+      setDetail(sale);
+      setConfirmation((previous) =>
+        previous?.sale.id === sale.id && previous.sale.revision < sale.revision
+          ? null
+          : previous,
+      );
     } catch (error) {
       if (detailRequest.current.revision === request)
         setDetailError(
@@ -229,8 +260,19 @@ export function SalesManager({
     }
   }, []);
   const success = useCallback(
-    (result: unknown) => {
+    (
+      result: unknown,
+      command: { url: string; payload: Record<string, unknown> },
+    ) => {
       const sale = result as SaleDetail;
+      const cash =
+        receipt.current?.requestId === command.payload.requestId
+          ? receipt.current?.cash
+          : undefined;
+      receipt.current = null;
+      const isCollection =
+        command.url === "/api/sales" || command.url.endsWith("/payments");
+      setConfirmation(isCollection ? { sale, cash } : null);
       if (view === "detail" && activeDetailId.current !== sale.id) {
         setRefresh((n) => n + 1);
         setNotice(`Venta #${sale.number} actualizada.`);
@@ -258,7 +300,7 @@ export function SalesManager({
         setPaymentOpen(false);
         setCancelOpen(false);
         setError("");
-        setNotice(`Venta #${sale.number} actualizada.`);
+        setNotice(isCollection ? "" : `Venta #${sale.number} actualizada.`);
         setRefresh((n) => n + 1);
         const url = new URL(window.location.href);
         url.searchParams.set("account", sale.id);
@@ -278,16 +320,8 @@ export function SalesManager({
       activeDetailId.current = sale.id;
       setReturnView("new");
       setView(nextCustomer ? "new" : "detail");
-      if (nextCustomer) {
-        setLastSale(sale);
-        setNotes("");
-        setCustomerId("");
-        setCustomerName("");
-        setCustomerEmail("");
-        setTabletPanel("products");
-        setExternalId("");
-        setTableId("");
-      }
+      setLastSale(sale);
+      if (nextCustomer) setTabletPanel("products");
       setLines([]);
       setNotes("");
       setCustomerId("");
@@ -303,9 +337,7 @@ export function SalesManager({
       setDraftGeneration((n) => n + 1);
       setPaymentOpen(false);
       setCancelOpen(false);
-      setNotice(
-        `Venta #${sale.number} guardada.${sale.orders.at(-1)?.locatorNumber != null ? ` Localizador ${sale.orders.at(-1)!.locatorNumber}.` : ""}${nextCustomer ? " Lista la caja para el siguiente pedido." : " Los importes quedaron registrados."}`,
-      );
+      setNotice("");
       setError("");
       setRefresh((n) => n + 1);
     },
@@ -315,8 +347,16 @@ export function SalesManager({
     actorId,
     "sale",
     success,
+    undefined,
+    validSaleResult,
   );
   const locked = operation.locked || loading;
+  useEffect(() => {
+    if (operation.status === 409 && operation.errorCode === "CASH_CLOSED")
+      window.dispatchEvent(
+        new CustomEvent("kybo:cash-changed", { detail: { branchId } }),
+      );
+  }, [branchId, operation.status, operation.errorCode]);
   useEffect(() => {
     let live = true;
     getJson<SaleLookup>("/api/sales/lookup?kind=payment-methods")
@@ -418,11 +458,13 @@ export function SalesManager({
     window.history.replaceState(null, "", "/sales");
     setView("new");
     setReturnView("new");
+    setConfirmation(null);
     setError("");
     setNotice("");
     operation.clearError();
   }
   function changeOrigin(next: SaleOrigin) {
+    setConfirmation(null);
     setOrigin(next);
     setChannel(next === "delivery" ? "pedidosya" : "counter");
     setFulfillment(
@@ -435,11 +477,9 @@ export function SalesManager({
     setTableId("");
     setNotice("");
   }
-  const [configuring, setConfiguring] = useState<{
-    row: SaleLookup["rows"][number];
-    config: PublicConfiguration | ComboSaleConfiguration;
-    index?: number;
-  } | null>(null);
+  const [configuring, setConfiguring] = useState<OrderConfiguration | null>(
+    null,
+  );
   const loadConfiguration = useCallback(
     (row: SaleLookup["rows"][number]) => {
       const combo = row.kind === "combo";
@@ -493,6 +533,7 @@ export function SalesManager({
     )
       return;
     configRequest.current = true;
+    setConfirmation(null);
     setLoading(true);
     setError("");
     try {
@@ -540,7 +581,16 @@ export function SalesManager({
       setLoading(false);
     }
   }
-  function submit(payments: PaymentDraft[] = []) {
+  function submitPayment(
+    url: string,
+    payload: Record<string, unknown>,
+    cash?: CashPaymentSummary,
+  ) {
+    const requestId = crypto.randomUUID();
+    if (operation.submit(url, { ...payload, requestId }))
+      receipt.current = { requestId, cash };
+  }
+  function submit(payments: PaymentDraft[] = [], cash?: CashPaymentSummary) {
     if (locked || !valid) return;
     const linePayload = lines.map(
       ({
@@ -582,27 +632,30 @@ export function SalesManager({
       });
       return;
     }
-    operation.submit("/api/sales", {
-      requestId: crypto.randomUUID(),
-      origin,
-      channel,
-      fulfillment,
-      tableId: tableId || undefined,
-      customerId: customerId || undefined,
-      newCustomer:
-        !customerId && customerName.trim()
-          ? {
-              name: customerName.trim(),
-              email: customerEmail.trim() || undefined,
-            }
-          : undefined,
-      externalId: origin === "delivery" ? externalId.trim() : undefined,
-      notes,
-      lines: linePayload,
-      payments,
-      locatorMode,
-      locatorNumber: locatorMode === "manual" ? locatorNumber : undefined,
-    });
+    submitPayment(
+      "/api/sales",
+      {
+        origin,
+        channel,
+        fulfillment,
+        tableId: tableId || undefined,
+        customerId: customerId || undefined,
+        newCustomer:
+          !customerId && customerName.trim()
+            ? {
+                name: customerName.trim(),
+                email: customerEmail.trim() || undefined,
+              }
+            : undefined,
+        externalId: origin === "delivery" ? externalId.trim() : undefined,
+        notes,
+        lines: linePayload,
+        payments,
+        locatorMode,
+        locatorNumber: locatorMode === "manual" ? locatorNumber : undefined,
+      },
+      cash,
+    );
   }
   async function selectSale(id: string) {
     if (operation.locked || fulfillmentBusy) return;
@@ -686,6 +739,7 @@ export function SalesManager({
             modifiers: config.model === "configurable" ? [] : undefined,
             configurable: false,
             name: row.name,
+            expectedPricingRevision: row.pricingRevision,
             expectedPrice: row.price ?? null,
             price: defaultPrice
               ? row.price === null || row.price === undefined
@@ -708,6 +762,11 @@ export function SalesManager({
     }
   }
   const showCart = workspaceView === "new" || workspaceView === "append";
+  const quantities: Record<string, number> = {};
+  for (const line of lines)
+    quantities[line.productId] =
+      (quantities[line.productId] ?? 0) + line.quantity;
+  const surfaceClassName = `pos-surface ${fontClassName}`;
   const orderActions = (
     <>
       {!isAppend && (
@@ -726,6 +785,7 @@ export function SalesManager({
         />
       )}
       <LocatorPicker
+        surfaceClassName={surfaceClassName}
         value={displayedLocator}
         automatic={locatorMode === "automatic"}
         onAutomatic={() => setLocatorMode("automatic")}
@@ -742,98 +802,33 @@ export function SalesManager({
   const workspace = (
     <div
       data-pos
-      className="flex h-full min-h-0 flex-col gap-2 [&>div:not([data-pos-workspace])]:shrink-0"
+      data-pos-active-panel={showCart ? tabletPanel : undefined}
+      className={`${surfaceClassName} flex h-full min-h-0 flex-col gap-2 [&>div:not([data-pos-workspace])]:shrink-0`}
     >
-      <CashStatusGate key={branchId} branchId={branchId} actorId={actorId} />
-      <Dialog
-        open={!!configuring}
-        onOpenChange={(open) => {
-          if (!open) setConfiguring(null);
+      <CashStatusGate
+        key={branchId}
+        branchId={branchId}
+        actorId={actorId}
+        onStatusChange={setCashStatus}
+      />
+      <OrderConfigurationDialog
+        configuration={configuring}
+        line={
+          configuring?.index === undefined
+            ? undefined
+            : lines[configuring.index]
+        }
+        channel={channel}
+        fontClassName={fontClassName}
+        onClose={() => setConfiguring(null)}
+        onConfirm={(configuration) => {
+          if (!configuring) return;
+          setLines((current) =>
+            saveConfiguredLine(current, configuring, configuration),
+          );
+          setConfiguring(null);
         }}
-      >
-        <DialogContent className="max-h-[94dvh] overflow-y-auto sm:max-w-4xl [&_[data-slot=dialog-close]]:flex [&_[data-slot=dialog-close]]:min-h-12 [&_[data-slot=dialog-close]]:min-w-12 [&_[data-slot=dialog-close]]:items-center [&_[data-slot=dialog-close]]:justify-center">
-          <DialogHeader>
-            <DialogTitle>{configuring?.row.name}</DialogTitle>
-            <DialogDescription>
-              Elegí las opciones de este producto.
-            </DialogDescription>
-          </DialogHeader>
-          {configuring &&
-            ("definition" in configuring.config ? (
-              <ComboConfigurator
-                config={configuring.config}
-                initialChoices={
-                  configuring.index === undefined
-                    ? undefined
-                    : lines[configuring.index]?.comboChoices
-                }
-                channel={channel}
-                onCancel={() => setConfiguring(null)}
-                onConfirm={(data) => {
-                  setLines((current) => {
-                    const index = configuring.index;
-                    const item = {
-                      ...(index === undefined
-                        ? newCartLine(configuring.row)
-                        : current[index]),
-                      ...data,
-                      expectedPricingRevision:
-                        configuring.config.pricingRevision,
-                      configurable: true,
-                      expectedFulfillmentVersionId: undefined,
-                      expectedRecipeVersionId: undefined,
-                      modifiers: [],
-                      price: inputDecimal(data.expectedPrice),
-                      priceReason: "",
-                    };
-                    return index === undefined
-                      ? appendCartLine(current, item)
-                      : current.map((l, i) => (i === index ? item : l));
-                  });
-                  setConfiguring(null);
-                }}
-              />
-            ) : (
-              <ProductConfigurator
-                key={configuring.config.recipeVersionId}
-                config={configuring.config}
-                initialSelection={
-                  configuring.index === undefined
-                    ? undefined
-                    : lines[configuring.index]?.modifiers
-                }
-                onCancel={() => setConfiguring(null)}
-                onConfirm={(data) => {
-                  setLines((current) => {
-                    const index = configuring.index;
-                    const item = {
-                      ...(index === undefined
-                        ? newCartLine(configuring.row)
-                        : current[index]),
-                      ...data,
-                      expectedPricingRevision:
-                        configuring.config.pricingRevision,
-                      expectedFulfillmentVersionId:
-                        "fulfillmentVersionId" in configuring.config
-                          ? (configuring.config.fulfillmentVersionId ??
-                            undefined)
-                          : undefined,
-                      configurable:
-                        "groups" in configuring.config &&
-                        configuring.config.groups.length > 0,
-                      price: inputDecimal(data.expectedPrice),
-                      priceReason: "",
-                    };
-                    return index === undefined
-                      ? appendCartLine(current, item)
-                      : current.map((l, i) => (i === index ? item : l));
-                  });
-                  setConfiguring(null);
-                }}
-              />
-            ))}
-        </DialogContent>
-      </Dialog>
+      />
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line">
         <div>
           <h1
@@ -849,7 +844,7 @@ export function SalesManager({
             disabled={locked || view === "append"}
             aria-pressed={showCart}
             onClick={() => {
-              if (view !== "new") newSale();
+              if (view !== "new" || confirmation) newSale();
             }}
             className={`min-h-12 border-b-2 px-3 text-sm font-bold ${showCart ? "border-blue text-blue" : "border-transparent text-muted"}`}
           >
@@ -950,6 +945,19 @@ export function SalesManager({
       {accountKind === "store" && (
         <WorkplaceSummary key={branchId} branchId={branchId} />
       )}
+      {confirmation &&
+        confirmation.sale.id === lastSale?.id &&
+        view === "new" &&
+        !lines.length && (
+          <SaleConfirmation
+            {...confirmation}
+            onNewSale={() => {
+              setConfirmation(null);
+              setTabletPanel("products");
+              document.querySelector<HTMLElement>("[data-pos-title]")?.focus();
+            }}
+          />
+        )}
       {lastSale && view === "new" && (
         <LatestOrderPrinting
           key={`${actorId}:${branchId}:${lastSale.id}`}
@@ -991,7 +999,7 @@ export function SalesManager({
       <div hidden={!showCart} className={showCart ? "contents" : "hidden"}>
         <div className="@container shrink-0">
           {isAppend && appendSale ? (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-xl border border-blue-100 bg-blue-50 p-3">
               <div>
                 <p className="text-sm font-bold text-brand">
                   Nuevo pedido · {appendSale.tableName}
@@ -1038,6 +1046,23 @@ export function SalesManager({
                 setTableId("");
               }}
               actions={orderActions}
+              details={
+                <OrderFulfillmentFields
+                  origin={origin}
+                  fulfillment={fulfillment}
+                  channel={channel}
+                  externalId={externalId}
+                  tableId={tableId}
+                  tables={tables}
+                  selectedTable={selectedTable}
+                  locked={locked}
+                  originLocked={lines.length > 0}
+                  onChannelChange={setChannel}
+                  onExternalIdChange={setExternalId}
+                  onTableChange={setTableId}
+                  onOpenAccount={(saleId) => void selectSale(saleId)}
+                />
+              }
             />
           )}
         </div>
@@ -1049,99 +1074,6 @@ export function SalesManager({
             data-pos-catalogue
             className={`${tabletPanel === "products" ? "flex" : "hidden"} min-h-0 min-w-0 flex-col gap-3 lg:flex`}
           >
-            {!isAppend &&
-              (origin !== "counter" || fulfillment === "dine_in") && (
-                <section className="surface-panel grid shrink-0 gap-3 p-3 sm:grid-cols-2">
-                  {origin === "delivery" ? (
-                    <>
-                      <Control label="Plataforma" required>
-                        <select
-                          required
-                          value={channel}
-                          disabled={locked || lines.length > 0}
-                          className={selectClass}
-                          onChange={(e) =>
-                            setChannel(e.target.value as SaleChannel)
-                          }
-                        >
-                          <option value="pedidosya">PedidosYa</option>
-                          <option value="ubereats">Uber Eats</option>
-                        </select>
-                      </Control>
-                      <Control label="Número del pedido externo" required>
-                        <Input
-                          required
-                          value={externalId}
-                          disabled={locked}
-                          maxLength={80}
-                          placeholder="Ej. 2280061098"
-                          onChange={(e) => setExternalId(e.target.value)}
-                        />
-                      </Control>
-                    </>
-                  ) : origin === "table" ? (
-                    <Control label="Mesa" required>
-                      <select
-                        required
-                        className={selectClass}
-                        disabled={locked || lines.length > 0}
-                        value={tableId}
-                        onChange={(e) => setTableId(e.target.value)}
-                      >
-                        <option value="">Seleccionar mesa</option>
-                        {tables.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.name}
-                            {t.saleId ? " · Cuenta abierta" : ""}
-                          </option>
-                        ))}
-                      </select>
-                    </Control>
-                  ) : (
-                    <>
-                      {fulfillment === "dine_in" && (
-                        <Control label="Mesa de consumo" optional>
-                          <select
-                            className={selectClass}
-                            value={tableId}
-                            disabled={locked}
-                            onChange={(e) => setTableId(e.target.value)}
-                          >
-                            <option value="">Sin mesa asociada</option>
-                            {tables.map((t) => (
-                              <option key={t.id} value={t.id}>
-                                {t.name}
-                              </option>
-                            ))}
-                          </select>
-                        </Control>
-                      )}
-                    </>
-                  )}
-                  {origin === "table" && selectedTable?.saleId && (
-                    <p className="text-sm text-amber-800 sm:col-span-2">
-                      Esta mesa ya tiene una cuenta.{" "}
-                      <Link
-                        className="font-bold underline"
-                        href={`/sales?account=${selectedTable.saleId}`}
-                        onClick={(event) => {
-                          if (
-                            !event.metaKey &&
-                            !event.ctrlKey &&
-                            !event.shiftKey &&
-                            !event.altKey
-                          ) {
-                            event.preventDefault();
-                            void selectSale(selectedTable.saleId!);
-                          }
-                        }}
-                      >
-                        Abrir venta #{selectedTable.saleNumber}
-                      </Link>
-                    </p>
-                  )}
-                </section>
-              )}
             <ProductPicker
               key={channel}
               channel={channel}
@@ -1149,20 +1081,13 @@ export function SalesManager({
               onAdd={configure}
               refresh={catalogueRefresh}
               onCatalogueLoaded={warmConfigurations}
+              quantities={quantities}
             />
           </div>
           <div
             data-pos-order
             className={`${tabletPanel === "order" ? "flex" : "hidden"} min-h-0 min-w-0 flex-col gap-2 lg:flex`}
           >
-            <Button
-              variant="outline"
-              className="min-h-12 justify-start lg:hidden"
-              onClick={() => setTabletPanel("products")}
-            >
-              <ArrowLeft size={18} />
-              Seguir agregando productos
-            </Button>
             <Cart
               key={`${branchId}:${channel}:${draftGeneration}`}
               onEdit={(index) =>
@@ -1176,22 +1101,54 @@ export function SalesManager({
               locked={locked}
               allowPrice={role !== "staff" || channel !== "counter"}
               total={total}
+              fontClassName={fontClassName}
+              tools={
+                <div className="pos-order-tools">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="pos-order-note"
+                    disabled={locked}
+                    onClick={() => {
+                      setOrderNoteDraft(notes);
+                      setOrderNoteOpen(true);
+                    }}
+                  >
+                    <MessageSquare size={16} />
+                    <span className="truncate">
+                      {notes ? `Nota: ${notes}` : "Agregar nota al pedido"}
+                    </span>
+                  </Button>
+                  {lines.length > 0 && (
+                    <>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        aria-label="Actualizar precios"
+                        disabled={locked}
+                        onClick={refreshPrices}
+                      >
+                        <RotateCw size={14} />
+                        Precios
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        aria-label="Vaciar pedido"
+                        disabled={locked}
+                        onClick={() => setClearOpen(true)}
+                      >
+                        <Trash2 size={14} />
+                        Vaciar
+                      </Button>
+                    </>
+                  )}
+                </div>
+              }
             >
-              <Button
-                type="button"
-                variant="ghost"
-                className="mb-1 min-h-12 w-full justify-start px-0 text-xs text-muted"
-                disabled={locked}
-                onClick={() => {
-                  setOrderNoteDraft(notes);
-                  setOrderNoteOpen(true);
-                }}
-              >
-                <MessageSquare size={16} />
-                <span className="truncate">
-                  {notes ? `Nota: ${notes}` : "Agregar nota al pedido"}
-                </span>
-              </Button>
               {isAppend ? (
                 <Button
                   className="min-h-14 w-full text-base"
@@ -1209,7 +1166,7 @@ export function SalesManager({
                   Abrir cuenta
                 </Button>
               ) : (
-                <div className="space-y-2">
+                <>
                   <Button
                     className="min-h-14 w-full text-base"
                     disabled={locked || !valid}
@@ -1223,12 +1180,11 @@ export function SalesManager({
                   >
                     {lines.length > 0 && total === "0.00"
                       ? "Registrar sin cargo"
-                      : origin === "delivery"
-                        ? "Registrar con cobro"
-                        : "Cobrar"}
+                      : "Continuar al cobro"}
                   </Button>
                   {origin === "delivery" && (
                     <Button
+                      data-pos-order-pending
                       className="w-full"
                       variant="outline"
                       disabled={locked || !valid}
@@ -1237,30 +1193,18 @@ export function SalesManager({
                       Registrar pendiente de cobro
                     </Button>
                   )}
-                </div>
+                </>
               )}
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full lg:hidden"
+                onClick={() => setTabletPanel("products")}
+              >
+                <ArrowLeft size={18} />
+                Seguir agregando
+              </Button>
             </Cart>
-            {lines.length > 0 && (
-              <div className="flex flex-wrap items-center justify-between gap-1">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={locked}
-                  onClick={refreshPrices}
-                >
-                  <RotateCw size={14} />
-                  Actualizar precios
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={locked}
-                  onClick={() => setClearOpen(true)}
-                >
-                  Vaciar pedido
-                </Button>
-              </div>
-            )}
           </div>
         </div>
         {tabletPanel === "products" && (
@@ -1290,7 +1234,7 @@ export function SalesManager({
         )}
       </div>
       <Dialog open={stockHelpOpen} onOpenChange={setStockHelpOpen}>
-        <DialogContent showCloseButton={false}>
+        <DialogContent showCloseButton={false} className={surfaceClassName}>
           <DialogHeader>
             <DialogTitle>Stock y preparación</DialogTitle>
             <DialogDescription>
@@ -1313,7 +1257,7 @@ export function SalesManager({
           if (!locked) setOrderNoteOpen(open);
         }}
       >
-        <DialogContent showCloseButton={false}>
+        <DialogContent showCloseButton={false} className={surfaceClassName}>
           <DialogHeader>
             <DialogTitle>Observaciones del pedido</DialogTitle>
             <DialogDescription>
@@ -1359,7 +1303,7 @@ export function SalesManager({
         </DialogContent>
       </Dialog>
       <Dialog open={clearOpen} onOpenChange={setClearOpen}>
-        <DialogContent>
+        <DialogContent showCloseButton={false} className={surfaceClassName}>
           <DialogHeader>
             <DialogTitle>¿Vaciar el pedido?</DialogTitle>
             <DialogDescription>
@@ -1403,6 +1347,7 @@ export function SalesManager({
       )}
       {view === "detail" && (
         <SaleDetailDialog
+          surfaceClassName={surfaceClassName}
           actorId={actorId}
           sale={detail}
           loading={detailLoading}
@@ -1429,13 +1374,20 @@ export function SalesManager({
           }}
           feedback={
             !paymentOpen && !cancelOpen ? (
-              <OperationNotice
-                eventKey={operation.errorAttempt}
-                error={operation.error}
-                uncertain={operation.uncertain}
-                busy={operation.busy}
-                retry={operation.retry}
-              />
+              <>
+                {confirmation && confirmation.sale.id === detail?.id && (
+                  <SaleConfirmation {...confirmation} />
+                )}
+                <OperationNotice
+                  eventKey={operation.errorAttempt}
+                  error={operation.error}
+                  uncertain={operation.uncertain}
+                  busy={operation.busy}
+                  retry={operation.retry}
+                  canDiscard={operation.canDiscard}
+                  onDiscard={operation.discardRejected}
+                />
+              </>
             ) : null
           }
           onPay={() => {
@@ -1483,6 +1435,7 @@ export function SalesManager({
       )}
       {paymentOpen && (
         <PaymentDialog
+          fontClassName={fontClassName}
           eventKey={operation.errorAttempt}
           methods={paymentMethods}
           methodsError={methodsError}
@@ -1501,6 +1454,7 @@ export function SalesManager({
           }
           exact={view !== "detail" && origin === "counter"}
           locked={operation.locked}
+          cashClosed={cashClosed}
           checkoutIssue={view === "detail" ? "" : locatorIssue || customerIssue}
           busy={operation.busy}
           error={operation.error}
@@ -1509,14 +1463,17 @@ export function SalesManager({
           canDiscard={operation.canDiscard}
           onDiscard={operation.discardRejected}
           onClose={() => setPaymentOpen(false)}
-          onConfirm={(payments) => {
+          onConfirm={(payments, cash) => {
             if (view === "detail" && detail)
-              operation.submit(`/api/sales/${detail.id}/payments`, {
-                requestId: crypto.randomUUID(),
-                revision: detail.revision,
-                payments,
-              });
-            else submit(payments);
+              submitPayment(
+                `/api/sales/${detail.id}/payments`,
+                {
+                  revision: detail.revision,
+                  payments,
+                },
+                cash,
+              );
+            else submit(payments, cash);
           }}
         />
       )}
@@ -1527,7 +1484,10 @@ export function SalesManager({
             if (!v && !operation.locked) setCancelOpen(false);
           }}
         >
-          <DialogContent showCloseButton={!operation.locked}>
+          <DialogContent
+            showCloseButton={!operation.locked}
+            className={surfaceClassName}
+          >
             <DialogHeader>
               <DialogTitle>Anular venta #{detail.number}</DialogTitle>
               <DialogDescription>
@@ -1541,6 +1501,8 @@ export function SalesManager({
               uncertain={operation.uncertain}
               busy={operation.busy}
               retry={operation.retry}
+              canDiscard={operation.canDiscard}
+              onDiscard={operation.discardRejected}
             />
             <Control label="Motivo de anulación" required>
               <Input

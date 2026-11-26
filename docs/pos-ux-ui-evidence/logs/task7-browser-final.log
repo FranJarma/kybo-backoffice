@@ -1,0 +1,94 @@
+
+Running 86 tests using 1 worker
+
+
+
+(node:5104) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[1/86] tests\e2e\payment-receipt.spec.ts:73:1 ΓÇ║ card receipt is inline, required, focused and preserves leading zeros after an error
+[2/86] tests\e2e\payment-receipt.spec.ts:97:1 ΓÇ║ split card payments keep separate receipt numbers
+[3/86] tests\e2e\payment-receipt.spec.ts:133:1 ΓÇ║ switching to cash clears a card receipt and does not require one
+[4/86] tests\e2e\payment-receipt.spec.ts:155:1 ΓÇ║ platform collections do not request a posnet receipt
+[5/86] tests\e2e\payment-receipt.spec.ts:168:3 ΓÇ║ card receipt and confirmation remain usable at 390px
+[6/86] tests\e2e\payment-receipt.spec.ts:168:3 ΓÇ║ card receipt and confirmation remain usable at 1024px
+[7/86] tests\e2e\payment-receipt.spec.ts:168:3 ΓÇ║ card receipt and confirmation remain usable at 1440px
+[8/86] tests\e2e\payment-receipt.spec.ts:191:1 ΓÇ║ cash needs valid tender and distinguishes exact, over and under payment
+[9/86] tests\e2e\payment-receipt.spec.ts:230:1 ΓÇ║ dividing preserves cash and receipts while allocations are edited or removed
+[10/86] tests\e2e\payment-receipt.spec.ts:307:1 ΓÇ║ partial allocation proposes the remaining amount when a payment is added
+[11/86] tests\e2e\payment-receipt.spec.ts:328:1 ΓÇ║ transfer requires verification of the current details and limits the combined reference
+[12/86] tests\e2e\payment-receipt.spec.ts:387:1 ΓÇ║ cancelling checkout does not confirm or retain payment details when reopened
+[13/86] tests\e2e\payment-receipt.spec.ts:407:1 ΓÇ║ desktop cash checkout fits the approved two-column layout
+[14/86] tests\e2e\payment-receipt.spec.ts:463:1 ΓÇ║ cash actions stay visible when the visual viewport shrinks for the keyboard
+[15/86] tests\e2e\payment-receipt.spec.ts:549:1 ΓÇ║ a repeated checkout error is visible from the last split payment
+[16/86] tests\e2e\payment-receipt.spec.ts:566:1 ΓÇ║ uncertain checkout shows retry and discard from the last split payment
+[17/86] tests\e2e\pos-operation.spec.ts:113:1 ΓÇ║ admits one immediate submit and persists it while the response is slow
+[18/86] tests\e2e\pos-operation.spec.ts:142:1 ΓÇ║ admits one immediate retry of the same request
+[19/86] tests\e2e\pos-operation.spec.ts:158:1 ΓÇ║ replays the same request after network loss, 503 and truncated JSON across reloads
+[20/86] tests\e2e\pos-operation.spec.ts:194:1 ΓÇ║ blocks discard immediately when retry begins
+[21/86] tests\e2e\pos-operation.spec.ts:254:3 ΓÇ║ preserves the request after malformed 200 sale data (commission)
+[22/86] tests\e2e\pos-operation.spec.ts:254:3 ΓÇ║ preserves the request after malformed 200 sale data (vat)
+[23/86] tests\e2e\pos-operation.spec.ts:254:3 ΓÇ║ preserves the request after malformed 200 sale data (empty)
+[24/86] tests\e2e\pos-operation.spec.ts:254:3 ΓÇ║ preserves the request after malformed 200 sale data (order)
+[25/86] tests\e2e\pos-operation.spec.ts:254:3 ΓÇ║ preserves the request after malformed 200 sale data (line)
+[26/86] tests\e2e\pos-operation.spec.ts:254:3 ΓÇ║ preserves the request after malformed 200 sale data (payment)
+[27/86] tests\e2e\pos-operation.spec.ts:274:1 ΓÇ║ releases admission when saving the initial request fails
+[28/86] tests\e2e\pos-operation.spec.ts:295:1 ΓÇ║ rejects a retained submit while the original request is uncertain
+[29/86] tests\e2e\pos-operation.spec.ts:308:1 ΓÇ║ rejects a retained retry after its request has been confirmed
+[30/86] tests\e2e\pos-operation.spec.ts:325:1 ΓÇ║ rejects a retained permission discard after an uncertain retry
+[31/86] tests\e2e\pos-operation.spec.ts:348:3 ΓÇ║ keeps the new terminal's command through a late 200 and reload
+[32/86] tests\e2e\pos-operation.spec.ts:348:3 ΓÇ║ keeps the new terminal's command through a late 503 and reload
+[33/86] tests\e2e\pos-operation.spec.ts:404:1 ΓÇ║ recovers from failed verification when storage cleanup also fails
+[34/86] tests\e2e\pos-operation.spec.ts:455:1 ΓÇ║ does not dispatch a verified command after switching its branch
+[35/86] tests\e2e\pos-surface.spec.ts:1242:3 ΓÇ║ checkout confirms paid cash and starts a new draft at 1280px
+[36/86] tests\e2e\pos-surface.spec.ts:1242:3 ΓÇ║ checkout confirms paid cash and starts a new draft at 390px
+[37/86] tests\e2e\pos-surface.spec.ts:1294:1 ΓÇ║ checkout confirmation lists each split payment and known cash change
+[38/86] tests\e2e\pos-surface.spec.ts:1407:1 ΓÇ║ Task 7 keeps a catalogue product physically reachable after mobile payment
+[39/86] tests\e2e\pos-surface.spec.ts:1432:1 ΓÇ║ Task 7 keeps the existing table account link touch-sized with a native destination
+[40/86] tests\e2e\pos-surface.spec.ts:1461:1 ΓÇ║ Task 7 keeps clear-order cancellation reachable by touch and restores focus
+[41/86] tests\e2e\pos-surface.spec.ts:1498:1 ΓÇ║ Task 7 uses the loaded POS font and touch targets in locator and sale detail portals
+[42/86] tests\e2e\pos-surface.spec.ts:1546:1 ΓÇ║ Task 7 keeps cash actions usable after a keyboard-sized viewport reduction
+[43/86] tests\e2e\pos-surface.spec.ts:1579:1 ΓÇ║ Task 7 renders canonical product bands and actual Next thumbnail fallback
+[44/86] tests\e2e\pos-surface.spec.ts:1677:3 ΓÇ║ checkout expires the previous confirmation after a newer table-paid revision
+[45/86] tests\e2e\pos-surface.spec.ts:1677:3 ΓÇ║ checkout expires the previous confirmation after a newer paid-cancelled revision
+[46/86] tests\e2e\pos-surface.spec.ts:1763:1 ΓÇ║ checkout renders accepted admin commission and VAT decimal fields without errors
+[47/86] tests\e2e\pos-surface.spec.ts:1815:3 ΓÇ║ checkout labels an unpaid table sale as pending
+[48/86] tests\e2e\pos-surface.spec.ts:1815:3 ΓÇ║ checkout labels an unpaid delivery sale as pending
+[49/86] tests\e2e\pos-surface.spec.ts:1861:1 ΓÇ║ checkout labels a zero total sale as free without invented payment values
+[50/86] tests\e2e\pos-surface.spec.ts:1884:1 ΓÇ║ checkout blocks known closed cash and returns to the intact order
+[51/86] tests\e2e\pos-surface.spec.ts:1906:1 ΓÇ║ checkout allows platform collection when local cash is closed
+[52/86] tests\e2e\pos-surface.spec.ts:1940:1 ΓÇ║ checkout stock rejection keeps the draft and exposes inline shortage details
+[53/86] tests\e2e\pos-surface.spec.ts:1968:1 ΓÇ║ checkout refreshes stale open cash after server rejection without losing the draft
+[54/86] tests\e2e\pos-surface.spec.ts:2010:1 ΓÇ║ checkout leaves cash status unchanged for an unrelated server conflict
+[55/86] tests\e2e\pos-surface.spec.ts:2031:1 ΓÇ║ checkout waits for a slow definitive response with one physical sale request
+[56/86] tests\e2e\pos-surface.spec.ts:2063:3 ΓÇ║ checkout replays the exact uncertain network request and preserves the draft
+[57/86] tests\e2e\pos-surface.spec.ts:2063:3 ΓÇ║ checkout replays the exact uncertain invalid-json request and preserves the draft
+[58/86] tests\e2e\pos-surface.spec.ts:2063:3 ΓÇ║ checkout replays the exact uncertain invalid-result request and preserves the draft
+[59/86] tests\e2e\pos-surface.spec.ts:2063:3 ΓÇ║ checkout replays the exact uncertain server-error request and preserves the draft
+[60/86] tests\e2e\pos-surface.spec.ts:2108:1 ΓÇ║ checkout printing recovery keeps the sale confirmed and never repeats its payment
+[61/86] tests\e2e\pos-surface.spec.ts:2165:3 ΓÇ║ order layout remains physically usable at 320x720
+[62/86] tests\e2e\pos-surface.spec.ts:2165:3 ΓÇ║ order layout remains physically usable at 360x740
+[63/86] tests\e2e\pos-surface.spec.ts:2165:3 ΓÇ║ order layout remains physically usable at 390x844
+[64/86] tests\e2e\pos-surface.spec.ts:2165:3 ΓÇ║ order layout remains physically usable at 768x1024
+[65/86] tests\e2e\pos-surface.spec.ts:2165:3 ΓÇ║ order layout remains physically usable at 1024x768
+[66/86] tests\e2e\pos-surface.spec.ts:2165:3 ΓÇ║ order layout remains physically usable at 1280x800
+[67/86] tests\e2e\pos-surface.spec.ts:2165:3 ΓÇ║ order layout remains physically usable at 390x640
+[68/86] tests\e2e\pos-surface.spec.ts:2241:1 ΓÇ║ order line edits, notes, removal and undo retain the configured draft on mobile
+[69/86] tests\e2e\pos-surface.spec.ts:2335:3 ΓÇ║ order line removal leaves surviving actions usable at 320x720
+[70/86] tests\e2e\pos-surface.spec.ts:2335:3 ΓÇ║ order line removal leaves surviving actions usable at 390x640
+[71/86] tests\e2e\pos-surface.spec.ts:2386:1 ΓÇ║ order draft retains customer, locator, notes and quantities through history detail and breakpoints
+[72/86] tests\e2e\pos-surface.spec.ts:2459:1 ΓÇ║ order combo editing preserves quantity notes and confirmed component choices
+[73/86] tests\e2e\pos-surface.spec.ts:2536:1 ΓÇ║ order scroll keeps its heading total and checkout action reachable
+[74/86] tests\e2e\pos-surface.spec.ts:2594:1 ΓÇ║ modifiers keep header and footer fixed while option groups scroll
+[75/86] tests\e2e\pos-surface.spec.ts:2699:3 ΓÇ║ modifiers preserve product defaults, recipe membership and accessible actions at 1280px
+[76/86] tests\e2e\pos-surface.spec.ts:2699:3 ΓÇ║ modifiers preserve product defaults, recipe membership and accessible actions at 768px
+[77/86] tests\e2e\pos-surface.spec.ts:2699:3 ΓÇ║ modifiers preserve product defaults, recipe membership and accessible actions at 390px
+[78/86] tests\e2e\pos-surface.spec.ts:2772:1 ΓÇ║ modifiers enforce multiple selection, per-option maxima and group minimum and maximum
+[79/86] tests\e2e\pos-surface.spec.ts:2826:1 ΓÇ║ modifiers keep confirmed quantity and notes through cancellation and update price and labels only when saved
+[80/86] tests\e2e\pos-surface.spec.ts:2964:3 ΓÇ║ catalogue focus ring stays visible at the first and last categories when using the keyboard
+[81/86] tests\e2e\pos-surface.spec.ts:2964:3 ΓÇ║ catalogue focus ring stays visible at the first and last products when using the keyboard
+[82/86] tests\e2e\pos-surface.spec.ts:3001:1 ΓÇ║ catalogue handles an empty category and a long product name with a missing photo
+[83/86] tests\e2e\pos-surface.spec.ts:3067:3 ΓÇ║ POS baseline preserves one draft and cached options at 1280px
+[84/86] tests\e2e\pos-surface.spec.ts:3067:3 ΓÇ║ POS baseline preserves one draft and cached options at 768px
+[85/86] tests\e2e\pos-surface.spec.ts:3067:3 ΓÇ║ POS baseline preserves one draft and cached options at 390px
+[86/86] tests\e2e\pos-surface.spec.ts:3215:1 ΓÇ║ catalogue uses one responsive grid, real quantities and cached data across filters and widths
+  86 passed (2.2m)

@@ -1,0 +1,230 @@
+
+> kybo-operations-next@0.6.0-rc.1 test C:\Users\franj\AppData\Local\Temp\kybo-pos-ux-ui-api
+> vitest run
+
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.1 [39m[90mC:/Users/franj/AppData/Local/Temp/kybo-pos-ux-ui-api[39m
+
+ [31mΓ¥»[39m tests/inventory.test.ts [2m([22m[2m23 tests[22m[2m | [22m[33m23 skipped[39m[2m)[22m[33m 4211[2mms[22m[39m
+ [31mΓ¥»[39m tests/modifiers.test.ts [2m([22m[2m13 tests[22m[2m | [22m[33m13 skipped[39m[2m)[22m[33m 5063[2mms[22m[39m
+ [31mΓ¥»[39m tests/checkout-performance.integration.test.ts [2m([22m[2m6 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 5461[2mms[22m[39m
+[31m   [31m├ù[31m confirms two recipe drinks with bounded database round trips and intact reservations[39m[32m 247[2mms[22m[39m
+ [31mΓ¥»[39m tests/preparation.test.ts [2m([22m[2m10 tests[22m[2m | [22m[33m10 skipped[39m[2m)[22m[33m 3748[2mms[22m[39m
+ [31mΓ¥»[39m tests/sales.test.ts [2m([22m[2m12 tests[22m[2m | [22m[33m12 skipped[39m[2m)[22m[33m 3542[2mms[22m[39m
+ [31mΓ¥»[39m tests/production.test.ts [2m([22m[2m6 tests[22m[2m | [22m[33m6 skipped[39m[2m)[22m[33m 4444[2mms[22m[39m
+(node:18992) ExperimentalWarning: The supports Web Crypto API method is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:18992) ExperimentalWarning: The ML-DSA-44 Web Crypto API algorithm is an experimental feature and might change at any time
+ [31mΓ¥»[39m tests/pos-loading-browser.test.ts [2m([22m[2m2 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[33m 4408[2mms[22m[39m
+[31m   [31m├ù[31m shares one real pickup request across the POS actions and dialog, with standalone fallback and branch isolation[39m[33m 366[2mms[22m[39m
+[31m   [31m├ù[31m lets a cashier use the first catalogue page and retains it through a late-page error and retry[39m[33m 319[2mms[22m[39m
+ [31mΓ¥»[39m tests/catalog.test.ts [2m([22m[2m8 tests[22m[2m | [22m[33m8 skipped[39m[2m)[22m[33m 4319[2mms[22m[39m
+ [31mΓ¥»[39m tests/preparation-feed-browser.test.ts [2m([22m[2m2 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[33m 1599[2mms[22m[39m
+[31m   [31m├ù[31m coalesces wake events into one active preparation HTTP read[39m[32m 276[2mms[22m[39m
+[31m   [31m├ù[31m replaces pending reads on revision and URL changes without accepting old responses[39m[32m 224[2mms[22m[39m
+ [31mΓ¥»[39m tests/recipes.test.ts [2m([22m[2m5 tests[22m[2m | [22m[33m5 skipped[39m[2m)[22m[33m 4355[2mms[22m[39m
+(node:20232) ExperimentalWarning: The supports Web Crypto API method is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:20232) ExperimentalWarning: The ML-DSA-44 Web Crypto API algorithm is an experimental feature and might change at any time
+ [31mΓ¥»[39m tests/data-model.concurrency.test.ts [2m([22m[2m2 tests[22m[2m | [22m[33m2 skipped[39m[2m)[22m[32m 7[2mms[22m[39m
+ [31mΓ¥»[39m tests/modifiers-schema.test.ts [2m([22m[2m3 tests[22m[2m | [22m[33m3 skipped[39m[2m)[22m[33m 3282[2mms[22m[39m
+ [31mΓ¥»[39m tests/manual-day-isolation.test.ts [2m([22m[2m4 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[32m 153[2mms[22m[39m
+[31m   [31m├ù[31m rejects a database directory redirected outside its run[39m[32m 9[2mms[22m[39m
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ» Failed Suites 9 ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»
+
+ FAIL  tests/catalog.test.ts [ tests/catalog.test.ts ]
+ FAIL  tests/inventory.test.ts [ tests/inventory.test.ts ]
+ FAIL  tests/modifiers-schema.test.ts [ tests/modifiers-schema.test.ts ]
+ FAIL  tests/modifiers.test.ts [ tests/modifiers.test.ts ]
+ FAIL  tests/preparation.test.ts [ tests/preparation.test.ts ]
+ FAIL  tests/production.test.ts [ tests/production.test.ts ]
+ FAIL  tests/recipes.test.ts [ tests/recipes.test.ts ]
+ FAIL  tests/sales.test.ts [ tests/sales.test.ts ]
+Error: Failed query: DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM data_model_state WHERE id=1 AND status='transitioning')
+    OR (SELECT count(*) FROM branches)<>1 OR (SELECT count(*) FROM locations)<>1 THEN
+    RAISE EXCEPTION 'Explicit transition mapping must be applied before finalization';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM stock_balances b FULL JOIN inventory_valuations v ON v.item_id=b.item_id
+    WHERE b.physical_quantity IS DISTINCT FROM v.quantity OR b.stock_value IS DISTINCT FROM v.value
+  ) OR EXISTS (
+    SELECT 1 FROM stock_balances b FULL JOIN location_stock_balances s ON s.item_id=b.item_id
+    WHERE b.physical_quantity IS DISTINCT FROM s.quantity OR s.reserved<>0
+  ) OR EXISTS (
+    SELECT 1 FROM inventory_lots l FULL JOIN lot_location_balances b ON b.lot_id=l.id
+    WHERE l.remaining_quantity IS DISTINCT FROM b.quantity OR b.reserved<>0 OR l.blocked IS DISTINCT FROM b.blocked
+  ) OR EXISTS (
+    SELECT 1 FROM stock_balances b FULL JOIN stock_transition_baselines s ON s.item_id=b.item_id
+    WHERE b.physical_quantity IS DISTINCT FROM s.quantity OR b.stock_value IS DISTINCT FROM s.value
+  ) OR EXISTS (
+    SELECT 1 FROM inventory_lots l FULL JOIN lot_transition_baselines b ON b.lot_id=l.id
+    WHERE l.remaining_quantity IS DISTINCT FROM b.quantity
+  ) THEN RAISE EXCEPTION 'Transition reconciliation failed'; END IF;
+END;
+$$;
+
+
+params: 
+ Γ¥» PglitePreparedQuery.queryWithCache node_modules/src/pg-core/session.ts:73:11
+ Γ¥» node_modules/src/pg-core/dialect.ts:102:7
+ Γ¥» node_modules/@electric-sql/pglite/src/base.ts:514:24
+
+Caused by: error: Explicit transition mapping must be applied before finalization
+ Γ¥» pe.Ue node_modules/@electric-sql/pglite/dist/chunk-2BOC2OMW.js:1:17959
+ Γ¥» pe.tt node_modules/@electric-sql/pglite/dist/chunk-2BOC2OMW.js:1:15347
+ Γ¥» pe.parse node_modules/@electric-sql/pglite/dist/chunk-2BOC2OMW.js:1:14021
+ Γ¥» N.qe node_modules/@electric-sql/pglite/dist/index.js:5:1762
+ Γ¥» node_modules/@electric-sql/pglite/dist/index.js:5:1155
+ Γ¥» null.<anonymous> wasm:/wasm/0267bb86:1:5922000
+ Γ¥» null.<anonymous> wasm:/wasm/0267bb86:1:2616044
+ Γ¥» null.<anonymous> wasm:/wasm/0267bb86:1:2648530
+ Γ¥» null.<anonymous> wasm:/wasm/0267bb86:1:2649134
+ Γ¥» null.<anonymous> wasm:/wasm/0267bb86:1:5569870
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»
+Serialized Error: { length: 178, severity: 'ERROR', code: 'P0001', detail: undefined, hint: undefined, position: undefined, internalPosition: undefined, internalQuery: undefined, where: 'PL/pgSQL function inline_code_block line 5 at RAISE', schema: undefined, table: undefined, dataType: undefined, constraint: undefined, file: 'pl_exec.c', routine: 'exec_stmt_raise', query: 'DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM data_model_state WHERE id=1 AND status='transitioning')
+    OR (SELECT count(*) FROM branches)<>1 OR (SELECT count(*) FROM locations)<>1 THEN
+    RAISE EXCEPTION 'Explicit transition mapping must be applied before finalization';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM stock_balances b FULL JOIN inventory_valuations v ON v.item_id=b.item_id
+    WHERE b.physical_quantity IS DISTINCT FROM v.quantity OR b.stock_value IS DISTINCT FROM v.value
+  ) OR EXISTS (
+    SELECT 1 FROM stock_balances b FULL JOIN location_stock_balances s ON s.item_id=b.item_id
+    WHERE b.physical_quantity IS DISTINCT FROM s.quantity OR s.reserved<>0
+  ) OR EXISTS (
+    SELECT 1 FROM inventory_lots l FULL JOIN lot_location_balances b ON b.lot_id=l.id
+    WHERE l.remaining_quantity IS DISTINCT FROM b.quantity OR b.reserved<>0 OR l.blocked IS DISTINCT FROM b.blocked
+  ) OR EXISTS (
+    SELECT 1 FROM stock_balances b FULL JOIN stock_transition_baselines s ON s.item_id=b.item_id
+    WHERE b.physical_quantity IS DISTINCT FROM s.quantity OR b.stock_value IS DISTINCT FROM s.value
+  ) OR EXISTS (
+    SELECT 1 FROM inventory_lots l FULL JOIN lot_transition_baselines b ON b.lot_id=l.id
+    WHERE l.remaining_quantity IS DISTINCT FROM b.quantity
+  ) THEN RAISE EXCEPTION 'Transition reconciliation failed'; END IF;
+END;
+$$;
+
+', params: [], queryOptions: { rowMode: 'object', parsers: { '1082': 'Function<1082>', '1114': 'Function<1114>', '1115': 'Function<1115>', '1182': 'Function<1182>', '1184': 'Function<1184>', '1185': 'Function<1185>', '1186': 'Function<1186>', '1187': 'Function<1187>', '1231': 'Function<1231>' } } }
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[1/15]ΓÄ»
+
+ FAIL  tests/data-model.concurrency.test.ts [ tests/data-model.concurrency.test.ts ]
+Error: Falta KYBO_TEST_DATABASE_URL; no se usa DATABASE_URL como alternativa.
+ Γ¥» createDedicatedTestContext tests/helpers/postgres-data-model.ts:12:11
+     10|   const connectionString = process.env.KYBO_TEST_DATABASE_URL;
+     11|   if (!connectionString)
+     12|     throw new Error(
+       |           ^
+     13|       "Falta KYBO_TEST_DATABASE_URL; no se usa DATABASE_URL como alterΓÇª
+     14|     );
+ Γ¥» tests/data-model.concurrency.test.ts:20:19
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[2/15]ΓÄ»
+
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ» Failed Tests 6 ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»
+
+ FAIL  tests/checkout-performance.integration.test.ts > confirms two recipe drinks with bounded database round trips and intact reservations
+AssertionError: expected 52 to be less than or equal to 50
+ Γ¥» tests/checkout-performance.integration.test.ts:400:26
+    398|     beforePayments.length + 1,
+    399|   );
+    400|   expect(queries.length).toBeLessThanOrEqual(50);
+       |                          ^
+    401| });
+    402| it("rejects a claim context that belongs to another actor or branch", ΓÇª
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[3/15]ΓÄ»
+
+ FAIL  tests/manual-day-isolation.test.ts > rejects a database directory redirected outside its run
+Error: EPERM: operation not permitted, symlink 'C:\Users\franj\AppData\Local\Temp\kybo-pos-ux-ui-api\.local\manual-day\outside-1b1723fe' -> 'C:\Users\franj\AppData\Local\Temp\kybo-pos-ux-ui-api\.local\manual-day\20261105-120000-89b1b931\database'
+ Γ¥» tests/manual-day-isolation.test.ts:70:3
+     68|   );
+     69|   mkdirSync(external);
+     70|   symlinkSync(external, resolve(root, "database"), "junction");
+       |   ^
+     71|   expect(() => childEnvironment(root)).toThrow(/redireccion|ensayo/i);
+     72| });
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[4/15]ΓÄ»
+
+ FAIL  tests/pos-loading-browser.test.ts > shares one real pickup request across the POS actions and dialog, with standalone fallback and branch isolation
+Error: page.goto: net::ERR_NETWORK_ACCESS_DENIED at http://127.0.0.1:49948/?mode=pickup
+Call log:
+  - navigating to "http://127.0.0.1:49948/?mode=pickup", waiting until "load"
+
+ Γ¥» harness tests/pos-loading-browser.test.ts:117:14
+    115|   const errors: string[] = [];
+    116|   page.on("pageerror", (error) => errors.push(error.message));
+    117|   await page.goto(
+       |              ^
+    118|     `http://127.0.0.1:${(server.address() as { port: number }).port}/?ΓÇª
+    119|   );
+ Γ¥» tests/pos-loading-browser.test.ts:135:17
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[5/15]ΓÄ»
+
+ FAIL  tests/pos-loading-browser.test.ts > lets a cashier use the first catalogue page and retains it through a late-page error and retry
+Error: page.goto: net::ERR_NETWORK_ACCESS_DENIED at http://127.0.0.1:59933/?mode=catalogue
+Call log:
+  - navigating to "http://127.0.0.1:59933/?mode=catalogue", waiting until "load"
+
+ Γ¥» harness tests/pos-loading-browser.test.ts:117:14
+    115|   const errors: string[] = [];
+    116|   page.on("pageerror", (error) => errors.push(error.message));
+    117|   await page.goto(
+       |              ^
+    118|     `http://127.0.0.1:${(server.address() as { port: number }).port}/?ΓÇª
+    119|   );
+ Γ¥» tests/pos-loading-browser.test.ts:185:17
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[6/15]ΓÄ»
+
+ FAIL  tests/preparation-feed-browser.test.ts > coalesces wake events into one active preparation HTTP read
+Error: page.goto: net::ERR_NETWORK_ACCESS_DENIED at http://127.0.0.1:63765/
+Call log:
+  - navigating to "http://127.0.0.1:63765/", waiting until "load"
+
+ Γ¥» harness tests/preparation-feed-browser.test.ts:113:14
+    111|   const errors: string[] = [];
+    112|   page.on("pageerror", (error) => errors.push(error.message));
+    113|   await page.goto(
+       |              ^
+    114|     `http://127.0.0.1:${(server.address() as { port: number }).port}`,
+    115|   );
+ Γ¥» tests/preparation-feed-browser.test.ts:144:17
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[7/15]ΓÄ»
+
+ FAIL  tests/preparation-feed-browser.test.ts > replaces pending reads on revision and URL changes without accepting old responses
+Error: page.goto: net::ERR_NETWORK_ACCESS_DENIED at http://127.0.0.1:50503/
+Call log:
+  - navigating to "http://127.0.0.1:50503/", waiting until "load"
+
+ Γ¥» harness tests/preparation-feed-browser.test.ts:113:14
+    111|   const errors: string[] = [];
+    112|   page.on("pageerror", (error) => errors.push(error.message));
+    113|   await page.goto(
+       |              ^
+    114|     `http://127.0.0.1:${(server.address() as { port: number }).port}`,
+    115|   );
+ Γ¥» tests/preparation-feed-browser.test.ts:180:17
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[8/15]ΓÄ»
+
+
+[2m Test Files [22m [1m[31m13 failed[39m[22m[2m | [22m[1m[32m204 passed[39m[22m[2m | [22m[33m2 skipped[39m[90m (219)[39m
+[2m      Tests [22m [1m[31m6 failed[39m[22m[2m | [22m[1m[32m1175 passed[39m[22m[2m | [22m[33m86 skipped[39m[90m (1267)[39m
+[2m   Start at [22m 02:31:58
+[2m   Duration [22m 947.94s[2m (tests 58%, import 40%, transform 2%)[22m
+
+[2m     Import [22m [33m656 modules were evaluated 2933 times[39m[2m ┬╖ 351.94s total, 40% of tracked time[22m
+[2m            [22m [2m~273.22s faster with [22m[33misolate: false[39m[2m ΓÇö shared modules are evaluated once per worker instead of once per file[22m
+[2m            [22m [2mlearn more: https://vitest.dev/guide/improving-performance#test-isolation[22m
+
+ΓÇëELIFECYCLEΓÇë Test failed. See above for more details.

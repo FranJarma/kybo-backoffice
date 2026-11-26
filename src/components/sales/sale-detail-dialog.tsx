@@ -9,6 +9,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { money } from "@/components/inventory/shared";
+import { cn } from "@/lib/utils";
 import {
   originLabels,
   channelLabels,
@@ -35,6 +36,7 @@ export function SaleDetailDialog({
   restoreFocus,
   feedback,
   onOpenSale,
+  surfaceClassName,
 }: {
   sale: SaleDetail | null;
   loading: boolean;
@@ -53,6 +55,7 @@ export function SaleDetailDialog({
   restoreFocus: () => void;
   feedback?: ReactNode;
   onOpenSale: (saleId: string) => void;
+  surfaceClassName?: string;
 }) {
   return (
     <Dialog
@@ -64,7 +67,10 @@ export function SaleDetailDialog({
       <DialogContent
         data-sale-detail
         showCloseButton={false}
-        className="flex h-[min(900px,calc(100dvh-2rem))] max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-[1100px] flex-col gap-0 overflow-hidden bg-white p-0 sm:max-w-[1100px] max-sm:inset-0 max-sm:h-dvh max-sm:max-h-dvh max-sm:w-full max-sm:max-w-full max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none data-[state=open]:animate-none data-[state=closed]:animate-none"
+        className={cn(
+          "flex h-[min(900px,calc(100dvh-2rem))] max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-[1100px] flex-col gap-0 overflow-hidden bg-white p-0 sm:max-w-[1100px] max-sm:inset-0 max-sm:h-dvh max-sm:max-h-dvh max-sm:w-full max-sm:max-w-full max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none data-[state=open]:animate-none data-[state=closed]:animate-none",
+          surfaceClassName,
+        )}
         onEscapeKeyDown={(event) => {
           if (locked) event.preventDefault();
         }}

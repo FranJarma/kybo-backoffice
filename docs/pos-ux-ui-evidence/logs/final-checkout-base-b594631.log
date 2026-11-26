@@ -1,0 +1,50 @@
+Base commit b5946319f0f875854d52a981338157aea3368981
+Base tree a6d4cf3fd7fb636aed2017baf05d4127367ffb0f
+Isolated test root C:\Users\franj\AppData\Local\Temp\kybo-pos-ux-ui-api\.next-e2e\checkout-base-b594631-1795240232529
+Archived tracked files checked (src, drizzle, tests, scripts, test config and dependencies): 1025
+Content mismatches after normalizing git text line endings: 0
+Vite config: C:\Users\franj\AppData\Local\Temp\kybo-pos-ux-ui-api\.next-e2e\checkout-base-b594631-1795240232529\vitest.config.ts
+Source alias: C:\Users\franj\AppData\Local\Temp\kybo-pos-ux-ui-api\.next-e2e\checkout-base-b594631-1795240232529\src
+NODE_MODULES C:\Users\franj\AppData\Local\Temp\kybo-pos-ux-ui-api\node_modules\vitest\package.json
+Test file: C:\Users\franj\AppData\Local\Temp\kybo-pos-ux-ui-api\.next-e2e\checkout-base-b594631-1795240232529\tests\checkout-performance.integration.test.ts
+No local dependency tree or loadable .env files
+Command: node <parent>/node_modules/vitest/vitest.mjs run tests/checkout-performance.integration.test.ts --config ./vitest.config.ts --pool=threads --maxWorkers=1 --reporter=verbose
+
+ RUN  v5.0.1 C:/Users/franj/AppData/Local/Temp/kybo-pos-ux-ui-api/.next-e2e/checkout-base-b594631-1795240232529
+
+ Γ£ô tests/checkout-performance.integration.test.ts > rejects aggregate shortages without keeping a sale, payment, document or reservation 218ms
+ Γ£ô tests/checkout-performance.integration.test.ts > shares FEFO lots across lines and releases every allocation when cancelled 352ms
+ Γ£ô tests/checkout-performance.integration.test.ts > keeps split payments in the same canonical order on creation and replay 135ms
+stdout | tests/checkout-performance.integration.test.ts > confirms two recipe drinks with bounded database round trips and intact reservations
+CHECKOUT_PROFILE {"queries":52,"elapsedMs":110,"simulatedRttMs":0,"tables":{"branches":3,"operational_users":2,"stock_operations":1,"select":3,"cash_settings":1,"recipe_graph_lock":2,"products":2,"recipe_versions":2,"recipe_lines":2,"recipe_modifier_groups":2,"items":3,"payment_methods":1,"sales":1,"sale_orders":2,"sale_lines":2,"sale_line_components":1,"stock_documents":2,"inventory_valuations":2,"locations":1,"location_stock_balances":3,"lot_location_balances":3,"stock_reservations":1,"reservation_allocations":1,"sale_line_fulfillments":1,"locator_assignments":1,"preparation_stations":1,"preparation_tasks":1,"preparation_task_lines":1,"preparation_events":1,"printing_settings":1,"sale_payments":1,"audit_events":1}}
+
+ ├ù tests/checkout-performance.integration.test.ts > confirms two recipe drinks with bounded database round trips and intact reservations 168ms
+   ΓåÆ expected 52 to be less than or equal to 50
+ Γ£ô tests/checkout-performance.integration.test.ts > rejects a claim context that belongs to another actor or branch 3ms
+ Γ£ô tests/checkout-performance.integration.test.ts > rechecks revocation after customer resolution and rejects replay after account revocation 121ms
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ» Failed Tests 1 ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»
+
+ FAIL  tests/checkout-performance.integration.test.ts > confirms two recipe drinks with bounded database round trips and intact reservations
+AssertionError: expected 52 to be less than or equal to 50
+ Γ¥» tests/checkout-performance.integration.test.ts:400:26
+    398|     beforePayments.length + 1,
+    399|   );
+    400|   expect(queries.length).toBeLessThanOrEqual(50);
+       |                          ^
+    401| });
+    402| it("rejects a claim context that belongs to another actor or branch", ΓÇª
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[1/1]ΓÄ»
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 passed (6)
+   Start at  02:51:35
+   Duration  10.62s (tests 52%, transform 26%, import 21%)
+
+  Transform  transforming modules took 2.72s ┬╖ 26% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
+
+Vitest exit code: 1

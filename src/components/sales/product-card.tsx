@@ -1,0 +1,61 @@
+"use client";
+
+import { Button } from "@/components/ui/button";
+import { ProductPhoto } from "@/components/products/photo";
+import type { ProductCardModel } from "./pos-presentation";
+
+export function ProductCard({
+  product,
+  quantity = 0,
+  locked = false,
+  onSelect,
+}: {
+  product: ProductCardModel;
+  quantity?: number;
+  locked?: boolean;
+  onSelect: () => void;
+}) {
+  const stripeHeight = 100 / product.appearance.stripes.length;
+  const stripeStops = product.appearance.stripes.map(
+    (color, index) =>
+      `${color} ${index * stripeHeight}% ${(index + 1) * stripeHeight}%`,
+  );
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      className="pos-product-card"
+      aria-label={`Agregar ${product.name}`}
+      data-in-order={quantity > 0}
+      disabled={locked || !product.selectable}
+      onClick={onSelect}
+    >
+      <span className="pos-product-name">{product.name}</span>
+      <span className="pos-product-price">{product.priceLabel}</span>
+      {product.unavailableReason && (
+        <span className="pos-product-availability">
+          {product.unavailableReason}
+        </span>
+      )}
+      {quantity > 0 && (
+        <span className="pos-product-count">{quantity} en pedido</span>
+      )}
+      <span
+        className="pos-product-stripes"
+        aria-hidden="true"
+        style={{
+          background: `linear-gradient(to bottom, ${stripeStops.join(", ")})`,
+        }}
+      />
+      <span className="pos-product-photo">
+        <ProductPhoto
+          id={product.imageAssetId}
+          src={product.appearance.photoSrc}
+          name={product.name}
+          variant="thumbnail"
+          sizes="100px"
+        />
+      </span>
+    </Button>
+  );
+}

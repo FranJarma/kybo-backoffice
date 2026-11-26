@@ -1,0 +1,52 @@
+
+> kybo-operations-next@0.6.0-rc.1 test C:\Users\franj\AppData\Local\Temp\kybo-pos-ux-ui-api
+> vitest run "tests/pos-presentation.test.ts"
+
+
+ RUN  v5.0.1 C:/Users/franj/AppData/Local/Temp/kybo-pos-ux-ui-api
+
+ Γ¥» tests/pos-presentation.test.ts (9 tests | 2 failed) 84ms
+   Γ¥» POS product presentation (9)
+     ├ù preserves the approved palette if the product is renamed 8ms
+     ├ù renders the approved top and bottom bands without repeating the gradient 7ms
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ» Failed Tests 2 ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»
+
+ FAIL  tests/pos-presentation.test.ts > POS product presentation > preserves the approved palette if the product is renamed
+AssertionError: expected { stripes: [ '#E7EDF0', ΓÇª(3) ] } to not deeply equal { stripes: [ '#E7EDF0', ΓÇª(3) ] }
+
+Compared values have no visual difference.
+
+ Γ¥» tests/pos-presentation.test.ts:59:37
+     57|     expect(renamed.appearance).toEqual(approved.appearance);
+     58|     expect(sameName.appearance).toEqual(productAppearance("unknown"));
+     59|     expect(approved.appearance).not.toEqual(sameName.appearance);
+       |                                     ^
+     60|   });
+     61|   it("uses a neutral palette for catalogue products without an approveΓÇª
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[1/2]ΓÄ»
+
+ FAIL  tests/pos-presentation.test.ts > POS product presentation > renders the approved top and bottom bands without repeating the gradient
+AssertionError: expected '<button data-slot="button" data-variaΓÇª' to contain 'linear-gradient(to bottom, #E9CEAE 0'
+
+Expected: "linear-gradient(to bottom, #E9CEAE 0"
+Received: "<button data-slot="button" data-variant="outline" data-size="default" class="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-[9px] text-sm font-bold whitespace-nowrap shadow-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&amp;_svg]:pointer-events-none [&amp;_svg]:shrink-0 [&amp;_svg:not([class*=&#x27;size-&#x27;])]:size-4 border border-input bg-background text-brand hover:bg-secondary hover:text-brand h-11 px-4 py-2 has-[&gt;svg]:px-3 pos-product-card" type="button" aria-label="Agregar T├⌐ con un nombre largo" data-in-order="false"><span class="pos-product-name">T├⌐ con un nombre largo</span><span class="pos-product-price">$┬á7.500,00</span><span class="pos-product-stripes" aria-hidden="true" style="background:repeating-linear-gradient(to bottom, #E7EDF0 0 16px, #D5E1E8 16px 32px, #C5D4DC 32px 48px, #B6C9D4 48px 64px)"></span><span class="pos-product-photo"><span class="relative flex aspect-square w-full items-center justify-center overflow-hidden rounded-xl bg-slate-50 text-muted"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image" aria-label="Sin foto"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path></svg></span></span></button>"
+
+ Γ¥» tests/pos-presentation.test.ts:80:18
+     78|     );
+     79|
+     80|     expect(html).toContain("linear-gradient(to bottom, #E9CEAE 0");
+       |                  ^
+     81|     expect(html).toContain("#68432F 75% 87.5%, #352B26 87.5% 100%)");
+     82|     expect(html).not.toContain("repeating-linear-gradient");
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[2/2]ΓÄ»
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 7 passed (9)
+   Start at  02:27:56
+   Duration  1.87s (import 80%, transform 14%, tests 5%, worker 1%)
+
+ΓÇëELIFECYCLEΓÇë Test failed. See above for more details.

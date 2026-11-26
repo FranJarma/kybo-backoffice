@@ -3,6 +3,14 @@ import { PosRequestCache } from "../src/components/sales/request-cache";
 import { cashChange } from "../src/components/sales/payment-math";
 
 describe("POS request cache", () => {
+  it("bounds retained scoped results without evicting the newest configuration", async () => {
+    const cache = new PosRequestCache<number>(100, 2);
+    await cache.get("first", async () => 1, 0);
+    await cache.get("second", async () => 2, 1);
+    await cache.get("third", async () => 3, 2);
+    expect(await cache.get("third", async () => 30, 3)).toBe(3);
+    expect(await cache.get("first", async () => 4, 4)).toBe(4);
+  });
   it("deduplicates requests and refreshes expired results", async () => {
     const cache = new PosRequestCache<number>(100, 5);
     let calls = 0;

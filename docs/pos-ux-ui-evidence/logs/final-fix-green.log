@@ -1,0 +1,20 @@
+
+Running 13 tests using 1 worker
+
+(node:21148) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok  1 tests\e2e\pos-operation.spec.ts:496:3 ΓÇ║ retries the identical command after 400 and failed local cleanup (823ms)
+  ok  2 tests\e2e\pos-operation.spec.ts:496:3 ΓÇ║ retries the identical command after 409 and failed local cleanup (564ms)
+  ok  3 tests\e2e\pos-surface.spec.ts:3384:5 ΓÇ║ shell catalogue has a physical product target at 320 with delivery (1.2s)
+  ok  4 tests\e2e\pos-surface.spec.ts:3384:5 ΓÇ║ shell catalogue has a physical product target at 320 with receipt (1.7s)
+  ok  5 tests\e2e\pos-surface.spec.ts:3384:5 ΓÇ║ shell catalogue has a physical product target at 360 with delivery (1.2s)
+  ok  6 tests\e2e\pos-surface.spec.ts:3384:5 ΓÇ║ shell catalogue has a physical product target at 360 with receipt (1.6s)
+  ok  7 tests\e2e\pos-surface.spec.ts:3384:5 ΓÇ║ shell catalogue has a physical product target at 390 with delivery (1.2s)
+  ok  8 tests\e2e\pos-surface.spec.ts:3384:5 ΓÇ║ shell catalogue has a physical product target at 390 with receipt (1.7s)
+  ok  9 tests\e2e\pos-surface.spec.ts:3434:1 ΓÇ║ cancel permission rejection releases sale detail and retains the new draft (2.0s)
+  ok 10 tests\e2e\pos-surface.spec.ts:3476:3 ΓÇ║ account deep link preserves the discard policy for a saved command (uncertain=false) (1.6s)
+  ok 11 tests\e2e\pos-surface.spec.ts:3476:3 ΓÇ║ account deep link preserves the discard policy for a saved command (uncertain=true) (1.5s)
+  ok 12 tests\e2e\pos-surface.spec.ts:3528:1 ΓÇ║ price refresh sends the current revision and preserves the edited line (2.0s)
+  ok 13 tests\e2e\pos-surface.spec.ts:3593:1 ΓÇ║ checkout can safely discard after a stock rejection and failed local cleanup (1.5s)
+
+  13 passed (30.2s)

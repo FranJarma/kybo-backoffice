@@ -1,0 +1,42 @@
+
+Running 1 test using 1 worker
+
+(node:37648) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x  1 tests\e2e\pos-surface.spec.ts:3470:1 ΓÇ║ price refresh sends the current revision and preserves the edited line (2.2s)
+
+
+  1) tests\e2e\pos-surface.spec.ts:3470:1 ΓÇ║ price refresh sends the current revision and preserves the edited line 
+
+    Error: expect(received).toMatchObject(expected)
+
+    - Expected  - 1
+    + Received  + 1
+
+    @@ -1,9 +1,9 @@
+      Array [
+        Object {
+          "expectedPrice": "3900.00",
+    -     "expectedPricingRevision": 2,
+    +     "expectedPricingRevision": 1,
+          "notes": "Sin az├║car",
+          "price": "3900",
+          "productId": "20000000-0000-4000-8000-000000000008",
+          "quantity": 2,
+        },
+
+      3496 |   const original = {productId:fresh.id,quantity:2,notes:"Sin az├║car"};
+      3497 |   expect(app.submissions[0].payload.lines).toMatchObject([{...original,expectedPrice:"3500.00",expectedPricingRevision:1}]);
+    > 3498 |   expect(app.submissions[1].payload.lines).toMatchObject([{...original,price:"3900",expectedPrice:"3900.00",expectedPricingRevision:2}]);
+           |                                            ^
+      3499 | });
+      3500 |
+      3501 | test("checkout can safely discard after a stock rejection and failed local cleanup", async ({page})=>{
+        at C:\Users\franj\AppData\Local\Temp\kybo-pos-ux-ui-api\tests\e2e\pos-surface.spec.ts:3498:44
+
+    Error Context: .next-e2e\price-red-results\pos-surface-price-refresh--4d986-d-preserves-the-edited-line\error-context.md
+
+    Error Context: .next-e2e\price-red-results\pos-surface-price-refresh--4d986-d-preserves-the-edited-line\error-context.md
+
+  1 failed
+    tests\e2e\pos-surface.spec.ts:3470:1 ΓÇ║ price refresh sends the current revision and preserves the edited line 

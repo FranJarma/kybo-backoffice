@@ -72,6 +72,8 @@ La densidad depende del trabajo: POS y cobro priorizan uso táctil; administraci
 
 Manrope como familia compartida. Título de página, título de sección, etiqueta y ayuda tienen funciones distintas. Mantener el perfil compacto del POS y sus cantidades visibles. Datos operativos no deben depender de microtexto de 10–11px. Importes y cantidades usan cifras tabulares; unidades explícitas.
 
+La superficie de ventas aplica la excepción visual aprobada para el POS: Barlow y sus tokens propios en catálogo, pedido, configuración, cobro y sus portales. El alcance y los contratos están en [Superficie POS](docs/pos-ux-ui.md). La fuente se carga con next/font/local; los componentes y módulos administrativos conservan la tipografía y los tokens de esta guía.
+
 ## Layout
 
 Escala de espacios 4/8/12/16/24/32px. Agrupar etiqueta, campo y ayuda; separar bloques de decisión con 24px. La base de página usa 24px laterales en escritorio y 16px en móvil. Las listas administrativas priorizan comparación: Editar visible y secundarios en un menú cuando su apilado aumenta la fila.

@@ -1,0 +1,85 @@
+{
+  "baseline": "SalesManager isolated browser fixture; mocked API, no DB; production profiling build",
+  "final": "SalesManager isolated browser fixture; mocked API, no DB; production profiling build",
+  "finalCodeCommit": "be21941c921a788c1c8124386eb8c3fa349863fd",
+  "conditions": "Clean final profile after all heavy checks; mocked HTTP and original standalone nine-product journey; real AppShell covered separately by six browser regressions",
+  "script": {
+    "before": 2771954,
+    "after": 2799946,
+    "delta": 27992
+  },
+  "runs": [
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "before": {
+        "calls": 15,
+        "catalogueReadyMs": 627.1171000000004,
+        "configurationReadyMs": 118.89359999999942,
+        "commits": 40,
+        "searchCommits": 4,
+        "editCommits": 10,
+        "lineAreaHeight": 307.875
+      },
+      "after": {
+        "calls": 15,
+        "catalogueReadyMs": 566.2973000000002,
+        "configurationReadyMs": 84.52160000000003,
+        "commits": 40,
+        "searchCommits": 4,
+        "editCommits": 10,
+        "lineAreaHeight": 340.078125
+      }
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "before": {
+        "calls": 15,
+        "catalogueReadyMs": 562.9346999999998,
+        "configurationReadyMs": 125.26740000000063,
+        "commits": 41,
+        "searchCommits": 4,
+        "editCommits": 10,
+        "lineAreaHeight": 379.875
+      },
+      "after": {
+        "calls": 15,
+        "catalogueReadyMs": 495.7044999999998,
+        "configurationReadyMs": 112.46609999999964,
+        "commits": 41,
+        "searchCommits": 4,
+        "editCommits": 10,
+        "lineAreaHeight": 425.875
+      }
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "before": {
+        "calls": 15,
+        "catalogueReadyMs": 537.2163999999993,
+        "configurationReadyMs": 107.86879999999837,
+        "commits": 31,
+        "searchCommits": 4,
+        "editCommits": null,
+        "lineAreaHeight": 0
+      },
+      "after": {
+        "calls": 15,
+        "catalogueReadyMs": 504.6095999999998,
+        "configurationReadyMs": 103.12589999999909,
+        "commits": 41,
+        "searchCommits": 4,
+        "editCommits": 10,
+        "lineAreaHeight": 189.875
+      }
+    }
+  ]
+}

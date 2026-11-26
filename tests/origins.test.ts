@@ -108,3 +108,137 @@ it.each(["", "0", "65536", "8080.attacker.test", "-1"])(
     expect(configuredOrigins()).toEqual(["http://localhost:3000"]);
   },
 );
+
+const previewHost = "kybo-backoffice-1vnjntrhv-franjarmaprojects.vercel.app";
+const branchHost =
+  "kybo-backoffice-git-feature-ux-ui-pos-2f4359-franjarmaprojects.vercel.app";
+
+function vercelPreview() {
+  vi.stubEnv("NODE_ENV", "production");
+  vi.stubEnv("VERCEL", "1");
+  vi.stubEnv("VERCEL_ENV", "preview");
+  vi.stubEnv("VERCEL_URL", previewHost);
+  vi.stubEnv("VERCEL_BRANCH_URL", branchHost);
+  vi.stubEnv("BETTER_AUTH_URL", "https://kybo.example");
+  vi.stubEnv("BETTER_AUTH_TRUSTED_ORIGINS", "https://alias.kybo.example");
+}
+
+it("shares exact Vercel preview origins between authentication and mutations", async () => {
+  vercelPreview();
+  expect(configuredOrigins()).toEqual([
+    "https://kybo.example",
+    "https://alias.kybo.example",
+    `https://${previewHost}`,
+    `https://${branchHost}`,
+  ]);
+  expect(
+    trustedOrigins("https://kybo.example", ["https://alias.kybo.example"]),
+  ).toEqual(configuredOrigins());
+  for (const host of [previewHost, branchHost]) {
+    const request = new Request(`https://${host}/api/catalog/suppliers`, {
+      method: "POST",
+      headers: {
+        Origin: `https://${host}`,
+        "Content-Type": "application/json",
+      },
+      body: '{"name":"Proveedor"}',
+    });
+    await expect(requestInput(request)).resolves.toEqual({ name: "Proveedor" });
+  }
+});
+
+it.each(["production", "development", ""])(
+  "does not infer deployment origins outside Vercel preview: %s",
+  (environment) => {
+    vercelPreview();
+    vi.stubEnv("VERCEL_ENV", environment);
+    expect(configuredOrigins()).toEqual([
+      "https://kybo.example",
+      "https://alias.kybo.example",
+    ]);
+  },
+);
+
+it("does not infer preview origins outside Vercel", () => {
+  vercelPreview();
+  vi.stubEnv("VERCEL", "");
+  expect(configuredOrigins()).toEqual([
+    "https://kybo.example",
+    "https://alias.kybo.example",
+  ]);
+});
+
+it("allows preview metadata to be missing and deduplicates explicit aliases", () => {
+  vercelPreview();
+  vi.stubEnv("VERCEL_BRANCH_URL", "");
+  vi.stubEnv("BETTER_AUTH_TRUSTED_ORIGINS", `https://${previewHost}`);
+  expect(configuredOrigins()).toEqual([
+    "https://kybo.example",
+    `https://${previewHost}`,
+  ]);
+  vi.stubEnv("VERCEL_URL", "");
+  vi.stubEnv("BETTER_AUTH_TRUSTED_ORIGINS", "");
+  expect(configuredOrigins()).toEqual(["https://kybo.example"]);
+});
+
+it.each([
+  undefined,
+  "null",
+  "https://another-project.vercel.app",
+  `https://${previewHost}.attacker.test`,
+  `http://${previewHost}`,
+  "https://attacker.example",
+])(
+  "rejects unlisted origins and forwarded hosts in preview: %s",
+  async (origin) => {
+    vercelPreview();
+    const request = new Request(
+      `https://${previewHost}/api/catalog/suppliers`,
+      {
+        method: "POST",
+        headers: {
+          ...(origin === undefined ? {} : { Origin: origin }),
+          Host: "attacker.example",
+          "X-Forwarded-Host": "attacker.example",
+          "Content-Type": "application/json",
+        },
+        body: "{}",
+      },
+    );
+    await expect(requestInput(request)).rejects.toMatchObject({ status: 403 });
+  },
+);
+
+it.each(["VERCEL_URL", "VERCEL_BRANCH_URL"])(
+  "enforces the DNS label length in %s",
+  (key) => {
+    vercelPreview();
+    const longest = `${"a".repeat(63)}.vercel.app`;
+    vi.stubEnv(key, longest);
+    expect(configuredOrigins()).toContain(`https://${longest}`);
+    vi.stubEnv(key, `${"a".repeat(64)}.vercel.app`);
+    expect(() => configuredOrigins()).toThrow();
+  },
+);
+
+it.each(["VERCEL_URL", "VERCEL_BRANCH_URL"])(
+  "rejects malformed deployment metadata in %s",
+  (key) => {
+    vercelPreview();
+    for (const host of [
+      "*.vercel.app",
+      "attacker.example",
+      "preview.vercel.app.attacker.test",
+      "https://preview.vercel.app",
+      "preview.vercel.app/path",
+      "preview.vercel.app?query=1",
+      "preview.vercel.app#fragment",
+      "user@preview.vercel.app",
+      "preview.vercel.app:443",
+      "preview.vercel.app\n",
+    ]) {
+      vi.stubEnv(key, host);
+      expect(() => configuredOrigins()).toThrow();
+    }
+  },
+);

@@ -9,6 +9,11 @@ import {
 } from "@/components/sales/touch-selection";
 import type { PublicConfiguration } from "@/modules/recipes/configuration";
 import { SalesManager } from "@/components/sales/sales-manager";
+import {
+  confirmedComboConfiguration,
+  confirmedProductConfiguration,
+  saveConfiguredLine,
+} from "@/components/sales/order-configuration";
 vi.stubGlobal("React", React);
 const line = (extra: Partial<CartLine> = {}): CartLine => ({
   productId: "tea",
@@ -96,6 +101,108 @@ describe("tactile cart consolidation", () => {
     expect(appendCartLine(lines, line({ productId: "0" }))[0].quantity).toBe(2);
   });
 });
+describe("confirmed order configurations", () => {
+  const row = { id: "tea", name: "Tea" };
+  const selection = {
+    expectedRecipeVersionId: "recipe2",
+    modifiers: [{ recipeModifierOptionId: "mango", count: 2 }],
+    modifierLabels: ["2 x Mango"],
+    expectedPrice: "1550.75",
+  };
+
+  it("uses exact-match merge when adding and preserves quantity and notes during option edits", () => {
+    const update = confirmedProductConfiguration(
+      {
+        ...config([
+          { id: "pearls", name: "Perlas", min: 0, max: 3, options: [] },
+        ]),
+        fulfillmentVersionId: "physical2",
+        pricingRevision: 3,
+      },
+      selection,
+    );
+    const first = saveConfiguredLine([], { row }, update);
+    expect(saveConfiguredLine(first, { row }, update)[0].quantity).toBe(2);
+
+    const original = [
+      line({
+        quantity: 3,
+        notes: "Sin hielo",
+        price: "900",
+        priceReason: "Promoción",
+      }),
+      { ...first[0], notes: "Sin hielo" },
+    ];
+    const edited = saveConfiguredLine(original, { row, index: 0 }, update);
+
+    expect(edited).toHaveLength(2);
+    expect(edited[0]).toMatchObject({
+      ...selection,
+      quantity: 3,
+      notes: "Sin hielo",
+      price: "1550,75",
+      priceReason: "",
+      expectedFulfillmentVersionId: "physical2",
+      expectedPricingRevision: 3,
+    });
+    expect(edited[1]).toBe(original[1]);
+    expect(original[0].priceReason).toBe("Promoción");
+    expect(
+      saveConfiguredLine(
+        edited,
+        { row: { ...row, id: "another" }, index: 0 },
+        update,
+      ),
+    ).toBe(edited);
+  });
+
+  it("keeps every combo child binding and published version when updating a cart line", () => {
+    const comboChoices = [
+      {
+        groupId: "g",
+        optionId: "updated",
+        expectedFulfillmentVersionId: "child-physical2",
+        expectedRecipeVersionId: "child-recipe2",
+        modifiers: selection.modifiers,
+      },
+    ];
+    const update = confirmedComboConfiguration(
+      {
+        definition: {
+          id: "combo2",
+          productId: row.id,
+          revision: 2,
+          actorId: "tester",
+          createdAt: new Date(0),
+          groups: [],
+        },
+        basePrice: "2000.00",
+        pricingRevision: 4,
+      },
+      {
+        expectedComboVersionId: "combo2",
+        comboChoices,
+        expectedPrice: "2050.00",
+        modifierLabels: ["1 x Tea (incluido)", ...selection.modifierLabels],
+      },
+    );
+    const original = [line({ quantity: 4, notes: "Separados" })];
+    const [edited] = saveConfiguredLine(original, { row, index: 0 }, update);
+
+    expect(edited).toMatchObject({
+      quantity: 4,
+      notes: "Separados",
+      price: "2050",
+      priceReason: "",
+      expectedComboVersionId: "combo2",
+      expectedPricingRevision: 4,
+      comboChoices,
+      modifiers: [],
+    });
+    expect(edited.expectedRecipeVersionId).toBeUndefined();
+    expect(edited.expectedFulfillmentVersionId).toBeUndefined();
+  });
+});
 it("places the product before modifiers and keeps price editing secondary", () => {
   const cartProps: React.ComponentProps<typeof Cart> = {
     lines: [line({ modifierLabels: ["Perlas mango"] })],
@@ -112,9 +219,25 @@ it("places the product before modifiers and keeps price editing secondary", () =
   expect(html).not.toContain('placeholder="Sin hielo, para compartir…"');
   expect(html).toContain('aria-label="Editar precio de Tea"');
   expect(html).toContain('aria-label="Editar observaciones de Tea"');
-  expect(html).toContain("min-h-12");
+  expect(html).toContain('data-size="icon"');
   expect(html).toContain("overflow-y-auto");
 });
+it("keeps the order total and both review actions in one footer", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(SalesManager, {
+      actorId: "test",
+      branchId: "branch",
+      role: "admin",
+    }),
+  );
+  expect(html.match(/aria-label="Pedido actual"/g)).toHaveLength(1);
+  expect(html).toContain('aria-label="Productos del pedido"');
+  const footer = html.match(/<footer\b[^>]*>([\s\S]*?)<\/footer>/)?.[1];
+  expect(footer).toContain('data-testid="cart-total"');
+  expect(footer).toContain("Continuar al cobro");
+  expect(footer).toContain("Seguir agregando");
+});
+
 it("keeps stock help and order note forms outside the register until requested", () => {
   const html = renderToStaticMarkup(
     React.createElement(SalesManager, {
@@ -170,6 +293,150 @@ it("shows required groups before collapsed optional groups with touch counters",
   expect(html).toMatch(/<details[^>]*>[\s\S]*Endulzante/);
   expect(html).toContain('aria-label="Aumentar Azúcar"');
 });
+describe("modifier rows", () => {
+  type Option = PublicConfiguration["groups"][number]["options"][number];
+  const option = (extra: Partial<Option> = {}): Option => ({
+    id: "binding",
+    name: "Chocolate",
+    defaultCount: 0,
+    maxCount: 1,
+    available: true,
+    price: "0.00",
+    ...extra,
+  });
+  const renderOptions = (
+    options: Option[],
+    props: Partial<React.ComponentProps<typeof ProductConfigurator>> = {},
+    limits = { min: 1, max: 1 },
+  ) =>
+    renderToStaticMarkup(
+      React.createElement(ProductConfigurator, {
+        config: config([{ id: "group", name: "Perlas", ...limits, options }]),
+        onCancel: vi.fn(),
+        onConfirm: vi.fn(),
+        ...props,
+      }),
+    );
+
+  it("continues labeling a recipe default after it is deselected", () => {
+    const html = renderOptions([option({ defaultCount: 1 })], {
+      initialSelection: [],
+    });
+    expect(html).toContain("Viene incluida en la receta");
+    expect(html).not.toContain('checked=""');
+    expect(html).toContain("Perlas: elegí entre 1 y 1.");
+  });
+
+  it("labels and prices a paid recipe default and shows native checked state", () => {
+    const html = renderOptions([option({ defaultCount: 1, price: "200.00" })]);
+    expect(html).toContain("Viene incluida en la receta");
+    expect(html).toMatch(/\+ [^<]*200,00/);
+    expect(html).toContain('checked=""');
+  });
+
+  it("describes a free nondefault option without claiming recipe membership", () => {
+    const html = renderOptions([option()]);
+    expect(html).toContain("Sin cargo");
+    expect(html).not.toContain("Viene incluida en la receta");
+  });
+
+  it.each([
+    ["chocolate", "#956545"],
+    ["954f6731-0128-40d1-8f0c-4063fee07617", "#513A34"],
+    ["1875fd4b-bae4-407e-9ca8-f70fc2c76850", "#956545"],
+    ["84f02641-0f52-463c-8833-49e01818704e", "#C94254"],
+    ["b07eb534-9c5d-4dc0-975b-7e74c434c53c", "#F5BD35"],
+    ["a5f1e6b0-4a9a-4fb5-a1db-d2f21b8d1aa6", "#F5CA52"],
+    ["0f7efef8-b1d1-46f8-9605-fed632473170", "#74478C"],
+    ["0eff36cf-ebf1-4d10-850a-f738ea164a28", "#D68A4A"],
+    ["3283b742-82be-4a8b-9718-51e5e60316d6", "#956545"],
+    ["f11c17a9-d65e-4d37-82b7-cfcb0843c6d6", "#A86238"],
+    ["e00338f0-8ae3-4988-b8af-dd9ac86d7bfe", "#C94254"],
+    ["93648086-71f4-494c-8266-b608083c8e12", "#F7E8CC"],
+    ["9150176f-fdd7-46ea-b252-53196b068892", "#956545"],
+    ["14fcc687-670f-4512-8c97-79d3b863c062", "#A86238"],
+    ["795dce84-b27e-4db5-a8fd-feeb499726e9", "#C94254"],
+    ["americana", "#F7E8CC"],
+    ["caramelo", "#D68A4A"],
+    ["dulce-de-leche", "#A86238"],
+    ["frutilla", "#C94254"],
+    ["frutos-rojos", "#74478C"],
+  ])("uses the persisted flavor key %s after a rename", (key, color) => {
+    expect(
+      renderOptions([option({ key, name: "Edición de temporada" })]),
+    ).toContain(`background-color:${color}`);
+  });
+
+  it("keeps an unrelated option named Chocolate neutral", () => {
+    const unknown = renderOptions([
+      option({
+        key: "85fbc266-bcc3-4e93-921f-9c2de730a0db",
+        name: "Chocolate",
+      }),
+    ]);
+    expect(unknown).toContain('data-modifier-visual="swatch"');
+    expect(unknown).toContain("background-color:#D5E1E8");
+  });
+
+  it("uses an X for the known no-pearls keys only", () => {
+    for (const key of ["no-pearls", "229be374-c4bf-4f7c-a4f9-0cc4e5f84700"]) {
+      expect(
+        renderOptions([option({ key, name: "Sin agregado de perlas" })]),
+      ).toContain('data-modifier-visual="no-pearls"');
+    }
+    for (const key of [
+      "no-sauce",
+      "sin-salsa",
+      "9bf66daa-1dd6-4cfc-a5d9-e99116c46a67",
+    ]) {
+      const html = renderOptions([option({ key, name: "Sin perlas" })]);
+      expect(html).toContain('data-modifier-visual="swatch"');
+      expect(html).toContain("background-color:#D5E1E8");
+    }
+  });
+
+  it("keeps unavailable options visible and their single-choice controls disabled", () => {
+    const html = renderOptions([option({ available: false })]);
+    expect(html).toContain("No disponible");
+    expect(html).toMatch(
+      /<input[^>]*(?:type="radio"[^>]*disabled|disabled[^>]*type="radio")/,
+    );
+  });
+
+  it("disables a radio when the option limit allows zero selections", () => {
+    const html = renderOptions([option({ maxCount: 0 })]);
+    expect(html).toMatch(
+      /<input[^>]*(?:type="radio"[^>]*disabled|disabled[^>]*type="radio")/,
+    );
+  });
+
+  it("preserves initial counts and prevents increments at the option and group limits", () => {
+    const options = [
+      option({ id: "cocoa", defaultCount: 0 }),
+      option({ id: "mango", name: "Mango", maxCount: 3 }),
+    ];
+    const atOptionLimit = renderOptions(
+      options,
+      { initialSelection: [{ recipeModifierOptionId: "cocoa", count: 1 }] },
+      { min: 2, max: 3 },
+    );
+    expect(atOptionLimit).toContain("Perlas: elegí entre 2 y 3.");
+    expect(atOptionLimit).toMatch(
+      /aria-label="Cantidad Chocolate"[^>]*>1<\/output>/,
+    );
+    expect(atOptionLimit).toMatch(/aria-label="Aumentar Chocolate" disabled/);
+    expect(atOptionLimit).not.toMatch(/aria-label="Aumentar Mango" disabled/);
+
+    const atGroupLimit = renderOptions(
+      options,
+      { initialSelection: [{ recipeModifierOptionId: "mango", count: 3 }] },
+      { min: 2, max: 3 },
+    );
+    expect(atGroupLimit).toMatch(/aria-label="Aumentar Chocolate" disabled/);
+    expect(atGroupLimit).toMatch(/aria-label="Aumentar Mango" disabled/);
+  });
+});
+
 it("commits a simple combo component immediately with published versions and no surcharge", () => {
   expect(
     simpleComboSelection("group", "option", {
